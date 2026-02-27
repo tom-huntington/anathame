@@ -37,10 +37,10 @@ pub const Expr = union(enum) {
     pub const FuncUnion = struct {
         arity: Arity,
         union_: union(enum) {
-            prefix: struct { op: TokenTag, right: *Expr },
-            combinator: struct { op: Combinator, left: *Expr, right: *Expr },
-            partial_apply: struct { op: PartialApply, left: *Expr, right: *Expr },
-            scope: struct { *Expr },
+            //prefix: struct { op: TokenTag, right: *Expr },
+            combinator: struct { op: Combinator, left: *FuncUnion, right: *FuncUnion },
+            partial_apply: struct { op: PartialApply, left: *FuncUnion, right: *FuncUnion },
+            scope: *FuncUnion,
             builtin: union(enum) { monad: MonadFn, dyad: DyadFn },
         },
     };
@@ -405,7 +405,7 @@ const SubParser = struct {
                 }
                 self.index += 1;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = .monad, .union_ = .{ .scope = .{body} } },
+                    .func = .{ .arity = .monad, .union_ = .{ .scope = &body.func } },
                 });
             },
             .lbrace => {
@@ -444,7 +444,7 @@ const SubParser = struct {
                     .value => return error.ExpectedFunction,
                 };
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .comma, .left = left, .right = right } } },
+                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .comma, .left = &left.func, .right = &right.func } } },
                 });
             },
             .underscore => {
@@ -470,7 +470,7 @@ const SubParser = struct {
                 const arity = if (left_func.arity == right_func.arity) left_func.arity else .dyad;
                 const op = parseCombinator(tok, self.parser.source) orelse return error.UnknownCombinator;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = arity, .union_ = .{ .combinator = .{ .op = op, .left = left, .right = right } } },
+                    .func = .{ .arity = arity, .union_ = .{ .combinator = .{ .op = op, .left = &left.func, .right = &right.func } } },
                 });
             },
             .caret => {
@@ -479,7 +479,7 @@ const SubParser = struct {
                     .value => return error.ExpectedFunction,
                 };
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .caret, .left = left, .right = right } } },
+                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .caret, .left = &left.func, .right = &right.func } } },
                 });
             },
             else => return error.UnexpectedToken,
