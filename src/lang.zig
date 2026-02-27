@@ -31,30 +31,24 @@ pub const Value = union(enum) {
 };
 
 pub const Expr = union(enum) {
-    value: ValueExpr,
-    func: FuncExpr,
+    value: ValueUnion,
+    func: FuncUnion,
 
-    pub const ValueExpr = struct {
-        node: ValueNode,
-    };
-
-    pub const FuncExpr = struct {
+    pub const FuncUnion = struct {
         arity: Arity,
-        node: FuncNode,
+        union_: union(enum) {
+            prefix: struct { op: TokenTag, right: *Expr },
+            combinator: struct { op: Combinator, left: *Expr, right: *Expr },
+            partial_apply: struct { op: PartialApply, left: *Expr, right: *Expr },
+            scope: struct { *Expr },
+            builtin: union(enum) { monad: MonadFn, dyad: DyadFn },
+        },
     };
 
-    pub const ValueNode = union(enum) {
+    pub const ValueUnion = union(enum) {
         literal: Value,
         strand: struct { left: *Expr, right: *Expr },
         apply_rev: struct { func: *Expr, arg: *Expr },
-    };
-
-    pub const FuncNode = union(enum) {
-        prefix: struct { op: TokenTag, right: *Expr },
-        combinator: struct { op: Combinator, left: *Expr, right: *Expr },
-        partial_apply: struct { op: PartialApply, left: *Expr, right: *Expr },
-        scope: struct { *Expr },
-        builtin: union(enum) { monad: MonadFn, dyad: DyadFn },
     };
 };
 
@@ -289,22 +283,22 @@ pub const Parser = struct {
 
     fn installBuiltins(self: *Parser) !void {
         const add_expr = try self.allocExpr(.{
-            .func = .{ .arity = .dyad, .node = .{ .builtin = .{ .dyad = builtinStubDyad } } },
+            .func = .{ .arity = .dyad, .union_ = .{ .builtin = .{ .dyad = builtinStubDyad } } },
         });
         try self.symbols.put("add", .{ .expr = add_expr });
 
         const mult_expr = try self.allocExpr(.{
-            .func = .{ .arity = .dyad, .node = .{ .builtin = .{ .dyad = builtinStubDyad } } },
+            .func = .{ .arity = .dyad, .union_ = .{ .builtin = .{ .dyad = builtinStubDyad } } },
         });
         try self.symbols.put("mult", .{ .expr = mult_expr });
 
         const inf_expr = try self.allocExpr(.{
-            .value = .{ .node = .{ .literal = .{ .scalar = .{ .value = std.math.inf(f64), .is_char = false } } } },
+            .value = .{ .literal = .{ .scalar = .{ .value = std.math.inf(f64), .is_char = false } } },
         });
         try self.symbols.put("inf", .{ .expr = inf_expr });
 
         const pi_expr = try self.allocExpr(.{
-            .value = .{ .node = .{ .literal = .{ .scalar = .{ .value = std.math.pi, .is_char = false } } } },
+            .value = .{ .literal = .{ .scalar = .{ .value = std.math.pi, .is_char = false } } },
         });
         try self.symbols.put("pi", .{ .expr = pi_expr });
     }
@@ -383,20 +377,20 @@ const SubParser = struct {
                 const slice = tok.lexeme(self.parser.source);
                 const val = try std.fmt.parseFloat(f64, slice);
                 return self.parser.allocExpr(.{
-                    .value = .{ .node = .{ .literal = .{ .scalar = .{ .value = val, .is_char = false } } } },
+                    .value = .{ .literal = .{ .scalar = .{ .value = val, .is_char = false } } },
                 });
             },
             .char_lit => {
                 const slice = tok.lexeme(self.parser.source);
                 const ch = slice[1];
                 return self.parser.allocExpr(.{
-                    .value = .{ .node = .{ .literal = .{ .scalar = .{ .value = @floatFromInt(ch), .is_char = true } } } },
+                    .value = .{ .literal = .{ .scalar = .{ .value = @floatFromInt(ch), .is_char = true } } },
                 });
             },
             .raw_string => {
                 // Placeholder: raw strings are parsed as value arrays later.
                 return self.parser.allocExpr(.{
-                    .value = .{ .node = .{ .literal = .{ .array = .{ .data = &.{}, .shape = &.{}, .is_char = true } } } },
+                    .value = .{ .literal = .{ .array = .{ .data = &.{}, .shape = &.{}, .is_char = true } } },
                 });
             },
             .ident => {
@@ -411,7 +405,7 @@ const SubParser = struct {
                 }
                 self.index += 1;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = .monad, .node = .{ .scope = .{body} } },
+                    .func = .{ .arity = .monad, .union_ = .{ .scope = .{body} } },
                 });
             },
             .lbrace => {
@@ -421,21 +415,21 @@ const SubParser = struct {
                 }
                 self.index += 1;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = .dyad, .node = .{ .scope = .{body} } },
+                    .func = .{ .arity = .dyad, .union_ = .{ .scope = .{body} } },
                 });
             },
             .backslash => {
                 const body = try self.parseExpr(0, end_tag);
                 _ = body;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = .monad, .node = .{ .builtin = .{ .monad = builtinStubMonad } } },
+                    .func = .{ .arity = .monad, .union_ = .{ .builtin = .{ .monad = builtinStubMonad } } },
                 });
             },
             .dbl_backslash => {
                 const body = try self.parseExpr(0, end_tag);
                 _ = body;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = .dyad, .node = .{ .builtin = .{ .dyad = builtinStubDyad } } },
+                    .func = .{ .arity = .dyad, .union_ = .{ .builtin = .{ .dyad = builtinStubDyad } } },
                 });
             },
             else => return error.UnexpectedToken,
@@ -450,18 +444,18 @@ const SubParser = struct {
                     .value => return error.ExpectedFunction,
                 };
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .node = .{ .partial_apply = .{ .op = .comma, .left = left, .right = right } } },
+                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .comma, .left = left, .right = right } } },
                 });
             },
             .underscore => {
                 return self.parser.allocExpr(.{
-                    .value = .{ .node = .{ .strand = .{ .left = left, .right = right } } },
+                    .value = .{ .strand = .{ .left = left, .right = right } },
                 });
             },
             .pipe_gt => {
                 if (left.* != .func) return error.ExpectedFunction;
                 return self.parser.allocExpr(.{
-                    .value = .{ .node = .{ .apply_rev = .{ .func = left, .arg = right } } },
+                    .value = .{ .apply_rev = .{ .func = left, .arg = right } },
                 });
             },
             .combinator => {
@@ -476,7 +470,7 @@ const SubParser = struct {
                 const arity = if (left_func.arity == right_func.arity) left_func.arity else .dyad;
                 const op = parseCombinator(tok, self.parser.source) orelse return error.UnknownCombinator;
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = arity, .node = .{ .combinator = .{ .op = op, .left = left, .right = right } } },
+                    .func = .{ .arity = arity, .union_ = .{ .combinator = .{ .op = op, .left = left, .right = right } } },
                 });
             },
             .caret => {
@@ -485,7 +479,7 @@ const SubParser = struct {
                     .value => return error.ExpectedFunction,
                 };
                 return self.parser.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .node = .{ .partial_apply = .{ .op = .caret, .left = left, .right = right } } },
+                    .func = .{ .arity = left_func.arity, .union_ = .{ .partial_apply = .{ .op = .caret, .left = left, .right = right } } },
                 });
             },
             else => return error.UnexpectedToken,
