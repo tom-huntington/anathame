@@ -18,7 +18,7 @@ pub fn main() !void {
     defer arena.deinit();
     const ast_alloc = arena.allocator();
 
-    const source = "add";
+    const source = "add )b1 sq";
     std.debug.print("soure: {s}\n", .{source});
 
     var lines = try lex.lex(allocator, source);

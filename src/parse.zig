@@ -43,7 +43,6 @@ pub const Parser = struct {
     }
 
     pub fn parseFile(self: *Parser, allocator: std.mem.Allocator) !FileAst {
-        //try self.installBuiltins();
         try self.populateBuiltins();
 
         var consts: std.ArrayList(ConstDef) = .empty;
