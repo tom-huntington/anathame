@@ -7,21 +7,40 @@ const printInt = std.Io.Writer.printInt;
 const printVector = std.Io.Writer.printVector;
 const invalidFmtError = std.Io.Writer.invalidFmtError;
 const printFloatHexOptions = std.Io.Writer.printFloatHexOptions;
-const optionsForbidden = std.Io.Writer.optionsForbidden;
+
 const printHex = std.Io.Writer.printHex;
-const ANY = std.Io.Writer.ANY;
+const ANY = "any";
 const stripOptionalOrErrorUnionSpec = std.Io.Writer.stripOptionalOrErrorUnionSpec;
 const printErrorSet = std.Io.Writer.printErrorSet;
-const printEnumExhaustive = std.Io.Writer.printEnumExhaustive;
-const printEnumNonexhaustive = std.Io.Writer.printEnumNonexhaustive;
 const lockStderrWriter = std.debug.lockStderrWriter;
 const unlockStderrWriter = std.debug.unlockStderrWriter;
+
+fn printEnumExhaustive(w: *Writer, value: anytype) Error!void {
+    var vecs: [2][]const u8 = .{ ".", @tagName(value) };
+    try w.writeVecAll(&vecs);
+}
+
+fn printEnumNonexhaustive(w: *Writer, value: anytype) Error!void {
+    if (std.enums.tagName(@TypeOf(value), value)) |tag_name| {
+        var vecs: [2][]const u8 = .{ ".", tag_name };
+        try w.writeVecAll(&vecs);
+        return;
+    }
+    try w.writeAll("@enumFromInt(");
+    try w.printInt(@intFromEnum(value), 10, .lower, .{});
+    try w.writeByte(')');
+}
+
+fn optionsForbidden(options: std.fmt.Options) void {
+    assert(options.precision == null);
+    assert(options.width == null);
+}
 
 pub fn printfmt(comptime fmt: []const u8, args: anytype) void {
     var buffer: [64]u8 = undefined;
     const bw = lockStderrWriter(&buffer);
     defer unlockStderrWriter();
-    nosuspend bw.print(fmt, args) catch return;
+    nosuspend print(bw, fmt, args) catch return;
 }
 
 pub fn print(w: *Writer, comptime fmt: []const u8, args: anytype) Error!void {
@@ -131,7 +150,8 @@ pub fn print(w: *Writer, comptime fmt: []const u8, args: anytype) Error!void {
         const arg_to_print = comptime arg_state.nextArg(arg_pos) orelse
             @compileError("too few arguments");
 
-        try w.printValue(
+        try printValue(
+            w,
             placeholder.specifier_arg,
             .{
                 .fill = placeholder.fill,
@@ -351,7 +371,7 @@ pub fn printValue(
             else
                 @compileError("cannot print optional without a specifier (i.e. {?} or {any})");
             if (value) |payload| {
-                return w.printValue(remaining_fmt, options, payload, max_depth);
+                return printValue(w, remaining_fmt, options, payload, max_depth);
             } else {
                 return w.alignBufferOptions("null", options);
             }
@@ -364,9 +384,9 @@ pub fn printValue(
             else
                 @compileError("cannot print error union without a specifier (i.e. {!} or {any})");
             if (value) |payload| {
-                return w.printValue(remaining_fmt, options, payload, max_depth);
+                return printValue(w, remaining_fmt, options, payload, max_depth);
             } else |err| {
-                return w.printValue("", options, err, max_depth);
+                return printValue(w, "", options, err, max_depth);
             }
         },
         .error_set => {
@@ -398,7 +418,7 @@ pub fn printValue(
                 try w.writeAll(" = ");
                 inline for (info.fields) |u_field| {
                     if (value == @field(UnionTagType, u_field.name)) {
-                        try w.printValue(ANY, options, @field(value, u_field.name), max_depth - 1);
+                        try printValue(w, ANY, options, @field(value, u_field.name), max_depth - 1);
                     }
                 }
                 try w.writeAll(" }");
@@ -413,7 +433,7 @@ pub fn printValue(
                         try w.writeByte('.');
                         try w.writeAll(field.name);
                         try w.writeAll(" = ");
-                        try w.printValue(ANY, options, @field(value, field.name), max_depth - 1);
+                        try printValue(w, ANY, options, @field(value, field.name), max_depth - 1);
                         try w.writeAll(if (i < info.fields.len) ", " else " }");
                     }
                 },
@@ -437,7 +457,7 @@ pub fn printValue(
                     // } else {
                     //     try w.writeAll(", ");
                     // }
-                    // try w.printValue(ANY, options, @field(value, f.name), max_depth - 1);
+                    // try printValue(w,ANY, options, @field(value, f.name), max_depth - 1);
                     if (i == 0) try w.writeAll(" .") else try w.writeAll(", .");
                     try w.writeAll(f.name);
                     try w.writeAll(" = ");
@@ -446,7 +466,7 @@ pub fn printValue(
                     const FieldT = f.type;
                     const is_str = comptime isStringType(FieldT);
                     const nested_fmt = if (is_str) "s" else ANY;
-                    try w.printValue(nested_fmt, options, @field(value, f.name), max_depth - 1);
+                    try printValue(w, nested_fmt, options, @field(value, f.name), max_depth - 1);
                     // --- NEW LOGIC END ---
                 }
                 try w.writeAll(" }");
@@ -465,14 +485,14 @@ pub fn printValue(
                 }
                 try w.writeAll(f.name);
                 try w.writeAll(" = ");
-                try w.printValue(ANY, options, @field(value, f.name), max_depth - 1);
+                try printValue(w, ANY, options, @field(value, f.name), max_depth - 1);
             }
             try w.writeAll(" }");
         },
         .pointer => |ptr_info| switch (ptr_info.size) {
             .one => switch (@typeInfo(ptr_info.child)) {
-                .array => |array_info| return w.printValue(fmt, options, @as([]const array_info.child, value), max_depth),
-                .@"enum", .@"union", .@"struct" => return w.printValue(fmt, options, value.*, max_depth),
+                .array => |array_info| return printValue(w, fmt, options, @as([]const array_info.child, value), max_depth),
+                .@"enum", .@"union", .@"struct" => return printValue(w, fmt, options, value.*, max_depth),
                 else => {
                     var buffers: [2][]const u8 = .{ @typeName(ptr_info.child), "@" };
                     try w.writeVecAll(&buffers);
@@ -488,10 +508,14 @@ pub fn printValue(
             .slice => {
                 if (!is_any)
                     @compileError("cannot format slice without a specifier (i.e. {s}, {x}, {b64}, or {any})");
+                if (ptr_info.child == u8) {
+                    const str: []const u8 = value;
+                    return w.alignBufferOptions(str, options);
+                }
                 if (max_depth == 0) return w.writeAll("{ ... }");
                 try w.writeAll("{ ");
                 for (value, 0..) |elem, i| {
-                    try w.printValue(fmt, options, elem, max_depth - 1);
+                    try printValue(w, fmt, options, elem, max_depth - 1);
                     if (i != value.len - 1) {
                         try w.writeAll(", ");
                     }
@@ -504,7 +528,7 @@ pub fn printValue(
             if (max_depth == 0) return w.writeAll("{ ... }");
             try w.writeAll("{ ");
             for (value, 0..) |elem, i| {
-                try w.printValue(fmt, options, elem, max_depth - 1);
+                try printValue(w, fmt, options, elem, max_depth - 1);
                 if (i < value.len - 1) {
                     try w.writeAll(", ");
                 }

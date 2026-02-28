@@ -18,6 +18,12 @@ pub fn main() !void {
     defer arena.deinit();
     const ast_alloc = arena.allocator();
 
+    const wrap = struct {
+        v: []const u8,
+    };
+    const a = wrap{ .v = "hello" };
+    stringprint.printfmt("a: {}\n", .{a});
+
     const source = "add )b1 sq";
     std.debug.print("soure: {s}\n", .{source});
 
