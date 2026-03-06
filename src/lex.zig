@@ -59,15 +59,14 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
                 }
             },
             ')' => {
-                try tokens.append(allocator, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
-                // `)name` denotes a combinator immediately after a closed scope.
-                // Emit both tokens so `)` can close a scope while `name` is parsed infix.
+                // `)name` is a combinator token, not a closing-scope token followed by a combinator.
                 if (i + 1 < line.len and std.ascii.isAlphabetic(line[i + 1])) {
                     var j = i + 1;
                     while (j < line.len and std.ascii.isAlphanumeric(line[j])) : (j += 1) {}
-                    try tokens.append(allocator, .{ .tag = .combinator, .start = base + i + 1, .end = base + j, .lexeme = line[i + 1 .. j] });
+                    try tokens.append(allocator, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
                     i = j;
                 } else {
+                    try tokens.append(allocator, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                     i += 1;
                 }
             },
