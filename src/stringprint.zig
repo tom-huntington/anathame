@@ -462,12 +462,7 @@ pub fn printValue(
                     try w.writeAll(f.name);
                     try w.writeAll(" = ");
 
-                    // --- NEW LOGIC START ---
-                    const FieldT = f.type;
-                    const is_str = comptime isStringType(FieldT);
-                    const nested_fmt = if (is_str) "s" else ANY;
-                    try printValue(w, nested_fmt, options, @field(value, f.name), max_depth - 1);
-                    // --- NEW LOGIC END ---
+                    try printValue(w, ANY, options, @field(value, f.name), max_depth - 1);
                 }
                 try w.writeAll(" }");
                 return;
@@ -510,7 +505,9 @@ pub fn printValue(
                     @compileError("cannot format slice without a specifier (i.e. {s}, {x}, {b64}, or {any})");
                 if (ptr_info.child == u8) {
                     const str: []const u8 = value;
-                    return w.alignBufferOptions(str, options);
+                    try w.writeByte('"');
+                    try w.writeAll(str);
+                    return w.writeByte('"');
                 }
                 if (max_depth == 0) return w.writeAll("{ ... }");
                 try w.writeAll("{ ");
@@ -556,16 +553,4 @@ pub fn printValue(
         },
         else => @compileError("unable to format type '" ++ @typeName(T) ++ "'"),
     }
-}
-
-fn isStringType(comptime T: type) bool {
-    const info = @typeInfo(T);
-    if (info == .pointer) {
-        const p = info.pointer;
-        // Detect []u8, [:0]u8, *const [N]u8, etc.
-        if (p.child == u8) {
-            return (p.size == .slice or p.size == .one or p.size == .many);
-        }
-    }
-    return false;
 }
