@@ -25,7 +25,10 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
     while (i < line.len) {
         const c = line[i];
         if (std.ascii.isWhitespace(c)) {
-            i += 1;
+            var j = i + 1;
+            while (j < line.len and std.ascii.isWhitespace(line[j])) : (j += 1) {}
+            try tokens.append(allocator, .{ .tag = .whitespace, .start = base + i, .end = base + j, .lexeme = line[i..j] });
+            i = j;
             continue;
         }
 

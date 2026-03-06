@@ -50,14 +50,14 @@ pub const Parser = struct {
 
         var last_nonempty: ?usize = null;
         for (self.lines, 0..) |line, i| {
-            if (line.items.len > 0) last_nonempty = i;
+            if (hasNonWhitespaceTokens(&line)) last_nonempty = i;
         }
         if (last_nonempty == null) return error.MissingMain;
 
         var line_index: usize = 0;
         while (line_index < self.lines.len) : (line_index += 1) {
             const line = &self.lines[line_index];
-            if (line.items.len == 0) continue;
+            if (!hasNonWhitespaceTokens(line)) continue;
 
             const is_last = line_index == last_nonempty.?;
             if (!is_last) {
@@ -101,13 +101,14 @@ pub const Parser = struct {
     }
 
     fn parseConst(self: *Parser, line: *const std.ArrayList(Token)) !ConstDef {
-        if (line.items.len < 3) return error.InvalidConst;
-        const name_tok = line.items[0];
+        var name_index: usize = 0;
+        const name_tok = nextNonWhitespaceToken(line, &name_index) orelse return error.InvalidConst;
         if (name_tok.tag != .ident) return error.InvalidConst;
-        const eq_tok = line.items[1];
+
+        const eq_tok = nextNonWhitespaceToken(line, &name_index) orelse return error.InvalidConst;
         if (eq_tok.tag != .equal) return error.InvalidConst;
 
-        var sub = self.makeSubParser(line, 2);
+        var sub = self.makeSubParser(line, name_index);
         const expr = try sub.parseExpr(0, null);
         try self.symbols.put(name_tok.lexeme, .{ .expr = expr });
         return .{ .name = name_tok.lexeme, .expr = expr };
@@ -138,6 +139,8 @@ const SubParser = struct {
         var left = try self.parsePrefix(end_tag);
 
         while (self.index < self.line.items.len) {
+            self.skipWhitespace();
+            if (self.index >= self.line.items.len) break;
             const tok = self.line.items[self.index];
             if (end_tag) |tag| {
                 if (tok.tag == tag) break;
@@ -165,6 +168,7 @@ const SubParser = struct {
     };
 
     fn parsePrefix(self: *SubParser, end_tag: ?TokenTag) (SubParserError || std.fmt.ParseFloatError || std.mem.Allocator.Error)!*Expr {
+        self.skipWhitespace();
         if (self.index >= self.line.items.len) return error.UnexpectedEof;
         const tok = self.line.items[self.index];
         self.index += 1;
@@ -196,6 +200,7 @@ const SubParser = struct {
             },
             .lparen => {
                 const body = try self.parseExpr(0, .rparen);
+                self.skipWhitespace();
                 if (self.index >= self.line.items.len or self.line.items[self.index].tag != .rparen) {
                     return error.MissingRightParen;
                 }
@@ -206,6 +211,7 @@ const SubParser = struct {
             },
             .lbrace => {
                 const body = try self.parseExpr(0, .rbrace);
+                self.skipWhitespace();
                 if (self.index >= self.line.items.len or self.line.items[self.index].tag != .rbrace) {
                     return error.MissingRightBrace;
                 }
@@ -228,6 +234,10 @@ const SubParser = struct {
             },
             else => return error.UnexpectedToken,
         }
+    }
+
+    fn skipWhitespace(self: *SubParser) void {
+        while (self.index < self.line.items.len and self.line.items[self.index].tag == .whitespace) : (self.index += 1) {}
     }
 
     fn buildInfix(self: *SubParser, tok: Token, left: *Expr, right: *Expr) !*Expr {
@@ -300,4 +310,20 @@ fn parseCombinator(tok: Token) ?Combinator {
     if (name.len == 0) return null;
     var out: [5]u8 = undefined;
     return std.meta.stringToEnum(Combinator, std.ascii.upperString(&out, name));
+}
+
+fn hasNonWhitespaceTokens(line: *const std.ArrayList(Token)) bool {
+    for (line.items) |tok| {
+        if (tok.tag != .whitespace) return true;
+    }
+    return false;
+}
+
+fn nextNonWhitespaceToken(line: *const std.ArrayList(Token), index: *usize) ?Token {
+    while (index.* < line.items.len) : (index.* += 1) {
+        const tok = line.items[index.*];
+        index.* += 1;
+        if (tok.tag != .whitespace) return tok;
+    }
+    return null;
 }

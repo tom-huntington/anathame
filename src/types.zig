@@ -17,6 +17,7 @@ pub const TokenTag = enum {
     backslash,
     dbl_backslash,
     equal,
+    whitespace,
 };
 
 pub const Token = struct {
