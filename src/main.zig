@@ -45,6 +45,6 @@ pub fn main() !void {
         .{ .scalar = .{ .value = 2, .is_char = false } },
         .{ .scalar = .{ .value = 3, .is_char = false } },
     };
-    const result = try eval.evalMain(ast_alloc, &args, file_ast.main);
+    const result = try eval.evalFunc(ast_alloc, file_ast.main, .{ .dyad = args });
     stringprint.printfmt("result: {}\n", .{result});
 }
