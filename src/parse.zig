@@ -22,6 +22,30 @@ pub const Symbol = struct {
     expr: *Expr,
 };
 
+const StatementKind = enum {
+    const_def,
+    expr,
+};
+
+const Statement = struct {
+    kind: StatementKind,
+    start: usize,
+    end: usize,
+};
+
+const ParseError = error{
+    UnexpectedEof,
+    UnknownIdentifier,
+    MissingRightParen,
+    MissingRightBrace,
+    UnexpectedToken,
+    ExpectedFunction,
+    UnknownCombinator,
+    MissingMain,
+    MainMustBeFunction,
+    InvalidConst,
+} || std.fmt.ParseFloatError || std.mem.Allocator.Error;
+
 pub const Parser = struct {
     allocator: std.mem.Allocator,
     source: []const u8,
@@ -44,50 +68,39 @@ pub const Parser = struct {
         self.symbols.deinit();
     }
 
-    pub fn parseFile(self: *Parser, allocator: std.mem.Allocator) !FileAst {
+    pub fn parseFile(self: *Parser, allocator: std.mem.Allocator) ParseError!FileAst {
         try self.populateBuiltins();
 
         var consts: std.ArrayList(ConstDef) = .empty;
         errdefer consts.deinit(allocator);
 
-        var last_nonempty: ?usize = null;
-        for (0..self.lineCount()) |i| {
-            if (hasNonWhitespaceTokens(self.lineTokens(i))) last_nonempty = i;
+        var statements = try self.collectStatements(allocator);
+        defer statements.deinit(allocator);
+
+        if (statements.items.len == 0) return error.MissingMain;
+
+        const main_stmt = statements.items[statements.items.len - 1];
+        if (main_stmt.kind != .expr) return error.MissingMain;
+
+        for (statements.items[0 .. statements.items.len - 1]) |stmt| {
+            if (stmt.kind != .const_def) return error.InvalidConst;
+            const const_def = try self.parseConst(stmt);
+            try consts.append(allocator, const_def);
         }
-        if (last_nonempty == null) return error.MissingMain;
 
-        var line_index: usize = 0;
-        while (line_index < self.lineCount()) : (line_index += 1) {
-            const line = self.lineTokens(line_index);
-            if (!hasNonWhitespaceTokens(line)) continue;
+        var main_index = main_stmt.start;
+        const main_expr = try self.parseExpr(&main_index, main_stmt.end, 0, null);
+        self.skipWhitespace(&main_index, main_stmt.end);
+        if (main_index != main_stmt.end) return error.UnexpectedToken;
+        if (main_expr.* != .func) return error.MainMustBeFunction;
 
-            const is_last = line_index == last_nonempty.?;
-            if (!is_last) {
-                const const_def = try self.parseConst(line);
-                try consts.append(allocator, const_def);
-            } else {
-                const main_expr = try self.parseExprLine(line, null);
-                if (main_expr.* != .func) return error.MainMustBeFunction;
-                return FileAst{
-                    .consts = try consts.toOwnedSlice(allocator),
-                    .main = &main_expr.func,
-                };
-            }
-        }
-        return error.MissingMain;
+        return .{
+            .consts = try consts.toOwnedSlice(allocator),
+            .main = &main_expr.func,
+        };
     }
 
-    fn lineCount(self: *const Parser) usize {
-        return if (self.line_offsets.len == 0) 0 else self.line_offsets.len - 1;
-    }
-
-    fn lineTokens(self: *const Parser, line_index: usize) []const Token {
-        const start = self.line_offsets[line_index];
-        const end = self.line_offsets[line_index + 1];
-        return self.tokens[start..end];
-    }
-
-    pub fn populateBuiltins(self: *Parser) !void {
+    pub fn populateBuiltins(self: *Parser) ParseError!void {
         inline for (@typeInfo(builtins).@"struct".decls) |decl| {
             const member = @field(builtins, decl.name);
             const member_info = @typeInfo(@TypeOf(member));
@@ -112,135 +125,164 @@ pub const Parser = struct {
         }
     }
 
-    fn parseConst(self: *Parser, line: []const Token) !ConstDef {
-        var name_index: usize = 0;
-        const name_tok = nextNonWhitespaceToken(line, &name_index) orelse return error.InvalidConst;
+    fn collectStatements(self: *Parser, allocator: std.mem.Allocator) ParseError!std.ArrayList(Statement) {
+        var statements: std.ArrayList(Statement) = .empty;
+        errdefer statements.deinit(allocator);
+
+        var pending_expr_start: ?usize = null;
+
+        for (0..self.lineCount()) |line_index| {
+            const line = self.lineTokens(line_index);
+            const line_start = firstNonWhitespaceIndex(line) orelse continue;
+            const kind = if (isConstStart(line, line_start)) StatementKind.const_def else StatementKind.expr;
+
+            switch (kind) {
+                .const_def => {
+                    if (pending_expr_start) |_| return error.InvalidConst;
+                    try statements.append(allocator, .{
+                        .kind = .const_def,
+                        .start = line_start,
+                        .end = self.tokens.len,
+                    });
+                },
+                .expr => {
+                    if (pending_expr_start == null) {
+                        pending_expr_start = line_start;
+                        try statements.append(allocator, .{
+                            .kind = .expr,
+                            .start = line_start,
+                            .end = self.tokens.len,
+                        });
+                    }
+                },
+            }
+        }
+
+        if (statements.items.len == 0) return statements;
+
+        for (0..statements.items.len - 1) |i| {
+            statements.items[i].end = statements.items[i + 1].start;
+        }
+        statements.items[statements.items.len - 1].end = self.tokens.len;
+
+        return statements;
+    }
+
+    fn lineCount(self: *const Parser) usize {
+        return if (self.line_offsets.len == 0) 0 else self.line_offsets.len - 1;
+    }
+
+    fn lineTokens(self: *const Parser, line_index: usize) []const Token {
+        const start = self.line_offsets[line_index];
+        const end = self.line_offsets[line_index + 1];
+        return self.tokens[start..end];
+    }
+
+    fn parseConst(self: *Parser, stmt: Statement) ParseError!ConstDef {
+        var index = stmt.start;
+        const name_tok = self.nextNonWhitespaceToken(&index, stmt.end) orelse return error.InvalidConst;
         if (name_tok.tag != .ident) return error.InvalidConst;
 
-        const eq_tok = nextNonWhitespaceToken(line, &name_index) orelse return error.InvalidConst;
+        const eq_tok = self.nextNonWhitespaceToken(&index, stmt.end) orelse return error.InvalidConst;
         if (eq_tok.tag != .equal) return error.InvalidConst;
 
-        var sub = self.makeSubParser(line, name_index);
-        const expr = try sub.parseExpr(0, null);
+        const expr = try self.parseExpr(&index, stmt.end, 0, null);
+        self.skipWhitespace(&index, stmt.end);
+        if (index != stmt.end) return error.UnexpectedToken;
+
         try self.symbols.put(name_tok.lexeme, .{ .expr = expr });
         return .{ .name = name_tok.lexeme, .expr = expr };
     }
 
-    fn parseExprLine(self: *Parser, line: []const Token, end_tag: ?TokenTag) !*Expr {
-        var sub = self.makeSubParser(line, 0);
-        return sub.parseExpr(0, end_tag);
-    }
+    fn parseExpr(self: *Parser, index: *usize, end_index: usize, min_bp: u8, end_tag: ?TokenTag) ParseError!*Expr {
+        var left = try self.parsePrefix(index, end_index, end_tag);
 
-    fn makeSubParser(self: *Parser, line: []const Token, start_index: usize) SubParser {
-        return .{ .parser = self, .line = line, .index = start_index };
-    }
+        while (true) {
+            self.skipWhitespace(index, end_index);
+            if (index.* >= end_index) break;
 
-    fn allocExpr(self: *Parser, expr: Expr) !*Expr {
-        const ptr = try self.allocator.create(Expr);
-        ptr.* = expr;
-        return ptr;
-    }
-};
-
-const SubParser = struct {
-    parser: *Parser,
-    line: []const Token,
-    index: usize,
-
-    fn parseExpr(self: *SubParser, min_bp: u8, end_tag: ?TokenTag) !*Expr {
-        var left = try self.parsePrefix(end_tag);
-
-        while (self.index < self.line.len) {
-            self.skipWhitespace();
-            if (self.index >= self.line.len) break;
-            const tok = self.line[self.index];
+            const tok = self.tokens[index.*];
             if (end_tag) |tag| {
                 if (tok.tag == tag) break;
             }
 
             const op_info = infixInfo(tok.tag) orelse break;
             if (op_info.lbp < min_bp) break;
-            self.index += 1;
+            index.* += 1;
 
-            const right = try self.parseExpr(op_info.rbp, end_tag);
+            const right = try self.parseExpr(index, end_index, op_info.rbp, end_tag);
             left = try self.buildInfix(tok, left, right);
         }
 
         return left;
     }
 
-    const SubParserError = error{
-        UnexpectedEof,
-        UnknownIdentifier,
-        MissingRightParen,
-        MissingRightBrace,
-        UnexpectedToken,
-        ExpectedFunction,
-        UnknownCombinator,
-    };
+    fn parsePrefix(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag) ParseError!*Expr {
+        self.skipWhitespace(index, end_index);
+        if (index.* >= end_index) return error.UnexpectedEof;
 
-    fn parsePrefix(self: *SubParser, end_tag: ?TokenTag) (SubParserError || std.fmt.ParseFloatError || std.mem.Allocator.Error)!*Expr {
-        self.skipWhitespace();
-        if (self.index >= self.line.len) return error.UnexpectedEof;
-        const tok = self.line[self.index];
-        self.index += 1;
+        const tok = self.tokens[index.*];
+        index.* += 1;
         const slice = tok.lexeme;
 
         switch (tok.tag) {
             .number => {
                 const val = try std.fmt.parseFloat(f64, slice);
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .value = .{ .literal = .{ .scalar = .{ .value = val, .is_char = false } } },
                 });
             },
             .char_lit => {
                 const ch = slice[1];
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .value = .{ .literal = .{ .scalar = .{ .value = @floatFromInt(ch), .is_char = true } } },
                 });
             },
             .raw_string => {
-                // Placeholder: raw strings are parsed as value arrays later.
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .value = .{ .literal = .{ .array = .{ .data = &.{}, .shape = &.{}, .is_char = true } } },
                 });
             },
             .ident => {
                 const name = tok.lexeme;
-                const sym = self.parser.symbols.get(name) orelse return error.UnknownIdentifier;
+                const sym = self.symbols.get(name) orelse return error.UnknownIdentifier;
                 return sym.expr;
             },
             .lparen => {
-                const body = try self.parseExpr(0, .rparen);
-                self.skipWhitespace();
-                if (self.index >= self.line.len or self.line[self.index].tag != .rparen) {
+                const body = try self.parseExpr(index, end_index, 0, .rparen);
+                self.skipWhitespace(index, end_index);
+                if (index.* >= end_index or self.tokens[index.*].tag != .rparen) {
                     return error.MissingRightParen;
                 }
-                self.index += 1;
-                return self.parser.allocExpr(.{
+                index.* += 1;
+                if (body.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = .monad, .type = .{ .scope = &body.func } },
                 });
             },
             .lbrace => {
-                const body = try self.parseExpr(0, .rbrace);
-                self.skipWhitespace();
-                if (self.index >= self.line.len or self.line[self.index].tag != .rbrace) {
+                const body = try self.parseExpr(index, end_index, 0, .rbrace);
+                self.skipWhitespace(index, end_index);
+                if (index.* >= end_index or self.tokens[index.*].tag != .rbrace) {
                     return error.MissingRightBrace;
                 }
-                self.index += 1;
-                return self.parser.allocExpr(.{
+                index.* += 1;
+                if (body.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = .dyad, .type = .{ .scope = &body.func } },
                 });
             },
             .backslash => {
-                const body = try self.parseExpr(0, end_tag);
-                return self.parser.allocExpr(.{
+                const body = try self.parseExpr(index, end_index, 0, end_tag);
+                if (body.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = .monad, .type = .{ .scope = &body.func } },
                 });
             },
             .dbl_backslash => {
-                const body = try self.parseExpr(0, end_tag);
-                return self.parser.allocExpr(.{
+                const body = try self.parseExpr(index, end_index, 0, end_tag);
+                if (body.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = .dyad, .type = .{ .scope = &body.func } },
                 });
             },
@@ -248,29 +290,38 @@ const SubParser = struct {
         }
     }
 
-    fn skipWhitespace(self: *SubParser) void {
-        while (self.index < self.line.len and self.line[self.index].tag == .whitespace) : (self.index += 1) {}
+    fn skipWhitespace(self: *const Parser, index: *usize, end_index: usize) void {
+        while (index.* < end_index and self.tokens[index.*].tag == .whitespace) : (index.* += 1) {}
     }
 
-    fn buildInfix(self: *SubParser, tok: Token, left: *Expr, right: *Expr) !*Expr {
+    fn nextNonWhitespaceToken(self: *const Parser, index: *usize, end_index: usize) ?Token {
+        self.skipWhitespace(index, end_index);
+        if (index.* >= end_index) return null;
+        const tok = self.tokens[index.*];
+        index.* += 1;
+        return tok;
+    }
+
+    fn buildInfix(self: *Parser, tok: Token, left: *Expr, right: *Expr) ParseError!*Expr {
         switch (tok.tag) {
             .comma => {
                 const left_func = switch (left.*) {
                     .func => |f| f,
                     .value => return error.ExpectedFunction,
                 };
-                return self.parser.allocExpr(.{
+                if (right.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = left_func.arity, .type = .{ .partial_apply = .{ .op = .comma, .left = &left.func, .right = &right.func } } },
                 });
             },
             .underscore => {
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .value = .{ .strand = .{ .left = left, .right = right } },
                 });
             },
             .pipe_gt => {
                 if (left.* != .func) return error.ExpectedFunction;
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .value = .{ .apply_rev = .{ .func = left, .arg = right } },
                 });
             },
@@ -285,7 +336,7 @@ const SubParser = struct {
                 };
                 const arity = if (left_func.arity == right_func.arity) left_func.arity else .dyad;
                 const op = parseCombinator(tok) orelse return error.UnknownCombinator;
-                return self.parser.allocExpr(.{
+                return self.allocExpr(.{
                     .func = .{ .arity = arity, .type = .{ .combinator = .{ .op = op, .left = &left.func, .right = &right.func } } },
                 });
             },
@@ -294,12 +345,19 @@ const SubParser = struct {
                     .func => |f| f,
                     .value => return error.ExpectedFunction,
                 };
-                return self.parser.allocExpr(.{
+                if (right.* != .func) return error.ExpectedFunction;
+                return self.allocExpr(.{
                     .func = .{ .arity = left_func.arity, .type = .{ .partial_apply = .{ .op = .caret, .left = &left.func, .right = &right.func } } },
                 });
             },
             else => return error.UnexpectedToken,
         }
+    }
+
+    fn allocExpr(self: *Parser, expr: Expr) ParseError!*Expr {
+        const ptr = try self.allocator.create(Expr);
+        ptr.* = expr;
+        return ptr;
     }
 };
 
@@ -324,18 +382,21 @@ fn parseCombinator(tok: Token) ?Combinator {
     return std.meta.stringToEnum(Combinator, std.ascii.upperString(&out, name));
 }
 
-fn hasNonWhitespaceTokens(line: []const Token) bool {
-    for (line) |tok| {
-        if (tok.tag != .whitespace) return true;
-    }
-    return false;
-}
-
-fn nextNonWhitespaceToken(line: []const Token, index: *usize) ?Token {
-    while (index.* < line.len) : (index.* += 1) {
-        const tok = line[index.*];
-        index.* += 1;
-        if (tok.tag != .whitespace) return tok;
+fn firstNonWhitespaceIndex(line: []const Token) ?usize {
+    for (line, 0..) |tok, i| {
+        if (tok.tag != .whitespace) return i;
     }
     return null;
+}
+
+fn isConstStart(line: []const Token, start_index: usize) bool {
+    if (start_index >= line.len or line[start_index].tag != .ident) return false;
+
+    var i = start_index + 1;
+    while (i < line.len) : (i += 1) {
+        const tok = line[i];
+        if (tok.tag == .whitespace) continue;
+        return tok.tag == .equal;
+    }
+    return false;
 }

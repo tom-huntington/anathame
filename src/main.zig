@@ -24,7 +24,11 @@ pub fn main() !void {
     const a = wrap{ .v = "hello" };
     stringprint.printfmt("a: {}\n", .{a});
 
-    const source = "add )b1 sq";
+    // main function can't have new lines ATM
+    const source =
+        \\a = 2 sq
+        \\add )b1 sq
+    ;
     std.debug.print("soure: {s}\n", .{source});
 
     var lexed = try lex.lex(allocator, source);
