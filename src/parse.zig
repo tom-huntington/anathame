@@ -358,6 +358,14 @@ pub const Parser = struct {
                     .func = .{ .arity = .dyad, .type = .{ .scope = &body.func } },
                 });
             },
+            .slash => {
+                const body = try self.parseExpr(index, end_index, 0, end_tag);
+                if (body.* != .func) return error.ExpectedFunction;
+                if (body.func.arity != .dyad) return error.ExpectedFunction;
+                return self.allocExpr(.{
+                    .func = .{ .arity = .monad, .type = .{ .reduce = &body.func } },
+                });
+            },
             else => return error.UnexpectedToken,
         }
     }
@@ -513,6 +521,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
         .lbrace,
         .backslash,
         .dbl_backslash,
+        .slash,
         => true,
         else => false,
     };
@@ -616,4 +625,27 @@ test "parse monadic arrow function with local parameter references" {
     const user_fn = expr.func.type.userFn;
     try std.testing.expectEqualStrings("x", user_fn.left);
     try std.testing.expect(user_fn.right == null);
+}
+
+test "parse slash reduce as monadic function" {
+    const allocator = std.testing.allocator;
+    const source = "/ add";
+
+    var lexed = try @import("lex.zig").lex(allocator, source);
+    defer lexed.deinit(allocator);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var parser = Parser.init(arena.allocator(), source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+    try parser.populateBuiltins();
+
+    var index: usize = 0;
+    const expr = try parser.parseExpr(&index, lexed.tokens.items.len, 0, null);
+
+    try std.testing.expect(expr.* == .func);
+    try std.testing.expectEqual(@as(Arity, .monad), expr.func.arity);
+    try std.testing.expect(expr.func.type == .reduce);
+    try std.testing.expectEqual(@as(Arity, .dyad), expr.func.type.reduce.arity);
 }

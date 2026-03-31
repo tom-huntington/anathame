@@ -16,6 +16,7 @@ pub const TokenTag = enum {
     rbrace,
     backslash,
     dbl_backslash,
+    slash,
     equal,
     whitespace,
 };
@@ -66,6 +67,7 @@ pub const Expr = union(enum) {
         arity: Arity,
         type: union(enum) {
             combinator: struct { op: Combinator, left: *FuncExpr, right: *FuncExpr },
+            reduce: *FuncExpr,
             partial_apply: struct { left: *FuncExpr, right: *ValueExpr },
             right_partial_apply: struct { left: *FuncExpr, right: *FuncExpr },
             scope: *FuncExpr,

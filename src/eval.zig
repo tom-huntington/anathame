@@ -76,6 +76,13 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: Args) 
                 },
             }
         },
+        .reduce => |reduced| {
+            const monad_args = switch (args) {
+                .monad => |monad_args| monad_args,
+                .dyad => return error.ArityMismatch,
+            };
+            return evalReduce(ctx, reduced, monad_args[0]);
+        },
         .partial_apply => |partial| {
             const right = try evalValueExpr(ctx, partial.right);
             return applyRightArg(ctx, partial.left, args, right);
@@ -175,6 +182,9 @@ fn foldFuncExpr(allocator: std.mem.Allocator, func: *Expr.FuncExpr) EvalError!vo
             try foldFuncExpr(allocator, com.left);
             try foldFuncExpr(allocator, com.right);
         },
+        .reduce => |reduced| {
+            try foldFuncExpr(allocator, reduced);
+        },
         .partial_apply => |partial| {
             if (try tryFoldValueExpr(allocator, partial.right)) |value| {
                 partial.right.* = .{ .literal = value };
@@ -258,6 +268,34 @@ fn applyRightArg(
         },
         .value => error.ArityMismatch,
     };
+}
+
+fn evalReduce(ctx: *EvalContext, func: *const Expr.FuncExpr, value: Value) EvalError!Value {
+    const array = switch (value) {
+        .array => |array| array,
+        else => return error.UnsupportedValueKind,
+    };
+
+    if (array.shape.len != 1) return error.UnsupportedValueKind;
+    if (array.data.len == 0) return error.UnsupportedValueKind;
+
+    var acc: Value = .{
+        .scalar = .{
+            .value = array.data[0],
+            .is_char = array.is_char,
+        },
+    };
+
+    for (array.data[1..]) |item| {
+        acc = try evalFuncInContext(ctx, func, .{
+            .dyad = .{
+                acc,
+                .{ .scalar = .{ .value = item, .is_char = array.is_char } },
+            },
+        });
+    }
+
+    return acc;
 }
 
 fn evalStrand(ctx: *EvalContext, left: *const Expr, right: *const Expr) EvalError!Value {
@@ -518,4 +556,28 @@ test "eval monadic arrow function tail-calls a function body" {
 
     try std.testing.expectEqual(@as(Value.Tag, .scalar), result);
     try std.testing.expectEqual(@as(f64, 25), result.scalar.value);
+}
+
+test "eval slash reduce folds rank-1 arrays" {
+    const allocator = std.testing.allocator;
+    const source = "/ add";
+
+    var lexed = try @import("lex.zig").lex(allocator, source);
+    defer lexed.deinit(allocator);
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+
+    var parser = @import("parse.zig").Parser.init(arena.allocator(), source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+    const file_ast = try parser.parseFile(arena.allocator());
+
+    const result = try evalFunc(arena.allocator(), file_ast.main, .{
+        .monad = .{
+            .{ .array = .{ .data = &.{ 1, 2, 3, 4 }, .shape = &.{4}, .is_char = false } },
+        },
+    });
+
+    try std.testing.expectEqual(@as(Value.Tag, .scalar), result);
+    try std.testing.expectEqual(@as(f64, 10), result.scalar.value);
 }

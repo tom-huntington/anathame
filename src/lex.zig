@@ -111,6 +111,10 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
                     i += 1;
                 }
             },
+            '/' => {
+                try tokens.append(allocator, .{ .tag = .slash, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                i += 1;
+            },
             '=' => {
                 try tokens.append(allocator, .{ .tag = .equal, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                 i += 1;
@@ -176,4 +180,15 @@ test "lex recognizes arrow functions" {
     try std.testing.expectEqual(TokenTag.ident, result.tokens.items[0].tag);
     try std.testing.expectEqual(TokenTag.arrow, result.tokens.items[2].tag);
     try std.testing.expectEqual(TokenTag.ident, result.tokens.items[4].tag);
+}
+
+test "lex recognizes slash operator" {
+    const allocator = std.testing.allocator;
+    const source = "/ add";
+
+    var result = try lex(allocator, source);
+    defer result.deinit(allocator);
+
+    try std.testing.expectEqual(TokenTag.slash, result.tokens.items[0].tag);
+    try std.testing.expectEqualStrings("/", result.tokens.items[0].lexeme);
 }
