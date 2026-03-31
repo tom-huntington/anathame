@@ -28,7 +28,7 @@ pub fn main() !void {
     const source =
         \\a = 2 sq
         \\c = sq
-        \\add,a )b1 c
+        \\add )b1 c
     ;
     std.debug.print("soure:\n{s}\n", .{source});
 
