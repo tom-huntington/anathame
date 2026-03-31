@@ -65,7 +65,8 @@ pub const Expr = union(enum) {
         arity: Arity,
         type: union(enum) {
             combinator: struct { op: Combinator, left: *FuncExpr, right: *FuncExpr },
-            partial_apply: struct { op: PartialApply, left: *FuncExpr, right: *FuncExpr },
+            partial_apply: struct { left: *FuncExpr, right: *ValueExpr },
+            right_partial_apply: struct { left: *FuncExpr, right: *FuncExpr },
             scope: *FuncExpr,
             userFn: *FuncExpr,
             builtin: union(enum) { monad: MonadFn, dyad: DyadFn },

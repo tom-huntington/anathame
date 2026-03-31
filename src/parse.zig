@@ -40,6 +40,7 @@ const ParseError = error{
     MissingRightBrace,
     UnexpectedToken,
     ExpectedFunction,
+    ExpectedValue,
     UnknownCombinator,
     MissingMain,
     MainMustBeFunction,
@@ -369,9 +370,9 @@ pub const Parser = struct {
                     .func => |f| f,
                     .value => return error.ExpectedFunction,
                 };
-                if (right.* != .func) return error.ExpectedFunction;
+                if (right.* != .value) return error.ExpectedValue;
                 return self.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .type = .{ .partial_apply = .{ .op = .comma, .left = &left.func, .right = &right.func } } },
+                    .func = .{ .arity = left_func.arity, .type = .{ .partial_apply = .{ .left = &left.func, .right = &right.value } } },
                 });
             },
             .underscore => {
@@ -401,7 +402,7 @@ pub const Parser = struct {
                 };
                 if (right.* != .func) return error.ExpectedFunction;
                 return self.allocExpr(.{
-                    .func = .{ .arity = left_func.arity, .type = .{ .partial_apply = .{ .op = .caret, .left = &left.func, .right = &right.func } } },
+                    .func = .{ .arity = left_func.arity, .type = .{ .right_partial_apply = .{ .left = &left.func, .right = &right.func } } },
                 });
             },
             else => return error.UnexpectedToken,

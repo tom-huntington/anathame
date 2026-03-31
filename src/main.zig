@@ -27,7 +27,7 @@ pub fn main() !void {
     // main function can't have new lines ATM
     const source =
         \\a = 2 sq
-        \\sq )b sq
+        \\add,3 )b1 sq
     ;
     std.debug.print("soure:\n{s}\n", .{source});
 
