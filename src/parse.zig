@@ -134,6 +134,7 @@ pub const Parser = struct {
         for (0..self.lineCount()) |line_index| {
             const line = self.lineTokens(line_index);
             const line_start = firstNonWhitespaceIndex(line) orelse continue;
+            const global_start = @as(usize, self.line_offsets[line_index]) + line_start;
             const kind = if (isConstStart(line, line_start)) StatementKind.const_def else StatementKind.expr;
 
             switch (kind) {
@@ -141,16 +142,16 @@ pub const Parser = struct {
                     if (pending_expr_start) |_| return error.InvalidConst;
                     try statements.append(allocator, .{
                         .kind = .const_def,
-                        .start = line_start,
+                        .start = global_start,
                         .end = self.tokens.len,
                     });
                 },
                 .expr => {
                     if (pending_expr_start == null) {
-                        pending_expr_start = line_start;
+                        pending_expr_start = global_start;
                         try statements.append(allocator, .{
                             .kind = .expr,
-                            .start = line_start,
+                            .start = global_start,
                             .end = self.tokens.len,
                         });
                     }

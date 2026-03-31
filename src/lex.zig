@@ -1,6 +1,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const Token = types.Token;
+const TokenTag = types.TokenTag;
 
 pub const LexResult = struct {
     tokens: std.ArrayList(Token),
@@ -132,11 +133,9 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
                         j += 1;
                         if (j >= line.len or !std.ascii.isDigit(line[j])) return error.InvalidNumber;
                         while (j < line.len and std.ascii.isDigit(line[j])) : (j += 1) {}
-                        try tokens.append(allocator, .{ .tag = .number, .start = start, .end = base + j, .lexeme = line[i..j] });
-                        i = j;
-                    } else {
-                        return error.InvalidNumber;
                     }
+                    try tokens.append(allocator, .{ .tag = .number, .start = start, .end = base + j, .lexeme = line[i..j] });
+                    i = j;
                 } else if (std.ascii.isAlphabetic(c)) {
                     var j = i;
                     while (j < line.len and std.ascii.isAlphabetic(line[j])) : (j += 1) {}
@@ -148,4 +147,21 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
             },
         }
     }
+}
+
+test "lex accepts integer and decimal numbers" {
+    const allocator = std.testing.allocator;
+    const source =
+        \\a = 2
+        \\b = 3.5
+    ;
+
+    var result = try lex(allocator, source);
+    defer result.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 10), result.tokens.items.len);
+    try std.testing.expectEqual(TokenTag.number, result.tokens.items[4].tag);
+    try std.testing.expectEqualStrings("2", result.tokens.items[4].lexeme);
+    try std.testing.expectEqual(TokenTag.number, result.tokens.items[9].tag);
+    try std.testing.expectEqualStrings("3.5", result.tokens.items[9].lexeme);
 }

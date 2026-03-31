@@ -26,10 +26,10 @@ pub fn main() !void {
 
     // main function can't have new lines ATM
     const source =
-        \\a = 2 sq
+        \\a = 2
         \\add )b1 sq
     ;
-    std.debug.print("soure: {s}\n", .{source});
+    std.debug.print("soure:\n{s}\n", .{source});
 
     var lexed = try lex.lex(allocator, source);
     stringprint.printfmt("tokens: {}\n", .{lexed.tokens});
