@@ -31,7 +31,7 @@ pub fn main() !void {
     stringprint.printfmt("a: {}\n", .{a});
 
     const source =
-        \\ strided,2,3^1
+        \\ / add
     ;
     std.debug.print("soure: {s}\n", .{source});
 

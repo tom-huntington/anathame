@@ -59,9 +59,11 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
                 },
             }
         },
-        .reduce => |reduced| {
-            if (args.len != 1) return error.ArityMismatch;
-            return evalReduce(ctx, reduced, args[0]);
+        .hof => |hof| {
+            if (args.len != hof.arity) return error.ArityMismatch;
+            return switch (hof.kind) {
+                .reduce => evalReduce(ctx, hof.funcArg, args[0]),
+            };
         },
         .partial_apply_permute => |partial| {
             const right = ctx.allocator.alloc(Value, partial.arguments.len) catch @panic("out of memory");
@@ -160,8 +162,8 @@ fn foldFuncExpr(allocator: std.mem.Allocator, func: *Expr.FuncExpr) EvalError!vo
             try foldFuncExpr(allocator, com.left);
             try foldFuncExpr(allocator, com.right);
         },
-        .reduce => |reduced| {
-            try foldFuncExpr(allocator, reduced);
+        .hof => |hof| {
+            try foldFuncExpr(allocator, hof.funcArg);
         },
         .partial_apply_permute => |partial| {
             for (partial.arguments) |*expr| {

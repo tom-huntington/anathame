@@ -16,7 +16,7 @@ pub const TokenTag = enum {
     rbrace,
     backslash,
     dbl_backslash,
-    slash,
+    hof,
     equal,
     whitespace,
 };
@@ -58,6 +58,23 @@ pub const Builtin = struct {
     pointer: *const fn (std.mem.Allocator, []const Value) Value,
 };
 
+pub const HofKind = enum {
+    reduce,
+};
+
+pub const HofTemplate = struct {
+    arity: u32,
+    kind: HofKind,
+    pointer: *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value,
+};
+
+pub const Hof = struct {
+    arity: u32,
+    kind: HofKind,
+    funcArg: *Expr.FuncExpr,
+    pointer: *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value,
+};
+
 pub const PartialApply = enum { comma, caret };
 
 pub const Expr = union(enum) {
@@ -68,7 +85,7 @@ pub const Expr = union(enum) {
         arity: u32,
         type: union(enum) {
             combinator: struct { op: Combinator, left: *FuncExpr, right: *FuncExpr },
-            reduce: *FuncExpr,
+            hof: Hof,
             partial_apply_permute: struct { func: *FuncExpr, arguments: []ValueExpr, permutation_index: u32 },
             scope: *FuncExpr,
             userFn: struct { left: []const u8, right: ?[]const u8, body: *Expr },

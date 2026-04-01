@@ -7,6 +7,7 @@ const Expr = types.Expr;
 const TokenTag = types.TokenTag;
 const Combinator = types.Combinator;
 const Builtin = types.Builtin;
+const Hof = types.Hof;
 
 pub const ConstDef = struct {
     name: []const u8,
@@ -353,12 +354,18 @@ pub const Parser = struct {
                     .func = .{ .arity = 2, .type = .{ .scope = &body.func } },
                 });
             },
-            .slash => {
+            .hof => {
+                const template = builtins.getHof(tok.lexeme) orelse return error.UnexpectedToken;
                 const body = try self.parseExpr(index, end_index, 0, end_tag);
                 if (body.* != .func) return error.ExpectedFunction;
                 if (body.func.arity != 2) return error.ExpectedFunction;
                 return self.allocExpr(.{
-                    .func = .{ .arity = 1, .type = .{ .reduce = &body.func } },
+                    .func = .{ .arity = template.arity, .type = .{ .hof = .{
+                        .arity = template.arity,
+                        .kind = template.kind,
+                        .funcArg = &body.func,
+                        .pointer = template.pointer,
+                    } } },
                 });
             },
             else => return error.UnexpectedToken,
@@ -615,7 +622,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
         .lbrace,
         .backslash,
         .dbl_backslash,
-        .slash,
+        .hof,
         => true,
         else => false,
     };
@@ -806,6 +813,6 @@ test "parse slash reduce as monadic function" {
 
     try std.testing.expect(expr.* == .func);
     try std.testing.expectEqual(@as(u32, 1), expr.func.arity);
-    try std.testing.expect(expr.func.type == .reduce);
-    try std.testing.expectEqual(@as(u32, 2), expr.func.type.reduce.arity);
+    try std.testing.expect(expr.func.type == .hof);
+    try std.testing.expectEqual(@as(u32, 2), expr.func.type.hof.funcArg.arity);
 }
