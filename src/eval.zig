@@ -64,34 +64,52 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
             }
             return applyRightArgs(ctx, partial.func, args, right, partial.permutation_index);
         },
-        .table => |table| return evalTableFunc(table, args),
+        .table => |table| return evalTableFunc(ctx.allocator, table, args),
     }
 }
 
-fn evalTableFunc(table: anytype, args: []const Value) EvalError!Value {
+fn evalTableFunc(allocator: std.mem.Allocator, table: anytype, args: []const Value) EvalError!Value {
     if (args.len != 1) return error.ArityMismatch;
     if (table.lookup.shape.len != 2 or table.lookup.shape[1] != 2) return error.NotImplemented;
 
-    const key = switch (args[0]) {
-        .scalar => |scalar| scalar,
-        .array => return error.UnsupportedValueKind,
-    };
+    return switch (args[0]) {
+        .scalar => |scalar| .{ .scalar = try evalTableScalar(table, scalar) },
+        .array => |array| blk: {
+            const data = allocator.alloc(f64, array.data.len) catch @panic("out of memory");
+            const shape = allocator.dupe(u32, array.shape) catch @panic("out of memory");
 
+            for (array.data, 0..) |item, i| {
+                data[i] = (try evalTableScalar(table, .{
+                    .value = item,
+                    .is_char = array.is_char,
+                })).value;
+            }
+
+            break :blk .{ .array = .{
+                .data = data,
+                .shape = shape,
+                .is_char = table.lookup.is_char and array.is_char,
+            } };
+        },
+    };
+}
+
+fn evalTableScalar(table: anytype, key: types.Scalar) EvalError!types.Scalar {
     const row_count: usize = table.lookup.shape[0];
     for (0..row_count) |row| {
         const row_offset = row * 2;
         const candidate = table.lookup.data[row_offset];
         if (candidate == key.value) {
-            return .{ .scalar = .{
+            return .{
                 .value = table.lookup.data[row_offset + 1],
                 .is_char = table.lookup.is_char,
-            } };
+            };
         }
     }
 
     return switch (table.unmatched) {
         .Error => error.TableMiss,
-        .Identity => args[0],
+        .Identity => key,
     };
 }
 
