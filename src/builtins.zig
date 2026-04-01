@@ -67,9 +67,52 @@ pub fn sq(all: std.mem.Allocator, args: *[1]Value) Value {
     @panic("not implemented");
 }
 
-pub fn strided(_: std.mem.Allocator, args: *[3]Value) Value {
-    std.debug.print("strided args: {}, {}, {}\n", .{ args[0], args[1], args[2] });
-    return args[0];
+fn expectNonNegativeInteger(value: f64) usize {
+    if (!std.math.isFinite(value) or value < 0 or @floor(value) != value) {
+        @panic("expected non-negative integer");
+    }
+    return @intFromFloat(value);
+}
+
+pub fn strided(all: std.mem.Allocator, args: *[3]Value) Value {
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("strided expects array as first argument"),
+    };
+    const inner_size = switch (args[1]) {
+        .scalar => |scalar| expectNonNegativeInteger(scalar.value),
+        else => @panic("strided expects scalar inner size"),
+    };
+    const stride = switch (args[2]) {
+        .scalar => |scalar| expectNonNegativeInteger(scalar.value),
+        else => @panic("strided expects scalar stride"),
+    };
+
+    if (array.shape.len != 1) @panic("strided only supports rank-1 arrays");
+    if (inner_size == 0) @panic("strided inner size must be greater than zero");
+
+    const step = inner_size + stride - 1;
+    if (step == 0) @panic("strided step must be greater than zero");
+
+    var outer_size: usize = 0;
+    var start: usize = 0;
+    while (start + inner_size <= array.data.len) : (start += step) {
+        outer_size += 1;
+    }
+
+    const data = all.alloc(f64, outer_size * inner_size) catch @panic("out of memory");
+    const shape = all.alloc(u32, 2) catch @panic("out of memory");
+    shape[0] = @intCast(outer_size);
+    shape[1] = @intCast(inner_size);
+
+    start = 0;
+    var out_index: usize = 0;
+    while (start + inner_size <= array.data.len) : (start += step) {
+        @memcpy(data[out_index .. out_index + inner_size], array.data[start .. start + inner_size]);
+        out_index += inner_size;
+    }
+
+    return .{ .array = .{ .data = data, .shape = shape, .is_char = array.is_char } };
 }
 
 test "sq squares scalar values" {
@@ -135,5 +178,33 @@ test "sq squares arrays elementwise" {
     try std.testing.expectEqual(@as(types.Value.Tag, .array), result);
     try std.testing.expectEqualSlices(f64, &.{ 4, 9, 16 }, result.array.data);
     try std.testing.expectEqualSlices(u32, &.{3}, result.array.shape);
+    try std.testing.expect(!result.array.is_char);
+}
+
+test "strided chunks a rank-1 array using the requested inner size and stride" {
+    const allocator = std.testing.allocator;
+    const result = strided(
+        allocator,
+        &.{
+            .{ .array = .{
+                .data = &.{ 1, 2, 3, 4, 5, 6, 7, 8 },
+                .shape = &.{8},
+                .is_char = false,
+            } },
+            .{ .scalar = .{ .value = 2, .is_char = false } },
+            .{ .scalar = .{ .value = 2, .is_char = false } },
+        },
+    );
+    defer switch (result) {
+        .array => |array| {
+            allocator.free(array.data);
+            allocator.free(array.shape);
+        },
+        else => {},
+    };
+
+    try std.testing.expectEqual(@as(types.Value.Tag, .array), result);
+    try std.testing.expectEqualSlices(f64, &.{ 1, 2, 4, 5, 7, 8 }, result.array.data);
+    try std.testing.expectEqualSlices(u32, &.{ 3, 2 }, result.array.shape);
     try std.testing.expect(!result.array.is_char);
 }

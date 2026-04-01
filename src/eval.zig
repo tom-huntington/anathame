@@ -479,11 +479,12 @@ test "eval chained comma partial application appends captured values in order" {
     const file_ast = try parser.parseFile(arena.allocator());
 
     const result = try evalFunc(arena.allocator(), file_ast.main, &.{
-        .{ .scalar = .{ .value = 7, .is_char = false } },
+        .{ .array = .{ .data = &.{ 1, 2, 3, 4, 5, 6, 7, 8, 9 }, .shape = &.{9}, .is_char = false } },
     });
 
-    try std.testing.expectEqual(@as(Value.Tag, .scalar), result);
-    try std.testing.expectEqual(@as(f64, 7), result.scalar.value);
+    try std.testing.expectEqual(@as(Value.Tag, .array), result);
+    try std.testing.expectEqualSlices(f64, &.{ 1, 2, 3, 6, 7, 8 }, result.array.data);
+    try std.testing.expectEqualSlices(u32, &.{ 2, 3 }, result.array.shape);
 }
 
 test "eval monadic arrow function evaluates a value body with a bound parameter" {
