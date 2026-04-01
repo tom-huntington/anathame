@@ -5,6 +5,7 @@ const parse = @import("parse.zig");
 const lex = @import("lex.zig");
 const eval = @import("eval.zig");
 const types = @import("types.zig");
+const format = @import("format.zig");
 
 pub const std_options: std.Options = .{
     .fmt_max_depth = 64, // Default is usually 16
@@ -54,5 +55,7 @@ pub fn main() !void {
         1 => try eval.evalFunc(ast_alloc, file_ast.main, args[0..1]),
         else => return error.ArityMismatch,
     };
-    stringprint.printfmt("result: {}\n", .{result});
+    const formatted = try format.allocPrint(allocator, result);
+    defer allocator.free(formatted);
+    std.debug.print("result: {s}\n", .{formatted});
 }
