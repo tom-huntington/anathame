@@ -58,19 +58,8 @@ pub const Builtin = struct {
     pointer: *const fn (std.mem.Allocator, []const Value) Value,
 };
 
-pub const HofKind = enum {
-    reduce,
-};
-
-pub const HofTemplate = struct {
-    arity: u32,
-    kind: HofKind,
-    pointer: *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value,
-};
-
 pub const Hof = struct {
     arity: u32,
-    kind: HofKind,
     funcArg: *Expr.FuncExpr,
     pointer: *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value,
 };

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtins = @import("builtins.zig");
+const hofs = @import("hofs.zig");
 const types = @import("types.zig");
 const Token = types.Token;
 const Value = types.Value;
@@ -21,6 +22,11 @@ pub const FileAst = struct {
 
 pub const Symbol = struct {
     expr: *Expr,
+};
+
+const HofSymbol = struct {
+    arity: u32,
+    pointer: *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value,
 };
 
 const StatementKind = enum {
@@ -54,27 +60,32 @@ pub const Parser = struct {
     tokens: []const Token,
     line_offsets: []const u32,
     symbols: std.StringHashMap(Symbol),
+    hofs: std.StringHashMap(HofSymbol),
     local_params: std.ArrayList([]const u8),
 
     pub fn init(allocator: std.mem.Allocator, source: []const u8, tokens: []const Token, line_offsets: []const u32) Parser {
         const symbols = std.StringHashMap(Symbol).init(allocator);
+        const registered_hofs = std.StringHashMap(HofSymbol).init(allocator);
         return .{
             .allocator = allocator,
             .source = source,
             .tokens = tokens,
             .line_offsets = line_offsets,
             .symbols = symbols,
+            .hofs = registered_hofs,
             .local_params = .empty,
         };
     }
 
     pub fn deinit(self: *Parser) void {
         self.symbols.deinit();
+        self.hofs.deinit();
         self.local_params.deinit(self.allocator);
     }
 
     pub fn parseFile(self: *Parser, allocator: std.mem.Allocator) ParseError!FileAst {
         try self.populateBuiltins();
+        try self.populateHofs();
 
         var consts: std.ArrayList(ConstDef) = .empty;
         errdefer consts.deinit(allocator);
@@ -103,6 +114,23 @@ pub const Parser = struct {
             .consts = try consts.toOwnedSlice(allocator),
             .main = &main_expr.func,
         };
+    }
+
+    pub fn populateHofs(self: *Parser) ParseError!void {
+        inline for (hofs.symbols) |symbol| {
+            const member = @field(hofs, symbol.name);
+            const member_info = @typeInfo(@TypeOf(member));
+
+            switch (member_info) {
+                .@"fn" => {
+                    const params = member_info.@"fn".params;
+                    if (hofFromParams(params, member)) |hof| {
+                        try self.hofs.put(symbol.lexeme, hof);
+                    }
+                },
+                else => {},
+            }
+        }
     }
 
     pub fn populateBuiltins(self: *Parser) ParseError!void {
@@ -355,16 +383,15 @@ pub const Parser = struct {
                 });
             },
             .hof => {
-                const template = builtins.getHof(tok.lexeme) orelse return error.UnexpectedToken;
+                const hof = self.hofs.get(tok.lexeme) orelse return error.UnexpectedToken;
                 const body = try self.parseExpr(index, end_index, 0, end_tag);
                 if (body.* != .func) return error.ExpectedFunction;
                 if (body.func.arity != 2) return error.ExpectedFunction;
                 return self.allocExpr(.{
-                    .func = .{ .arity = template.arity, .type = .{ .hof = .{
-                        .arity = template.arity,
-                        .kind = template.kind,
+                    .func = .{ .arity = hof.arity, .type = .{ .hof = .{
+                        .arity = hof.arity,
                         .funcArg = &body.func,
-                        .pointer = template.pointer,
+                        .pointer = hof.pointer,
                     } } },
                 });
             },
@@ -416,7 +443,7 @@ pub const Parser = struct {
         self.local_params.items.len = param_start;
 
         return self.allocExpr(.{
-                .func = .{
+            .func = .{
                 .arity = if (second_name == null) 1 else 2,
                 .type = .{ .userFn = .{ .left = first_name, .right = second_name, .body = body } },
             },
@@ -608,6 +635,36 @@ fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
             return member(allocator, @constCast(typed_args));
+        }
+    }.call;
+}
+
+fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol {
+    if (params.len != 3) return null;
+    if ((params[2].type orelse return null) != Expr.FuncExpr) return null;
+
+    const args_type = params[1].type orelse return null;
+    const args_info = @typeInfo(args_type);
+    if (args_info != .pointer) return null;
+    if (args_info.pointer.size != .one) return null;
+
+    const child_info = @typeInfo(args_info.pointer.child);
+    if (child_info != .array) return null;
+    if (child_info.array.child != Value) return null;
+
+    const arity: u32 = @intCast(child_info.array.len);
+    return .{
+        .arity = arity,
+        .pointer = makeHofWrapper(arity, member),
+    };
+}
+
+fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value {
+    return &struct {
+        fn call(allocator: std.mem.Allocator, args: []const Value, fn_arg: Expr.FuncExpr) Value {
+            std.debug.assert(args.len == arity);
+            const typed_args: *const [arity]Value = @ptrCast(args.ptr);
+            return member(allocator, @constCast(typed_args), fn_arg);
         }
     }.call;
 }

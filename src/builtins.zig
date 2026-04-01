@@ -1,49 +1,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const Expr = types.Expr;
-const HofTemplate = types.HofTemplate;
-const HofKind = types.HofKind;
 const Value = types.Value;
-
-pub const HofSymbol = struct {
-    lexeme: []const u8,
-    template: HofTemplate,
-};
-
-pub fn getHof(lexeme: []const u8) ?HofTemplate {
-    inline for (hof_symbols) |symbol| {
-        if (std.mem.eql(u8, lexeme, symbol.lexeme)) return symbol.template;
-    }
-    return null;
-}
-
-pub const hof_symbols = [_]HofSymbol{
-    .{
-        .lexeme = "/",
-        .template = .{
-            .arity = 1,
-            .kind = .reduce,
-            .pointer = makeHofWrapper(1, reduce),
-        },
-    },
-};
-
-pub fn reduce(all: std.mem.Allocator, args: *[1]Value, fnArg: Expr.FuncExpr) Value {
-    _ = all;
-    _ = args;
-    _ = fnArg;
-    @panic("reduce HOF must be evaluated via eval.zig");
-}
-
-fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (std.mem.Allocator, []const Value, Expr.FuncExpr) Value {
-    return &struct {
-        fn call(allocator: std.mem.Allocator, args: []const Value, fn_arg: Expr.FuncExpr) Value {
-            std.debug.assert(args.len == arity);
-            const typed_args: *const [arity]Value = @ptrCast(args.ptr);
-            return member(allocator, @constCast(typed_args), fn_arg);
-        }
-    }.call;
-}
 
 pub fn add(all: std.mem.Allocator, args: *[2]Value) Value {
     const a = args[0];

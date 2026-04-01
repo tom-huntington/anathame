@@ -53,9 +53,7 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
         },
         .hof => |hof| {
             if (args.len != hof.arity) return error.ArityMismatch;
-            return switch (hof.kind) {
-                .reduce => evalReduce(ctx, hof.funcArg, args[0]),
-            };
+            return hof.pointer(ctx.allocator, args, hof.funcArg.*);
         },
         .partial_apply_permute => |partial| {
             const right = ctx.allocator.alloc(Value, partial.arguments.len) catch @panic("out of memory");
@@ -209,32 +207,6 @@ fn factorial(n: usize) u64 {
         result *= i;
     }
     return result;
-}
-
-fn evalReduce(ctx: *EvalContext, func: *const Expr.FuncExpr, value: Value) EvalError!Value {
-    const array = switch (value) {
-        .array => |array| array,
-        else => return error.UnsupportedValueKind,
-    };
-
-    if (array.shape.len != 1) return error.UnsupportedValueKind;
-    if (array.data.len == 0) return error.UnsupportedValueKind;
-
-    var acc: Value = .{
-        .scalar = .{
-            .value = array.data[0],
-            .is_char = array.is_char,
-        },
-    };
-
-    for (array.data[1..]) |item| {
-        acc = try evalFuncInContext(ctx, func, &.{
-            acc,
-            .{ .scalar = .{ .value = item, .is_char = array.is_char } },
-        });
-    }
-
-    return acc;
 }
 
 fn evalStrand(ctx: *EvalContext, left: *const Expr, right: *const Expr) EvalError!Value {
