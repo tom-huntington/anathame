@@ -319,6 +319,7 @@ pub const Parser = struct {
             .raw_string,
             .lbracket,
             => return self.parseLiteralExpr(tok, index, end_index),
+            .table => return self.parseTableExpr(index, end_index),
             .ident => {
                 const name = tok.lexeme;
                 if (try self.maybeParseArrowFunction(index, end_index, end_tag, name)) |arrow| {
@@ -542,6 +543,27 @@ pub const Parser = struct {
     fn parseLiteralExpr(self: *Parser, first_tok: Token, index: *usize, end_index: usize) ParseError!*Expr {
         return self.allocExpr(.{
             .value = .{ .literal = try self.parseLiteralValue(first_tok, index, end_index) },
+        });
+    }
+
+    fn parseTableExpr(self: *Parser, index: *usize, end_index: usize) ParseError!*Expr {
+        const lookup_tok = self.nextNonWhitespaceToken(index, end_index) orelse return error.UnexpectedEof;
+        if (lookup_tok.tag != .lbracket) return error.UnexpectedToken;
+
+        const lookup_value = try self.parseLiteralValue(lookup_tok, index, end_index);
+        const lookup = switch (lookup_value) {
+            .array => |array| array,
+            .scalar => return error.UnexpectedToken,
+        };
+
+        return self.allocExpr(.{
+            .func = .{
+                .arity = 1,
+                .type = .{ .table = .{
+                    .lookup = lookup,
+                    .unmatched = .Error,
+                } },
+            },
         });
     }
 
@@ -778,6 +800,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
         .char_lit,
         .raw_string,
         .ident,
+        .table,
         .lparen,
         .lbrace,
         .lbracket,

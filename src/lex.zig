@@ -155,7 +155,9 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
                 } else if (std.ascii.isAlphabetic(c)) {
                     var j = i;
                     while (j < line.len and std.ascii.isAlphabetic(line[j])) : (j += 1) {}
-                    try tokens.append(allocator, .{ .tag = .ident, .start = start, .end = base + j, .lexeme = line[i..j] });
+                    const lexeme = line[i..j];
+                    const tag: TokenTag = if (std.mem.eql(u8, lexeme, "table")) .table else .ident;
+                    try tokens.append(allocator, .{ .tag = tag, .start = start, .end = base + j, .lexeme = lexeme });
                     i = j;
                 } else {
                     return error.UnexpectedChar;

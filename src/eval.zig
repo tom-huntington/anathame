@@ -5,6 +5,8 @@ const Value = types.Value;
 
 pub const EvalError = error{
     ArityMismatch,
+    NotImplemented,
+    TableMiss,
     UnsupportedFunctionKind,
     UnsupportedValueKind,
     UnboundIdentifier,
@@ -62,7 +64,35 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
             }
             return applyRightArgs(ctx, partial.func, args, right, partial.permutation_index);
         },
+        .table => |table| return evalTableFunc(table, args),
     }
+}
+
+fn evalTableFunc(table: anytype, args: []const Value) EvalError!Value {
+    if (args.len != 1) return error.ArityMismatch;
+    if (table.lookup.shape.len != 2 or table.lookup.shape[1] != 2) return error.NotImplemented;
+
+    const key = switch (args[0]) {
+        .scalar => |scalar| scalar,
+        .array => return error.UnsupportedValueKind,
+    };
+
+    const row_count: usize = table.lookup.shape[0];
+    for (0..row_count) |row| {
+        const row_offset = row * 2;
+        const candidate = table.lookup.data[row_offset];
+        if (candidate == key.value) {
+            return .{ .scalar = .{
+                .value = table.lookup.data[row_offset + 1],
+                .is_char = table.lookup.is_char,
+            } };
+        }
+    }
+
+    return switch (table.unmatched) {
+        .Error => error.TableMiss,
+        .Identity => args[0],
+    };
 }
 
 fn evalUserFunc(ctx: *EvalContext, user_fn: anytype, args: []const Value) EvalError!Value {

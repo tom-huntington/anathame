@@ -31,8 +31,7 @@ pub fn main() !void {
     stringprint.printfmt("a: {}\n", .{a});
 
     const source =
-        \\ a = [1_2 3_4]
-        \\ add
+        \\ table [1_2 3_4]
     ;
     std.debug.print("soure: {s}\n", .{source});
 

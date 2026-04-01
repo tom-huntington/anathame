@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const TokenTag = enum {
     ident,
+    table,
     combinator,
     arrow,
     number,
@@ -78,6 +79,7 @@ pub const Expr = union(enum) {
         type: union(enum) {
             combinator: struct { op: Combinator, left: *FuncExpr, right: *FuncExpr },
             hof: Hof,
+            table: struct { lookup: Array, unmatched: enum { Error, Identity } },
             partial_apply_permute: struct { func: *FuncExpr, arguments: []ValueExpr, permutation_index: u32 },
             scope: *FuncExpr,
             userFn: struct { left: []const u8, right: ?[]const u8, body: *Expr },
