@@ -309,7 +309,7 @@ pub const Parser = struct {
                 }
                 if (self.isLocalParam(name)) {
                     return self.allocExpr(.{
-                        .value = .{ .literal = .{ .ident = name } },
+                        .value = .{ .ident = name },
                     });
                 }
                 const sym = self.symbols.get(name) orelse return error.UnknownIdentifier;

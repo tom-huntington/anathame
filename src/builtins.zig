@@ -12,7 +12,7 @@ pub fn add(all: std.mem.Allocator, args: *[2]Value) Value {
                     const val = as.value + bs.value;
                     return .{ .scalar = .{ .value = val, .is_char = bs.is_char and as.is_char } };
                 },
-                else => {},
+                .array => {},
             }
         },
         .array => |aa| {
@@ -31,10 +31,9 @@ pub fn add(all: std.mem.Allocator, args: *[2]Value) Value {
 
                     return .{ .array = .{ .data = data, .shape = shape, .is_char = aa.is_char and ba.is_char } };
                 },
-                else => {},
+                .scalar => {},
             }
         },
-        else => {},
     }
     @panic("not implemented");
 }
@@ -62,7 +61,6 @@ pub fn sq(all: std.mem.Allocator, args: *[1]Value) Value {
 
             return .{ .array = .{ .data = data, .shape = shape, .is_char = false } };
         },
-        else => {},
     }
     @panic("not implemented");
 }

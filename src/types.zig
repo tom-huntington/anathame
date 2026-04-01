@@ -33,7 +33,6 @@ pub const Arity = enum { value, monad, dyad };
 pub const Value = union(enum) {
     scalar: struct { value: f64, is_char: bool },
     array: struct { data: []f64, shape: []u32, is_char: bool },
-    ident: []const u8,
 };
 
 pub const Combinator = enum {
@@ -82,5 +81,6 @@ pub const Expr = union(enum) {
         literal: Value,
         strand: struct { left: *Expr, right: *Expr },
         apply: struct { func: *Expr, arg: *Expr },
+        ident: []const u8,
     };
 };

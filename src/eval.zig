@@ -124,10 +124,8 @@ fn evalExpr(ctx: *EvalContext, expr: *const Expr) EvalError!Value {
 
 fn evalValueExpr(ctx: *EvalContext, expr: *const Expr.ValueExpr) EvalError!Value {
     return switch (expr.*) {
-        .literal => |literal| switch (literal) {
-            .ident => |name| ctx.bindings.get(name) orelse error.UnboundIdentifier,
-            else => literal,
-        },
+        .literal => |literal| literal,
+        .ident => |name| ctx.bindings.get(name) orelse error.UnboundIdentifier,
         .strand => |strand| evalStrand(ctx, strand.left, strand.right),
         .apply => |apply| {
             const func = switch (apply.func.*) {
@@ -186,10 +184,8 @@ fn foldFuncExpr(allocator: std.mem.Allocator, func: *Expr.FuncExpr) EvalError!vo
 
 fn tryFoldValueExpr(allocator: std.mem.Allocator, expr: *Expr.ValueExpr) EvalError!?Value {
     switch (expr.*) {
-        .literal => |literal| {
-            if (literal == .ident) return null;
-            return literal;
-        },
+        .literal => |literal| return literal,
+        .ident => return null,
         .strand => |strand| {
             const left_const = try foldExpr(allocator, strand.left);
             const right_const = try foldExpr(allocator, strand.right);
@@ -215,7 +211,7 @@ fn evalArgs(ctx: *EvalContext, expr: *const Expr) EvalError![]const Value {
     return switch (expr.*) {
         .func => return error.UnsupportedValueKind,
         .value => |value_expr| switch (value_expr) {
-            .literal, .apply => blk: {
+            .literal, .ident, .apply => blk: {
                 const args = ctx.allocator.alloc(Value, 1) catch @panic("out of memory");
                 args[0] = try evalExpr(ctx, expr);
                 break :blk args;
@@ -308,18 +304,15 @@ fn materializeArrayStrand(allocator: std.mem.Allocator, items: []const Value) Ev
     const first_shape = switch (items[0]) {
         .scalar => &[_]u32{},
         .array => |array| array.shape,
-        .ident => return error.UnsupportedValueKind,
     };
     const elem_len = switch (items[0]) {
         .scalar => @as(usize, 1),
         .array => |array| array.data.len,
-        .ident => unreachable,
     };
 
     var is_char = switch (items[0]) {
         .scalar => |scalar| scalar.is_char,
         .array => |array| array.is_char,
-        .ident => unreachable,
     };
 
     for (items[1..]) |item| {
@@ -333,7 +326,6 @@ fn materializeArrayStrand(allocator: std.mem.Allocator, items: []const Value) Ev
                 if (array.data.len != elem_len) return error.UnsupportedValueKind;
                 is_char = is_char and array.is_char;
             },
-            .ident => return error.UnsupportedValueKind,
         }
     }
 
@@ -353,7 +345,6 @@ fn materializeArrayStrand(allocator: std.mem.Allocator, items: []const Value) Ev
                 @memcpy(data[data_index .. data_index + array.data.len], array.data);
                 data_index += array.data.len;
             },
-            .ident => return error.UnsupportedValueKind,
         }
     }
 
