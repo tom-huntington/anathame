@@ -274,6 +274,8 @@ fn nthPermutation(allocator: std.mem.Allocator, len: usize, permutation_index: u
 }
 
 fn factorial(n: usize) u64 {
+    if (n < 2) return 1;
+
     var result: u64 = 1;
     for (2..n + 1) |i| {
         result *= i;
@@ -424,6 +426,16 @@ test "eval identifier suffix permutation reorders arguments" {
 
     try std.testing.expectEqual(@as(Value.Tag, .scalar), result);
     try std.testing.expectEqual(@as(f64, 13), result.scalar.value);
+}
+
+test "nthPermutation handles a single element" {
+    const allocator = std.testing.allocator;
+
+    const order = try nthPermutation(allocator, 1, 0);
+    defer allocator.free(order);
+
+    try std.testing.expectEqual(@as(usize, 1), order.len);
+    try std.testing.expectEqual(@as(usize, 0), order[0]);
 }
 
 test "eval strand materializes a constant array" {
