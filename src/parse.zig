@@ -45,6 +45,7 @@ const ParseError = error{
     UnknownIdentifier,
     MissingRightParen,
     MissingRightBrace,
+    MissingRightBracket,
     UnexpectedToken,
     ExpectedFunction,
     ExpectedValue,
@@ -311,26 +312,13 @@ pub const Parser = struct {
 
         const tok = self.tokens[index.*];
         index.* += 1;
-        const slice = tok.lexeme;
 
         switch (tok.tag) {
-            .number => {
-                const val = try std.fmt.parseFloat(f64, slice);
-                return self.allocExpr(.{
-                    .value = .{ .literal = .{ .scalar = .{ .value = val, .is_char = false } } },
-                });
-            },
-            .char_lit => {
-                const ch = slice[1];
-                return self.allocExpr(.{
-                    .value = .{ .literal = .{ .scalar = .{ .value = @floatFromInt(ch), .is_char = true } } },
-                });
-            },
-            .raw_string => {
-                return self.allocExpr(.{
-                    .value = .{ .literal = .{ .array = .{ .data = &.{}, .shape = &.{}, .is_char = true } } },
-                });
-            },
+            .number,
+            .char_lit,
+            .raw_string,
+            .lbracket,
+            => return self.parseLiteralExpr(tok, index, end_index),
             .ident => {
                 const name = tok.lexeme;
                 if (try self.maybeParseArrowFunction(index, end_index, end_tag, name)) |arrow| {
@@ -513,25 +501,11 @@ pub const Parser = struct {
         index.* += 1;
 
         return switch (tok.tag) {
-            .number => .{
-                .literal = .{ .scalar = .{
-                    .value = try std.fmt.parseFloat(f64, tok.lexeme),
-                    .is_char = false,
-                } },
-            },
-            .char_lit => .{
-                .literal = .{ .scalar = .{
-                    .value = @floatFromInt(tok.lexeme[1]),
-                    .is_char = true,
-                } },
-            },
-            .raw_string => .{
-                .literal = .{ .array = .{
-                    .data = &.{},
-                    .shape = &.{},
-                    .is_char = true,
-                } },
-            },
+            .number,
+            .char_lit,
+            .raw_string,
+            .lbracket,
+            => .{ .literal = try self.parseLiteralValue(tok, index, end_index) },
             .ident => blk: {
                 if (self.isLocalParam(tok.lexeme)) {
                     break :blk .{ .ident = tok.lexeme };
@@ -565,15 +539,145 @@ pub const Parser = struct {
         return tok;
     }
 
+    fn parseLiteralExpr(self: *Parser, first_tok: Token, index: *usize, end_index: usize) ParseError!*Expr {
+        return self.allocExpr(.{
+            .value = .{ .literal = try self.parseLiteralValue(first_tok, index, end_index) },
+        });
+    }
+
+    fn parseLiteralValue(self: *Parser, first_tok: Token, index: *usize, end_index: usize) ParseError!Value {
+        var items: std.ArrayList(Value) = .empty;
+        defer items.deinit(self.allocator);
+
+        try items.append(self.allocator, try self.parseLiteralAtomValue(first_tok, index, end_index));
+
+        while (true) {
+            var lookahead = index.*;
+            self.skipWhitespace(&lookahead, end_index);
+            if (lookahead >= end_index or self.tokens[lookahead].tag != .underscore) break;
+
+            lookahead += 1;
+            self.skipWhitespace(&lookahead, end_index);
+            if (lookahead >= end_index) return error.UnexpectedEof;
+            if (!tokenStartsLiteral(self.tokens[lookahead].tag)) return error.UnexpectedToken;
+
+            const next_tok = self.tokens[lookahead];
+            lookahead += 1;
+            try items.append(self.allocator, try self.parseLiteralAtomValue(next_tok, &lookahead, end_index));
+            index.* = lookahead;
+        }
+
+        if (items.items.len == 1) return items.items[0];
+        return try self.materializeLiteralArray(items.items);
+    }
+
+    fn parseLiteralAtomValue(self: *Parser, tok: Token, index: *usize, end_index: usize) ParseError!Value {
+        return switch (tok.tag) {
+            .number => .{ .scalar = .{
+                .value = try std.fmt.parseFloat(f64, tok.lexeme),
+                .is_char = false,
+            } },
+            .char_lit => .{ .scalar = .{
+                .value = @floatFromInt(tok.lexeme[1]),
+                .is_char = true,
+            } },
+            .raw_string => .{ .array = .{
+                .data = &.{},
+                .shape = &.{},
+                .is_char = true,
+            } },
+            .lbracket => try self.parseBracketLiteralValue(index, end_index),
+            else => error.ExpectedValue,
+        };
+    }
+
+    fn parseBracketLiteralValue(self: *Parser, index: *usize, end_index: usize) ParseError!Value {
+        var rows: std.ArrayList(Value) = .empty;
+        defer rows.deinit(self.allocator);
+
+        while (true) {
+            self.skipWhitespace(index, end_index);
+            if (index.* >= end_index) return error.MissingRightBracket;
+            if (self.tokens[index.*].tag == .rbracket) {
+                index.* += 1;
+                break;
+            }
+
+            const row_tok = self.tokens[index.*];
+            if (!tokenStartsLiteral(row_tok.tag) or row_tok.tag == .lbracket) return error.UnexpectedToken;
+
+            index.* += 1;
+            try rows.append(self.allocator, try self.parseLiteralValue(row_tok, index, end_index));
+        }
+
+        if (rows.items.len == 0) {
+            const data = try self.allocator.alloc(f64, 0);
+            const shape = try self.allocator.alloc(u32, 2);
+            shape[0] = 0;
+            shape[1] = 0;
+            return .{ .array = .{ .data = data, .shape = shape, .is_char = false } };
+        }
+
+        return try self.materializeLiteralArray(rows.items);
+    }
+
+    fn materializeLiteralArray(self: *Parser, items: []const Value) ParseError!Value {
+        if (items.len == 0) return error.ExpectedValue;
+
+        const first_shape = switch (items[0]) {
+            .scalar => &[_]u32{},
+            .array => |array| array.shape,
+        };
+        const elem_len = switch (items[0]) {
+            .scalar => @as(usize, 1),
+            .array => |array| array.data.len,
+        };
+
+        var is_char = switch (items[0]) {
+            .scalar => |scalar| scalar.is_char,
+            .array => |array| array.is_char,
+        };
+
+        for (items[1..]) |item| {
+            switch (item) {
+                .scalar => |scalar| {
+                    if (first_shape.len != 0) return error.UnexpectedToken;
+                    is_char = is_char and scalar.is_char;
+                },
+                .array => |array| {
+                    if (!std.mem.eql(u32, first_shape, array.shape)) return error.UnexpectedToken;
+                    if (array.data.len != elem_len) return error.UnexpectedToken;
+                    is_char = is_char and array.is_char;
+                },
+            }
+        }
+
+        const data = try self.allocator.alloc(f64, items.len * elem_len);
+        const shape = try self.allocator.alloc(u32, first_shape.len + 1);
+        shape[0] = @intCast(items.len);
+        @memcpy(shape[1..], first_shape);
+
+        var data_index: usize = 0;
+        for (items) |item| {
+            switch (item) {
+                .scalar => |scalar| {
+                    data[data_index] = scalar.value;
+                    data_index += 1;
+                },
+                .array => |array| {
+                    @memcpy(data[data_index .. data_index + array.data.len], array.data);
+                    data_index += array.data.len;
+                },
+            }
+        }
+
+        return .{ .array = .{ .data = data, .shape = shape, .is_char = is_char } };
+    }
+
     fn buildInfix(self: *Parser, tok: Token, left: *Expr, right: *Expr) ParseError!*Expr {
         switch (tok.tag) {
             .comma => {
                 return error.UnexpectedToken;
-            },
-            .underscore => {
-                return self.allocExpr(.{
-                    .value = .{ .strand = .{ .left = left, .right = right } },
-                });
             },
             .combinator => {
                 const left_func = switch (left.*) {
@@ -606,7 +710,6 @@ const InfixInfo = struct { lbp: u8, rbp: u8 };
 
 fn infixInfo(tag: TokenTag) ?InfixInfo {
     return switch (tag) {
-        .underscore => .{ .lbp = 80, .rbp = 81 },
         .combinator => .{ .lbp = 60, .rbp = 61 },
         else => null,
     };
@@ -677,6 +780,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
         .ident,
         .lparen,
         .lbrace,
+        .lbracket,
         .backslash,
         .dbl_backslash,
         .hof,
@@ -710,4 +814,15 @@ fn isConstStart(line: []const Token, start_index: usize) bool {
         return tok.tag == .equal;
     }
     return false;
+}
+
+fn tokenStartsLiteral(tag: TokenTag) bool {
+    return switch (tag) {
+        .number,
+        .char_lit,
+        .raw_string,
+        .lbracket,
+        => true,
+        else => false,
+    };
 }

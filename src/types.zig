@@ -14,6 +14,8 @@ pub const TokenTag = enum {
     rparen,
     lbrace,
     rbrace,
+    lbracket,
+    rbracket,
     backslash,
     dbl_backslash,
     hof,

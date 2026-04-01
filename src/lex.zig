@@ -105,6 +105,14 @@ fn lexLine(allocator: std.mem.Allocator, tokens: *std.ArrayList(Token), line: []
                 try tokens.append(allocator, .{ .tag = .rbrace, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                 i += 1;
             },
+            '[' => {
+                try tokens.append(allocator, .{ .tag = .lbracket, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                i += 1;
+            },
+            ']' => {
+                try tokens.append(allocator, .{ .tag = .rbracket, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                i += 1;
+            },
             '\\' => {
                 if (i + 1 < line.len and line[i + 1] == '\\') {
                     try tokens.append(allocator, .{ .tag = .dbl_backslash, .start = start, .end = start + 2, .lexeme = line[i .. i + 2] });
