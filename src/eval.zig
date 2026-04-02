@@ -45,8 +45,11 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
         .combinator => |com| {
             switch (com.op) {
                 .B1, .B => {
-                    const a = try evalFuncInContext(ctx, com.first_arg, args);
-                    return evalFuncInContext(ctx, com.remaining_args, &.{a});
+                    var value = try evalFuncInContext(ctx, com.first_arg, args);
+                    for (com.remaining_args) |arg| {
+                        value = try evalFuncInContext(ctx, arg, &.{value});
+                    }
+                    return value;
                 },
                 else => {
                     @panic("not implemented");

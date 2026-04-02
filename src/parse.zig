@@ -264,8 +264,12 @@ pub const Parser = struct {
         if (left.* != .func) return error.ExpectedFunction;
 
         const op = parseCombinator(tok) orelse return error.UnknownCombinator;
-        var remaining = try self.parseExpr(index, end_index, infixInfo(.combinator).?.rbp, end_tag);
-        if (remaining.* != .func) return error.ExpectedFunction;
+        var remaining_args: std.ArrayList(*Expr.FuncExpr) = .empty;
+        errdefer remaining_args.deinit(self.allocator);
+
+        const first_remaining = try self.parseExpr(index, end_index, infixInfo(.combinator).?.rbp, end_tag);
+        if (first_remaining.* != .func) return error.ExpectedFunction;
+        try remaining_args.append(self.allocator, &first_remaining.func);
 
         while (true) {
             self.skipWhitespace(index, end_index);
@@ -280,10 +284,10 @@ pub const Parser = struct {
 
             const arg = try self.parseExpr(index, end_index, infixInfo(.combinator).?.rbp, end_tag);
             if (arg.* != .func) return error.ExpectedFunction;
-            remaining = try self.allocCombinatorExpr(op, &remaining.func, &arg.func);
+            try remaining_args.append(self.allocator, &arg.func);
         }
 
-        return self.allocCombinatorExpr(op, &left.func, &remaining.func);
+        return self.allocCombinatorExpr(op, &left.func, try remaining_args.toOwnedSlice(self.allocator));
     }
 
     fn maybeParseImplicitApply(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag, left: *Expr) ParseError!*Expr {
@@ -748,8 +752,14 @@ pub const Parser = struct {
         }
     }
 
-    fn allocCombinatorExpr(self: *Parser, op: Combinator, first_arg: *Expr.FuncExpr, remaining_args: *Expr.FuncExpr) ParseError!*Expr {
-        const arity = if (first_arg.arity == remaining_args.arity) first_arg.arity else 2;
+    fn allocCombinatorExpr(self: *Parser, op: Combinator, first_arg: *Expr.FuncExpr, remaining_args: []*Expr.FuncExpr) ParseError!*Expr {
+        var arity = first_arg.arity;
+        for (remaining_args) |arg| {
+            if (arg.arity != arity) {
+                arity = 2;
+                break;
+            }
+        }
         return self.allocExpr(.{
             .func = .{ .arity = arity, .type = .{ .combinator = .{
                 .op = op,

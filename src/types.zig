@@ -77,7 +77,7 @@ pub const Expr = union(enum) {
     pub const FuncExpr = struct {
         arity: u32,
         type: union(enum) {
-            combinator: struct { op: Combinator, first_arg: *FuncExpr, remaining_args: *FuncExpr },
+            combinator: struct { op: Combinator, first_arg: *FuncExpr, remaining_args: []*FuncExpr },
             hof: Hof,
             table: struct { lookup: Array, unmatched: enum { Error, Identity } },
             partial_apply_permute: struct { func: *FuncExpr, arguments: []ValueExpr, permutation_index: u32 },
