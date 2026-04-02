@@ -8,6 +8,25 @@ const eval = @import("eval.zig");
 const types = @import("types.zig");
 const format = @import("format.zig");
 
+fn bytesToArray(allocator: std.mem.Allocator, bytes: []const u8) !types.Array {
+    const data = try allocator.alloc(f64, bytes.len);
+    errdefer allocator.free(data);
+
+    const shape = try allocator.alloc(u32, 1);
+    errdefer allocator.free(shape);
+
+    shape[0] = @intCast(bytes.len);
+    for (bytes, 0..) |byte, i| {
+        data[i] = @floatFromInt(byte);
+    }
+
+    return .{
+        .data = data,
+        .shape = shape,
+        .is_char = true,
+    };
+}
+
 pub const std_options: std.Options = .{
     .fmt_max_depth = 64, // Default is usually 16
 };
@@ -29,9 +48,24 @@ pub fn main() !void {
     };
     const a = wrap{ .v = "hello" };
     stringprint.printfmt("a: {}\n", .{a});
+    const input =
+        \\L68
+        \\L30
+        \\R48
+        \\L5
+        \\R60
+        \\L55
+        \\L1
+        \\L99
+        \\R14
+        \\L82
+    ;
+    const input_array = try bytesToArray(ast_alloc, input);
+    std.debug.print("input_array: {}\n", .{input_array});
 
+    //std.debug.print("{f}", .{std.zig.fmtString(input)});
     const source =
-        \\ add )B1 sq sq
+        \\ strided,3,2
     ;
     std.debug.print("soure: {s}\n", .{source});
 
@@ -52,10 +86,11 @@ pub fn main() !void {
     const args = [_]types.Value{
         .{ .array = .{ .data = arg0_data[0..], .shape = arg_shape[0..], .is_char = false } },
         .{ .array = .{ .data = arg1_data[0..], .shape = arg_shape[0..], .is_char = false } },
+        .{ .array = input_array },
     };
     const result = switch (file_ast.main.arity) {
-        2 => try eval.evalFunc(ast_alloc, file_ast.main, args[0..2]),
-        1 => try eval.evalFunc(ast_alloc, file_ast.main, args[0..1]),
+        2 => return error.ArityMismatch, //try eval.evalFunc(ast_alloc, file_ast.main, args[0..2]),
+        1 => try eval.evalFunc(ast_alloc, file_ast.main, args[2..3]),
         else => return error.ArityMismatch,
     };
     const rendered = try format.valueString(ast_alloc, result);
