@@ -8,10 +8,6 @@ pub const Symbol = struct {
     name: []const u8,
 };
 
-pub const symbols = [_]Symbol{
-    .{ .lexeme = "/", .name = "reduce" },
-};
-
 pub fn reduce(all: std.mem.Allocator, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
     const array = switch (args[0]) {
         .array => |array| array,

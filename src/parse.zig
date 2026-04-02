@@ -118,15 +118,15 @@ pub const Parser = struct {
     }
 
     pub fn populateHofs(self: *Parser) ParseError!void {
-        inline for (hofs.symbols) |symbol| {
-            const member = @field(hofs, symbol.name);
+        inline for (@typeInfo(hofs).@"struct".decls) |decl| {
+            const member = @field(hofs, decl.name);
             const member_info = @typeInfo(@TypeOf(member));
 
             switch (member_info) {
                 .@"fn" => {
                     const params = member_info.@"fn".params;
                     if (hofFromParams(params, member)) |hof| {
-                        try self.hofs.put(symbol.lexeme, hof);
+                        try self.hofs.put(decl.name, hof);
                     }
                 },
                 else => {},
