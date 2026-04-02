@@ -3,11 +3,6 @@ const types = @import("types.zig");
 const Expr = types.Expr;
 const Value = types.Value;
 
-pub const Symbol = struct {
-    lexeme: []const u8,
-    name: []const u8,
-};
-
 pub fn reduce(all: std.mem.Allocator, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
     const array = switch (args[0]) {
         .array => |array| array,
