@@ -104,7 +104,11 @@ pub fn allocMetadataHeader(
     status: CowStatus,
     shape: []const usize,
 ) !*MetadataHeader {
-    return allocMetadataHeaderWithAllocator(allocator.allocator(), status, shape);
+    return @call(
+        .always_inline,
+        allocMetadataHeaderWithAllocator,
+        .{ allocator.allocator(), status, shape },
+    );
 }
 pub const Value = union(enum) {
     scalar: f64,
