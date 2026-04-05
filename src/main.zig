@@ -89,5 +89,5 @@ pub fn main() !void {
     };
     const rendered = try format.valueString(ast_alloc.allocator(), result, true);
     std.debug.print("{s}\n", .{rendered});
-    // std.debug.print("{}\n", .{result});
+    std.debug.print("{}\n", .{result});
 }

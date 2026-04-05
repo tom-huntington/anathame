@@ -30,34 +30,44 @@ const EvalContext = struct {
 };
 
 pub fn evalFunc(allocator: *ReservedBufferAllocator, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
-    var ctx = EvalContext.init(allocator);
-    defer ctx.deinit();
-    return evalFuncInContext(&ctx, func, args);
+    return evalFuncTo(allocator, null, func, args);
 }
 
-fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
+pub fn evalFuncTo(
+    allocator: *ReservedBufferAllocator,
+    result_dest: ?[]f64,
+    func: *const Expr.FuncExpr,
+    args: []const Value,
+) EvalError!Value {
+    var ctx = EvalContext.init(allocator);
+    defer ctx.deinit();
+    return evalFuncInContext(&ctx, result_dest, func, args);
+}
+
+fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
     switch (func.type) {
         .builtin => |builtin| {
             if (args.len != builtin.arity) return error.ArityMismatch;
-            return builtin.pointer(ctx.allocator, null, args);
+            return builtin.pointer(ctx.allocator, result_dest, args);
         },
-        .scope => |scoped| return evalFuncInContext(ctx, scoped, args),
-        .userFn => |user_fn| return evalUserFunc(ctx, user_fn, args),
+        .scope => |scoped| return evalFuncInContext(ctx, result_dest, scoped, args),
+        .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {
             switch (com.op) {
                 .B1, .B => {
-                    var value = try evalFuncInContext(ctx, com.first_arg, args);
-                    for (com.remaining_args) |arg| {
-                        value = try evalFuncInContext(ctx, arg, &.{value});
+                    var value = try evalFuncInContext(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
+                    for (com.remaining_args, 0..) |arg, i| {
+                        const child_dest = if (i + 1 == com.remaining_args.len) result_dest else null;
+                        value = try evalFuncInContext(ctx, child_dest, arg, &.{value});
                     }
                     return value;
                 },
                 .S => {
                     //
-                    const value = try evalFuncInContext(ctx, com.first_arg, args);
+                    const value = try evalFuncInContext(ctx, null, com.first_arg, args);
                     //can you assert that both com.remaining_args and args are size 1
                     const args2 = [_]Value{ args[0], value };
-                    const value2 = try evalFuncInContext(ctx, com.remaining_args[0], &args2);
+                    const value2 = try evalFuncInContext(ctx, result_dest, com.remaining_args[0], &args2);
                     return value2;
                 },
                 else => {
@@ -67,20 +77,20 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
         },
         .hof => |hof| {
             if (args.len != hof.arity) return error.ArityMismatch;
-            return hof.pointer(ctx.allocator, null, args, hof.funcArg.*);
+            return hof.pointer(ctx.allocator, result_dest, args, hof.funcArg.*);
         },
         .partial_apply_permute => |partial| {
             const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");
             for (partial.arguments, 0..) |*expr, i| {
-                right[i] = try evalValueExpr(ctx, expr);
+                right[i] = try evalValueExpr(ctx, null, expr);
             }
-            return applyRightArgs(ctx, partial.func, args, right, partial.permutation_index);
+            return applyRightArgs(ctx, result_dest, partial.func, args, right, partial.permutation_index);
         },
-        .table => |table| return evalTableFunc(ctx.allocator, table, args),
+        .table => |table| return evalTableFunc(ctx.allocator, result_dest, table, args),
     }
 }
 
-fn evalTableFunc(allocator: *ReservedBufferAllocator, table: anytype, args: []const Value) EvalError!Value {
+fn evalTableFunc(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {
     if (args.len != 1) return error.ArityMismatch;
     const lookup_shape = table.lookup.shape();
     if (lookup_shape.len != 2 or lookup_shape[1] != 2) return error.NotImplemented;
@@ -88,7 +98,7 @@ fn evalTableFunc(allocator: *ReservedBufferAllocator, table: anytype, args: []co
     return switch (args[0]) {
         .scalar => |scalar| .{ .scalar = try evalTableScalar(table, scalar) },
         .array => |array| blk: {
-            const data = allocator.allocator().alloc(f64, array.data.len) catch @panic("out of memory");
+            const data = result_dest orelse (allocator.allocator().alloc(f64, array.data.len) catch @panic("out of memory"));
             const meta = types.InitMetadata(allocator, .Exclusive, array.shape());
 
             for (array.data, 0..) |item, i| {
@@ -119,7 +129,7 @@ fn evalTableScalar(table: anytype, key: f64) EvalError!f64 {
     };
 }
 
-fn evalUserFunc(ctx: *EvalContext, user_fn: anytype, args: []const Value) EvalError!Value {
+fn evalUserFunc(ctx: *EvalContext, result_dest: ?[]f64, user_fn: anytype, args: []const Value) EvalError!Value {
     const old_left = ctx.bindings.get(user_fn.left);
     defer restoreBinding(ctx, user_fn.left, old_left);
 
@@ -140,8 +150,8 @@ fn evalUserFunc(ctx: *EvalContext, user_fn: anytype, args: []const Value) EvalEr
     }
 
     return switch (user_fn.body.*) {
-        .func => |*body_func| evalFuncInContext(ctx, body_func, args),
-        .value => |*body_value| evalValueExpr(ctx, body_value),
+        .func => |*body_func| evalFuncInContext(ctx, result_dest, body_func, args),
+        .value => |*body_value| evalValueExpr(ctx, result_dest, body_value),
     };
 }
 
@@ -160,11 +170,11 @@ fn restoreBinding(ctx: *EvalContext, name: []const u8, old_value: ?Value) void {
 fn evalExpr(ctx: *EvalContext, expr: *const Expr) EvalError!Value {
     return switch (expr.*) {
         .func => return error.UnsupportedValueKind,
-        .value => |*value_expr| evalValueExpr(ctx, value_expr),
+        .value => |*value_expr| evalValueExpr(ctx, null, value_expr),
     };
 }
 
-fn evalValueExpr(ctx: *EvalContext, expr: *const Expr.ValueExpr) EvalError!Value {
+fn evalValueExpr(ctx: *EvalContext, result_dest: ?[]f64, expr: *const Expr.ValueExpr) EvalError!Value {
     return switch (expr.*) {
         .literal => |literal| literal,
         .ident => |name| ctx.bindings.get(name) orelse error.UnboundIdentifier,
@@ -174,7 +184,7 @@ fn evalValueExpr(ctx: *EvalContext, expr: *const Expr.ValueExpr) EvalError!Value
                 .func => |*func| func,
                 .value => return error.UnsupportedValueKind,
             };
-            return evalFuncInContext(ctx, func, try evalArgs(ctx, apply.arg));
+            return evalFuncInContext(ctx, result_dest, func, try evalArgs(ctx, apply.arg));
         },
     };
 }
@@ -200,6 +210,7 @@ fn evalArgs(ctx: *EvalContext, expr: *const Expr) EvalError![]const Value {
 
 fn applyRightArgs(
     ctx: *EvalContext,
+    result_dest: ?[]f64,
     func: *const Expr.FuncExpr,
     args: []const Value,
     right: []const Value,
@@ -209,7 +220,7 @@ fn applyRightArgs(
     @memcpy(combined[0..args.len], args);
     @memcpy(combined[args.len..], right);
     if (permutation_index == 0 or combined.len <= 1) {
-        return evalFuncInContext(ctx, func, combined);
+        return evalFuncInContext(ctx, result_dest, func, combined);
     }
 
     const order = try nthPermutation(ctx.allocator, combined.len, permutation_index);
@@ -217,7 +228,7 @@ fn applyRightArgs(
     for (order, 0..) |source_index, i| {
         permuted[i] = combined[source_index];
     }
-    return evalFuncInContext(ctx, func, permuted);
+    return evalFuncInContext(ctx, result_dest, func, permuted);
 }
 
 fn nthPermutation(allocator: *ReservedBufferAllocator, len: usize, permutation_index: u32) EvalError![]usize {
@@ -280,7 +291,7 @@ fn appendStrandItems(ctx: *EvalContext, items: *std.ArrayList(Value), expr: *con
                 try appendStrandItems(ctx, items, strand.left);
                 try appendStrandItems(ctx, items, strand.right);
             },
-            else => items.append(ctx.allocator.allocator(), try evalValueExpr(ctx, &value_expr)) catch @panic("out of memory"),
+            else => items.append(ctx.allocator.allocator(), try evalValueExpr(ctx, null, &value_expr)) catch @panic("out of memory"),
         },
     }
 }
