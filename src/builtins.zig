@@ -47,6 +47,7 @@ pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
     return b;
 }
 pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
+    ReservedBumpAllocator.checkpoint();
     _ = result_dest;
     const a = args[0];
     switch (a) {

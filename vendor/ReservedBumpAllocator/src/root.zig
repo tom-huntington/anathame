@@ -210,11 +210,11 @@ pub const ReservedBumpAllocator = struct {
         }
     }
 
-    fn checkpoint(self: *@This()) usize {
+    pub fn checkpoint(self: *@This()) usize {
         return self.sentinel;
     }
 
-    fn restore(self: *@This(), checkpoint_: usize) usize {
+    pub fn restore(self: *@This(), checkpoint_: usize) usize {
         std.debug.assert(checkpoint_ <= self.committed_len);
         std.debug.assert(checkpoint_ <= self.reserved_len);
         self.sentinel = checkpoint_;
