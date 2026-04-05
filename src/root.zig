@@ -1,1 +1,1 @@
-//! Quiver language core.
+//! anathame language core.

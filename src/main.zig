@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const quiver = @import("quiver");
+const anathame = @import("anathame");
 const stringprint = @import("stringprint.zig");
 const parse = @import("parse.zig");
 const lex = @import("lex.zig");
