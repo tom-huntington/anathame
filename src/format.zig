@@ -54,20 +54,23 @@ fn fmtArrayValue(
     is_char: bool,
     params: GridFmtParams,
 ) anyerror!Grid {
+    const logical_len = logicalElemCount(shape);
+    const bounded_data = data[0..@min(data.len, logical_len)];
+
     if (shape.len == 0) {
-        if (data.len == 0) return gridFromText(allocator, if (is_char) "\"\"" else "[]");
-        const scalar: Value = .{ .scalar = data[0] };
+        if (bounded_data.len == 0) return gridFromText(allocator, if (is_char) "\"\"" else "[]");
+        const scalar: Value = .{ .scalar = bounded_data[0] };
         return fmtValue(allocator, scalar, is_char, params);
     }
 
-    if (requiresSummary(shape, data.len)) {
-        return gridFromOwnedRow(allocator, try summaryRow(allocator, data, shape, is_char));
+    if (requiresSummary(shape, bounded_data.len)) {
+        return gridFromOwnedRow(allocator, try summaryRow(allocator, bounded_data, shape, is_char));
     }
 
     var metagrid = MetaGrid.init(allocator);
     defer deinitMetaGrid(&metagrid);
 
-    try fmtArray(allocator, data, shape, is_char, .{
+    try fmtArray(allocator, bounded_data, shape, is_char, .{
         .depth = params.depth,
         .parent_rank = shape.len,
     }, &metagrid);
@@ -116,7 +119,7 @@ fn fmtArray(
 
     const cell_count: usize = shape[0];
     const child_shape = shape[1..];
-    const cell_size = if (cell_count == 0) 0 else data.len / cell_count;
+    const cell_size = if (child_shape.len == 0) 1 else logicalElemCount(child_shape);
 
     const start_len = metagrid.items.len;
     for (0..cell_count) |i| {
@@ -258,6 +261,14 @@ fn outlineGrid(allocator: Allocator, grid: *Grid, rank: usize, is_char: bool) !v
 
 fn requiresSummary(shape: []const usize, elem_count: usize) bool {
     return elem_count > 3600 or shape.len > 8;
+}
+
+fn logicalElemCount(shape: []const usize) usize {
+    var len: usize = 1;
+    for (shape) |dim| {
+        len *= dim;
+    }
+    return len;
 }
 
 fn summaryRow(allocator: Allocator, data: []const f64, shape: []const usize, is_char: bool) ![]u8 {
