@@ -209,6 +209,16 @@ pub const ReservedBumpAllocator = struct {
             self.sentinel -= buf.len;
         }
     }
+
+    fn checkpoint(self: *@This()) usize {
+        return self.sentinel;
+    }
+
+    fn restore(self: *@This(), checkpoint_: usize) usize {
+        std.debug.assert(checkpoint_ <= self.committed_len);
+        std.debug.assert(checkpoint_ <= self.reserved_len);
+        self.sentinel = checkpoint_;
+    }
 };
 
 fn sliceContainsPtr(container: []const u8, ptr: [*]u8) bool {
