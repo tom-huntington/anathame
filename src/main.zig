@@ -7,9 +7,9 @@ const lex = @import("lex.zig");
 const eval = @import("eval.zig");
 const types = @import("types.zig");
 const format = @import("format.zig");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 
-fn bytesToArray(allocator: *ReservedBufferAllocator, bytes: []const u8) !types.Array {
+fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !types.Array {
     const data = try allocator.allocator().alloc(f64, bytes.len);
     const meta = types.Metadata.initWithShape(allocator, .Exclusive, &.{bytes.len});
 
@@ -32,9 +32,9 @@ pub fn main() !void {
         _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
     }
 
-    var ast_alloc = try ReservedBufferAllocator.init(1024 * 1024);
+    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
     defer ast_alloc.deinit();
-    var runtime_alloc = try ReservedBufferAllocator.init(1024 * 1024);
+    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
     defer runtime_alloc.deinit();
 
     const wrap = struct {

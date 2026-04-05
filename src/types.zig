@@ -1,5 +1,5 @@
 const std = @import("std");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 
 pub const TokenTag = enum {
     ident,
@@ -43,7 +43,7 @@ pub const Metadata = struct {
     shape: []usize,
 
     pub fn initWithDepth(
-        allocator: *ReservedBufferAllocator,
+        allocator: *ReservedBumpAllocator,
         status: CowStatus,
         depth: usize,
     ) *Metadata {
@@ -60,7 +60,7 @@ pub const Metadata = struct {
     }
 
     pub fn initWithShape(
-        allocator: *ReservedBufferAllocator,
+        allocator: *ReservedBumpAllocator,
         status: CowStatus,
         shape: []const usize, // copied into inline storage after the header
     ) *Metadata {
@@ -97,7 +97,7 @@ pub const Array = struct {
     }
 
     pub fn init(
-        allocator: *ReservedBufferAllocator,
+        allocator: *ReservedBumpAllocator,
         dims: []const usize,
     ) Array {
         const array = initWithDepth(allocator, dims.len, prod(dims));
@@ -106,7 +106,7 @@ pub const Array = struct {
     }
 
     pub fn initWithDepth(
-        allocator: *ReservedBufferAllocator,
+        allocator: *ReservedBumpAllocator,
         depth: usize,
         size: usize,
     ) Array {
@@ -182,13 +182,13 @@ pub const Combinator = enum {
 
 pub const Builtin = struct {
     arity: u32,
-    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value) Value,
+    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) Value,
 };
 
 pub const Hof = struct {
     arity: u32,
     funcArg: *Expr.FuncExpr,
-    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 pub const PartialApply = enum { comma, caret };

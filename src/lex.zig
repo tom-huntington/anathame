@@ -1,7 +1,7 @@
 const std = @import("std");
 const hofs = @import("hofs.zig");
 const types = @import("types.zig");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 const Token = types.Token;
 const TokenTag = types.TokenTag;
 
@@ -9,13 +9,13 @@ pub const LexResult = struct {
     tokens: std.ArrayList(Token),
     line_offsets: std.ArrayList(u32),
 
-    pub fn deinit(self: *LexResult, allocator: *ReservedBufferAllocator) void {
+    pub fn deinit(self: *LexResult, allocator: *ReservedBumpAllocator) void {
         self.tokens.deinit(allocator.allocator());
         self.line_offsets.deinit(allocator.allocator());
     }
 };
 
-pub fn lex(allocator: *ReservedBufferAllocator, source: []const u8) !LexResult {
+pub fn lex(allocator: *ReservedBumpAllocator, source: []const u8) !LexResult {
     var tokens: std.ArrayList(Token) = .empty;
     errdefer tokens.deinit(allocator.allocator());
 
@@ -41,7 +41,7 @@ pub fn lex(allocator: *ReservedBufferAllocator, source: []const u8) !LexResult {
     };
 }
 
-fn lexLine(allocator: *ReservedBufferAllocator, tokens: *std.ArrayList(Token), line: []const u8, base: usize) !void {
+fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), line: []const u8, base: usize) !void {
     const alloc = allocator.allocator();
     var i: usize = 0;
     while (i < line.len) {

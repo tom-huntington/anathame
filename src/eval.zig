@@ -1,6 +1,6 @@
 const std = @import("std");
 const types = @import("types.zig");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 const Expr = types.Expr;
 const Value = types.Value;
 
@@ -14,10 +14,10 @@ pub const EvalError = error{
 };
 
 const EvalContext = struct {
-    allocator: *ReservedBufferAllocator,
+    allocator: *ReservedBumpAllocator,
     bindings: std.StringHashMap(Value),
 
-    fn init(allocator: *ReservedBufferAllocator) EvalContext {
+    fn init(allocator: *ReservedBumpAllocator) EvalContext {
         return .{
             .allocator = allocator,
             .bindings = std.StringHashMap(Value).init(allocator.allocator()),
@@ -29,12 +29,12 @@ const EvalContext = struct {
     }
 };
 
-pub fn evalFunc(allocator: *ReservedBufferAllocator, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
+pub fn evalFunc(allocator: *ReservedBumpAllocator, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
     return evalFuncTo(allocator, null, func, args);
 }
 
 pub fn evalFuncTo(
-    allocator: *ReservedBufferAllocator,
+    allocator: *ReservedBumpAllocator,
     result_dest: ?[]f64,
     func: *const Expr.FuncExpr,
     args: []const Value,
@@ -90,7 +90,7 @@ fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.F
     }
 }
 
-fn evalTableFunc(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {
+fn evalTableFunc(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {
     if (args.len != 1) return error.ArityMismatch;
     const lookup_shape = table.lookup.shape();
     if (lookup_shape.len != 2 or lookup_shape[1] != 2) return error.NotImplemented;
@@ -231,7 +231,7 @@ fn applyRightArgs(
     return evalFuncInContext(ctx, result_dest, func, permuted);
 }
 
-fn nthPermutation(allocator: *ReservedBufferAllocator, len: usize, permutation_index: u32) EvalError![]usize {
+fn nthPermutation(allocator: *ReservedBumpAllocator, len: usize, permutation_index: u32) EvalError![]usize {
     var max_index: u64 = 1;
     for (2..len + 1) |n| {
         max_index *= n;
@@ -296,7 +296,7 @@ fn appendStrandItems(ctx: *EvalContext, items: *std.ArrayList(Value), expr: *con
     }
 }
 
-fn materializeArrayStrand(allocator: *ReservedBufferAllocator, items: []const Value) EvalError!Value {
+fn materializeArrayStrand(allocator: *ReservedBumpAllocator, items: []const Value) EvalError!Value {
     if (items.len == 0) return error.UnsupportedValueKind;
 
     const first_shape = switch (items[0]) {

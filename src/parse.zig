@@ -2,7 +2,7 @@ const std = @import("std");
 const builtins = @import("builtins.zig");
 const hofs = @import("hofs.zig");
 const types = @import("types.zig");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 const Token = types.Token;
 const Value = types.Value;
 const Expr = types.Expr;
@@ -27,7 +27,7 @@ pub const Symbol = struct {
 
 const HofSymbol = struct {
     arity: u32,
-    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 const StatementKind = enum {
@@ -59,8 +59,8 @@ const ParseError = error{
 } || std.fmt.ParseFloatError || std.fmt.ParseIntError;
 
 pub const Parser = struct {
-    allocator: *ReservedBufferAllocator,
-    value_allocator: *ReservedBufferAllocator,
+    allocator: *ReservedBumpAllocator,
+    value_allocator: *ReservedBumpAllocator,
     source: []const u8,
     tokens: []const Token,
     line_offsets: []const u32,
@@ -69,8 +69,8 @@ pub const Parser = struct {
     local_params: std.ArrayList([]const u8),
 
     pub fn init(
-        allocator: *ReservedBufferAllocator,
-        value_allocator: *ReservedBufferAllocator,
+        allocator: *ReservedBumpAllocator,
+        value_allocator: *ReservedBumpAllocator,
         source: []const u8,
         tokens: []const Token,
         line_offsets: []const u32,
@@ -166,7 +166,7 @@ pub const Parser = struct {
         }
     }
 
-    fn collectStatements(self: *Parser, allocator: *ReservedBufferAllocator) ParseError!std.ArrayList(Statement) {
+    fn collectStatements(self: *Parser, allocator: *ReservedBumpAllocator) ParseError!std.ArrayList(Statement) {
         var statements: std.ArrayList(Statement) = .empty;
         errdefer statements.deinit(allocator.allocator());
 
@@ -817,9 +817,9 @@ fn builtinFromParams(comptime params: anytype, comptime member: anytype) ?Builti
     };
 }
 
-fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, ?[]f64, []const Value) Value {
+fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) Value {
     return &struct {
-        fn call(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, args: []const Value) Value {
+        fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
             return member(allocator, result_dest, @constCast(typed_args));
@@ -848,9 +848,9 @@ fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol 
     };
 }
 
-fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value {
+fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value {
     return &struct {
-        fn call(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
+        fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
             return member(allocator, result_dest, @constCast(typed_args), fn_arg);

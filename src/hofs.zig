@@ -1,6 +1,6 @@
 const std = @import("std");
 const types = @import("types.zig");
-const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 const Expr = types.Expr;
 const Value = types.Value;
 
@@ -14,7 +14,7 @@ pub fn isHofName(name: []const u8) bool {
     return false;
 }
 
-pub fn reduce(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
+pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
@@ -38,7 +38,7 @@ pub fn reduce(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[1]Valu
     return acc;
 }
 
-pub fn partition(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
+pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |arr| arr,
@@ -150,7 +150,7 @@ fn rowSize(shape: []const usize) usize {
 }
 
 fn makeGroupView(
-    all: *ReservedBufferAllocator,
+    all: *ReservedBumpAllocator,
     array: types.Array,
     row_size: usize,
     start: usize,
