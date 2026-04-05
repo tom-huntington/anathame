@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReservedBumpAllocator wasm smoke test</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: #e2e8f0;
+    }
+
+    main {
+      width: min(42rem, calc(100vw - 2rem));
+      padding: 1.5rem;
+      border-radius: 1rem;
+      background: rgba(15, 23, 42, 0.82);
+      box-shadow: 0 1.5rem 4rem rgba(15, 23, 42, 0.35);
+    }
+
+    pre {
+      margin: 1rem 0 0;
+      padding: 1rem;
+      border-radius: 0.75rem;
+      background: rgba(15, 23, 42, 0.9);
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ReservedBumpAllocator wasm smoke test</h1>
+    <p>Build with <code>zig build wasm</code>, then serve this directory over HTTP and open this page.</p>
+    <pre id="log">Loading wasm...</pre>
+  </main>
+  <script>
+    const log = document.getElementById("log");
+    const write = (message) => {
+      console.log(message);
+      log.textContent += `\n${message}`;
+    };
+
+    async function main() {
+      log.textContent = "Fetching zig-out/bin/reserved_bump_allocator_test.wasm";
+      const response = await fetch("./zig-out/bin/reserved_bump_allocator_test.wasm");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const { instance } = await WebAssembly.instantiateStreaming(response, {});
+      const code = instance.exports.runSmokeTest();
+
+      if (code === 0) {
+        write("PASS: initFixedBuffer and last-allocation reuse behaved as expected.");
+      } else {
+        write(`FAIL: smoke test returned ${code}.`);
+      }
+    }
+
+    main().catch((error) => {
+      write(`ERROR: ${error.message}`);
+    });
+  </script>
+</body>
+</html>
