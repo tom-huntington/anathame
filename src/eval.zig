@@ -39,7 +39,7 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
     switch (func.type) {
         .builtin => |builtin| {
             if (args.len != builtin.arity) return error.ArityMismatch;
-            return builtin.pointer(ctx.allocator, args);
+            return builtin.pointer(ctx.allocator, null, args);
         },
         .scope => |scoped| return evalFuncInContext(ctx, scoped, args),
         .userFn => |user_fn| return evalUserFunc(ctx, user_fn, args),
@@ -67,7 +67,7 @@ fn evalFuncInContext(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []cons
         },
         .hof => |hof| {
             if (args.len != hof.arity) return error.ArityMismatch;
-            return hof.pointer(ctx.allocator, args, hof.funcArg.*);
+            return hof.pointer(ctx.allocator, null, args, hof.funcArg.*);
         },
         .partial_apply_permute => |partial| {
             const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");

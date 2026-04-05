@@ -4,7 +4,8 @@ const ReservedBufferAllocator = @import("ReservedBumpAllocator").ReservedBumpAll
 const Expr = types.Expr;
 const Value = types.Value;
 
-pub fn add(all: *ReservedBufferAllocator, args: *[2]Value) Value {
+pub fn add(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    _ = result_dest;
     const a = args[0];
     const b = args[1];
     switch (a) {
@@ -37,14 +38,16 @@ pub fn add(all: *ReservedBufferAllocator, args: *[2]Value) Value {
     }
     @panic("not implemented");
 }
-pub fn mul(all: *ReservedBufferAllocator, args: *[2]Value) Value {
+pub fn mul(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const a = args[0];
     const b = args[1];
     _ = a;
     _ = all;
+    _ = result_dest;
     return b;
 }
-pub fn sq(all: *ReservedBufferAllocator, args: *[1]Value) Value {
+pub fn sq(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
+    _ = result_dest;
     const a = args[0];
     switch (a) {
         .scalar => |scalar| {
@@ -70,7 +73,8 @@ fn expectNonNegativeInteger(value: f64) usize {
     return @intFromFloat(value);
 }
 
-pub fn strided(all: *ReservedBufferAllocator, args: *[3]Value) Value {
+pub fn strided(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[3]Value) Value {
+    _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
         else => @panic("strided expects array as first argument"),
@@ -108,7 +112,8 @@ pub fn strided(all: *ReservedBufferAllocator, args: *[3]Value) Value {
     return .{ .array = result };
 }
 
-pub fn not_eq(all: *ReservedBufferAllocator, args: *[2]Value) Value {
+pub fn not_eq(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    _ = result_dest;
     const rhs = switch (args[1]) {
         .scalar => |scalar| scalar,
         else => @panic("not_eq expects args[1] to be scalar"),
@@ -130,8 +135,9 @@ pub fn not_eq(all: *ReservedBufferAllocator, args: *[2]Value) Value {
     }
 }
 
-pub fn first(all: *ReservedBufferAllocator, args: *[1]Value) Value {
+pub fn first(all: *ReservedBufferAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     _ = all;
+    _ = result_dest;
 
     const array = switch (args[0]) {
         .array => |array| array,

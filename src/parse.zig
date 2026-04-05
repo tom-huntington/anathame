@@ -27,7 +27,7 @@ pub const Symbol = struct {
 
 const HofSymbol = struct {
     arity: u32,
-    pointer: *const fn (*ReservedBufferAllocator, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 const StatementKind = enum {
@@ -799,8 +799,10 @@ fn infixInfo(tag: TokenTag) ?InfixInfo {
 }
 
 fn builtinFromParams(comptime params: anytype, comptime member: anytype) ?Builtin {
-    if (params.len != 2) return null;
-    const args_type = params[1].type orelse return null;
+    if (params.len != 3) return null;
+    if ((params[1].type orelse return null) != ?[]f64) return null;
+
+    const args_type = params[2].type orelse return null;
     const args_info = @typeInfo(args_type);
     if (args_info != .pointer) return null;
     if (args_info.pointer.size != .one) return null;
@@ -815,21 +817,22 @@ fn builtinFromParams(comptime params: anytype, comptime member: anytype) ?Builti
     };
 }
 
-fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, []const Value) Value {
+fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, ?[]f64, []const Value) Value {
     return &struct {
-        fn call(allocator: *ReservedBufferAllocator, args: []const Value) Value {
+        fn call(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, args: []const Value) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
-            return member(allocator, @constCast(typed_args));
+            return member(allocator, result_dest, @constCast(typed_args));
         }
     }.call;
 }
 
 fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol {
-    if (params.len != 3) return null;
-    if ((params[2].type orelse return null) != Expr.FuncExpr) return null;
+    if (params.len != 4) return null;
+    if ((params[1].type orelse return null) != ?[]f64) return null;
+    if ((params[3].type orelse return null) != Expr.FuncExpr) return null;
 
-    const args_type = params[1].type orelse return null;
+    const args_type = params[2].type orelse return null;
     const args_info = @typeInfo(args_type);
     if (args_info != .pointer) return null;
     if (args_info.pointer.size != .one) return null;
@@ -845,12 +848,12 @@ fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol 
     };
 }
 
-fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, []const Value, Expr.FuncExpr) Value {
+fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value {
     return &struct {
-        fn call(allocator: *ReservedBufferAllocator, args: []const Value, fn_arg: Expr.FuncExpr) Value {
+        fn call(allocator: *ReservedBufferAllocator, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
-            return member(allocator, @constCast(typed_args), fn_arg);
+            return member(allocator, result_dest, @constCast(typed_args), fn_arg);
         }
     }.call;
 }

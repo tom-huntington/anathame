@@ -197,13 +197,13 @@ pub const Combinator = enum {
 
 pub const Builtin = struct {
     arity: u32,
-    pointer: *const fn (*ReservedBufferAllocator, []const Value) Value,
+    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value) Value,
 };
 
 pub const Hof = struct {
     arity: u32,
     funcArg: *Expr.FuncExpr,
-    pointer: *const fn (*ReservedBufferAllocator, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*ReservedBufferAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 pub const PartialApply = enum { comma, caret };
