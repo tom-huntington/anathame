@@ -678,7 +678,7 @@ pub const Parser = struct {
 
         if (rows.items.len == 0) {
             const data = try self.value_allocator.allocator().alloc(f64, 0);
-            const meta = types.allocMetadataHeader(self.value_allocator, .Exclusive, &.{ 0, 0 });
+            const meta = types.InitMetadata(self.value_allocator, .Exclusive, &.{ 0, 0 });
             return .{ .array = .{ .data = data, .meta = meta } };
         }
 
@@ -713,7 +713,7 @@ pub const Parser = struct {
         const shape = try self.value_allocator.allocator().alloc(usize, first_shape.len + 1);
         shape[0] = items.len;
         @memcpy(shape[1..], first_shape);
-        const meta = types.allocMetadataHeader(self.value_allocator, .Exclusive, shape);
+        const meta = types.InitMetadata(self.value_allocator, .Exclusive, shape);
 
         var data_index: usize = 0;
         for (items) |item| {
@@ -735,7 +735,7 @@ pub const Parser = struct {
     fn parseRawStringValue(self: *Parser, lexeme: []const u8) ParseError!Value {
         const bytes = if (lexeme.len > 0) lexeme[1..] else lexeme;
         const data = try self.value_allocator.allocator().alloc(f64, bytes.len);
-        const meta = types.allocMetadataHeader(self.value_allocator, .Exclusive, &.{bytes.len});
+        const meta = types.InitMetadata(self.value_allocator, .Exclusive, &.{bytes.len});
         for (bytes, 0..) |byte, i| {
             data[i] = @floatFromInt(byte);
         }
