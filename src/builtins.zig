@@ -5,6 +5,7 @@ const Expr = types.Expr;
 const Value = types.Value;
 
 pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const checkpoint = all.checkpoint();
     _ = result_dest;
     const a = args[0];
     const b = args[1];
@@ -30,7 +31,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                         result.data[i] = lhs + rhs;
                     }
 
-                    return .{ .array = result };
+                    return types.Array.Return(all, checkpoint, result);
                 },
                 .scalar => {},
             }
@@ -75,6 +76,7 @@ fn expectNonNegativeInteger(value: f64) usize {
 }
 
 pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value) Value {
+    const checkpoint = all.checkpoint();
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
@@ -110,10 +112,11 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         out_index += inner_size;
     }
 
-    return .{ .array = result };
+    return types.Array.Return(all, checkpoint, result);
 }
 
 pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const checkpoint = all.checkpoint();
     _ = result_dest;
     const rhs = switch (args[1]) {
         .scalar => |scalar| scalar,
@@ -131,7 +134,7 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
                 result.data[i] = if (item != rhs) 1 else 0;
             }
 
-            return .{ .array = result };
+            return types.Array.Return(all, checkpoint, result);
         },
     }
 }

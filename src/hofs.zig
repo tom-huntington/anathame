@@ -15,6 +15,7 @@ pub fn isHofName(name: []const u8) bool {
 }
 
 pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
+    const checkpoint = all.checkpoint();
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
@@ -35,10 +36,14 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
         }) catch @panic("reduce function evaluation failed");
     }
 
-    return acc;
+    return switch (acc) {
+        .scalar => acc,
+        .array => |result| types.Array.Return(all, checkpoint, result),
+    };
 }
 
 pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
+    const checkpoint = all.checkpoint();
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |arr| arr,
@@ -58,7 +63,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
 
     const first_run = findNextIncludedRun(&runs) orelse {
         const empty = types.Array.init(all, &.{0});
-        return .{ .array = empty };
+        return types.Array.Return(all, checkpoint, empty);
     };
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
@@ -94,7 +99,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     }
 
     output.meta.shape[0] = kept_count;
-    return .{ .array = output };
+    return types.Array.Return(all, checkpoint, output);
 }
 
 const PartitionRun = struct {
