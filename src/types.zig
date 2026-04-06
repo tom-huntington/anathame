@@ -182,12 +182,15 @@ pub const Array = struct {
             if (all.isNextAllocation(bytes.ptr)) {
                 _ = all.reclaim(bytes);
                 result.meta.status = .Exclusive;
+                assertReturnedArrayUnchanged(result, result);
                 return .{ .array = result };
             }
 
             const final_bytes = all.allocator().alignedAlloc(u8, Array.allocationAlignment(), bytes.len) catch @panic("out of memory");
             std.mem.copyForwards(u8, final_bytes, bytes);
-            return .{ .array = Array.fromCompactAllocation(final_bytes, depth, size) };
+            const final_result = Array.fromCompactAllocation(final_bytes, depth, size);
+            assertReturnedArrayUnchanged(result, final_result);
+            return .{ .array = final_result };
         }
 
         const final_data = if (all.isNextAllocation(@ptrCast(result.data.ptr))) blk: {
@@ -207,12 +210,35 @@ pub const Array = struct {
             break :blk result.meta;
         } else Metadata.initWithShape(all, .Exclusive, result.shape());
 
-        return .{ .array = .{
+        const final_result: Array = .{
             .data = final_data,
             .meta = final_meta,
-        } };
+        };
+        assertReturnedArrayUnchanged(result, final_result);
+        return .{ .array = final_result };
     }
 };
+
+fn assertReturnedArrayUnchanged(input: Array, output: Array) void {
+    if (arraysEqualByValue(input, output)) return;
+
+    std.debug.print("Array.Return changed array value\n", .{});
+    debugPrintArray("input", input);
+    debugPrintArray("output", output);
+    @panic("Array.Return changed array value");
+}
+
+fn arraysEqualByValue(lhs: Array, rhs: Array) bool {
+    return std.mem.eql(usize, lhs.shape(), rhs.shape()) and
+        std.mem.eql(f64, lhs.data, rhs.data);
+}
+
+fn debugPrintArray(label: []const u8, array: Array) void {
+    std.debug.print(
+        "{s}: shape={any} data={any}\n",
+        .{ label, array.shape(), array.data },
+    );
+}
 
 fn prod(shape: []const usize) usize {
     var len: usize = 1;
