@@ -173,34 +173,46 @@ pub const Array = struct {
     }
 
     pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result: Array) Value {
-        var debug_snapshot: if (debug_array_return_snapshot) DebugArraySnapshot else void = undefined;
         var debug_gpa: if (debug_array_return_snapshot) std.heap.GeneralPurposeAllocator(.{}) else void = undefined;
+        var debug_snapshot: if (debug_array_return_snapshot) Array else void = undefined;
         var final_result: ?Array = null;
-        var inline_shape_snapshot: [8]usize = undefined;
-        var heap_shape_snapshot: ?[]usize = null;
 
         if (comptime debug_array_return_snapshot) {
             debug_gpa = .init;
-            debug_snapshot = DebugArraySnapshot.init(debug_gpa.allocator(), result);
-            defer debug_snapshot.deinit(debug_gpa.allocator());
             defer std.debug.assert(debug_gpa.deinit() == .ok);
+
+            const debug_allocator = debug_gpa.allocator();
+
+            const debug_data = debug_allocator.alloc(f64, result.data.len) catch @panic("out of memory");
+            errdefer debug_allocator.free(debug_data);
+            std.mem.copyForwards(f64, debug_data, result.data);
+
+            const debug_shape = debug_allocator.alloc(usize, result.shape().len) catch @panic("out of memory");
+            errdefer debug_allocator.free(debug_shape);
+            std.mem.copyForwards(usize, debug_shape, result.shape());
+
+            const debug_meta = debug_allocator.create(Metadata) catch @panic("out of memory");
+            errdefer debug_allocator.destroy(debug_meta);
+            debug_meta.* = .{
+                .status = result.meta.status,
+                .shape = debug_shape,
+            };
+
+            debug_snapshot = .{
+                .data = debug_data,
+                .meta = debug_meta,
+            };
+
+            defer debug_allocator.destroy(debug_snapshot.meta);
+            defer debug_allocator.free(debug_snapshot.shape());
+            defer debug_allocator.free(debug_snapshot.data);
             defer if (final_result) |returned_array| {
-                assertReturnedArrayUnchanged(debug_snapshot.toArray(), returned_array);
+                assertReturnedArrayUnchanged(debug_snapshot, returned_array);
             };
         }
 
         const depth = result.shape().len;
         const size = result.data.len;
-        const shape_snapshot = blk: {
-            if (depth <= inline_shape_snapshot.len) break :blk inline_shape_snapshot[0..depth];
-
-            const heap_shape = std.heap.page_allocator.alloc(usize, depth) catch @panic("out of memory");
-            heap_shape_snapshot = heap_shape;
-            break :blk heap_shape;
-        };
-        defer if (heap_shape_snapshot) |heap_shape| std.heap.page_allocator.free(heap_shape);
-        std.mem.copyForwards(usize, shape_snapshot, result.shape());
-
         const meta_bytes = result.meta.allocationBytes();
         const compact_bytes = result.compactAllocationBytes();
 
@@ -211,13 +223,14 @@ pub const Array = struct {
                 _ = all.reclaim(bytes);
                 result.meta.status = .Exclusive;
                 final_result = result;
-                return .{ .array = final_result.? };
+                return .{ .array = result };
             }
 
             const final_bytes = all.allocator().alignedAlloc(u8, Array.allocationAlignment(), bytes.len) catch @panic("out of memory");
             std.mem.copyForwards(u8, final_bytes, bytes);
-            final_result = Array.fromCompactAllocation(final_bytes, depth, size);
-            return .{ .array = final_result.? };
+            const returned_array = Array.fromCompactAllocation(final_bytes, depth, size);
+            final_result = returned_array;
+            return .{ .array = returned_array };
         }
 
         const final_data = if (all.isNextAllocation(@ptrCast(result.data.ptr))) blk: {
@@ -235,55 +248,14 @@ pub const Array = struct {
             _ = all.reclaim(meta_bytes);
             result.meta.status = .Exclusive;
             break :blk result.meta;
-        } else Metadata.initWithShape(all, .Exclusive, shape_snapshot);
+        } else Metadata.initWithShape(all, .Exclusive, result.shape());
 
-        final_result = .{
+        const returned_array: Array = .{
             .data = final_data,
             .meta = final_meta,
         };
-        return .{ .array = final_result.? };
-    }
-};
-
-const DebugArraySnapshot = struct {
-    data: []f64,
-    shape: []usize,
-    meta: *Metadata,
-
-    fn init(allocator: std.mem.Allocator, source: Array) DebugArraySnapshot {
-        const data = allocator.alloc(f64, source.data.len) catch @panic("out of memory");
-        errdefer allocator.free(data);
-        std.mem.copyForwards(f64, data, source.data);
-
-        const shape = allocator.alloc(usize, source.shape().len) catch @panic("out of memory");
-        errdefer allocator.free(shape);
-        std.mem.copyForwards(usize, shape, source.shape());
-
-        const meta = allocator.create(Metadata) catch @panic("out of memory");
-        errdefer allocator.destroy(meta);
-        meta.* = .{
-            .status = source.meta.status,
-            .shape = shape,
-        };
-
-        return .{
-            .data = data,
-            .shape = shape,
-            .meta = meta,
-        };
-    }
-
-    fn deinit(self: DebugArraySnapshot, allocator: std.mem.Allocator) void {
-        allocator.destroy(self.meta);
-        allocator.free(self.shape);
-        allocator.free(self.data);
-    }
-
-    fn toArray(self: DebugArraySnapshot) Array {
-        return .{
-            .data = self.data,
-            .meta = self.meta,
-        };
+        final_result = returned_array;
+        return .{ .array = returned_array };
     }
 };
 
