@@ -183,6 +183,7 @@ pub const Array = struct {
 
             const result_after = ReturnImpl(all, checkpoint, result_before);
             assertReturnedArrayUnchanged(deep_copy, result_after.array);
+            assertReturnedArrayInvariants(all, result_after.array);
             return result_after;
         } else return ReturnImpl(all, checkpoint, result_before);
     }
@@ -276,6 +277,24 @@ fn assertReturnedArrayUnchanged(input: Array, output: Array) void {
     debugPrintArray("input", input);
     debugPrintArray("output", output);
     @panic("Array.Return changed array value");
+}
+
+fn assertReturnedArrayInvariants(all: *ReservedBumpAllocator, array: Array) void {
+    const expected_data_len = prod(array.shape());
+    if (array.data.len != expected_data_len) {
+        std.debug.print(
+            "Array.Return returned data length that does not match shape: expected {d}, got {d}\n",
+            .{ expected_data_len, array.data.len },
+        );
+        debugPrintArray("output", array);
+        @panic("Array.Return returned invalid array shape/data length");
+    }
+
+    if (!all.isLastAllocation(std.mem.sliceAsBytes(array.data))) {
+        std.debug.print("Array.Return returned data that is not the final bump allocation\n", .{});
+        debugPrintArray("output", array);
+        @panic("Array.Return returned non-final array data");
+    }
 }
 
 fn arraysEqualByValue(lhs: Array, rhs: Array) bool {
