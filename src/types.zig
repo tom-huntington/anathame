@@ -190,43 +190,52 @@ pub const Array = struct {
 
     pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: Array) Value {
         const depth = result.shape().len;
-        const size = result.data.len;
+        const size = prod(result.shape());
+        if (result.data.len < size) {
+            @panic("Array.Return result data is shorter than its shape");
+        }
         const meta_bytes = result.meta.allocationBytes();
         const compact_bytes = result.compactAllocationBytes();
+        const result_data = result.data[0..size];
+        const compact_size = totalByteLen(depth, size);
 
         all.restore(checkpoint);
 
         if (compact_bytes) |bytes| {
+            const compact_prefix = bytes[0..compact_size];
             if (all.isNextAllocation(bytes.ptr)) {
-                _ = all.reclaim(bytes);
+                _ = all.reclaim(compact_prefix);
                 result.meta.status = .Exclusive;
-                return .{ .array = result };
+                return .{ .array = .{
+                    .data = result_data,
+                    .meta = result.meta,
+                } };
             }
 
             if (all.ownsSlice(bytes) and @intFromPtr(bytes.ptr) >= @intFromPtr(all.base + all.sentinel)) {
                 // Reclaim the gap too; allocating first can debug-fill and clobber the source.
                 const reclaim_start = all.base + all.sentinel;
                 const align_offset = std.mem.alignPointerOffset(reclaim_start, Array.allocationAlignment().toByteUnits()) orelse unreachable;
-                const reclaimed_len = @intFromPtr(bytes.ptr) - @intFromPtr(reclaim_start) + bytes.len;
+                const reclaimed_len = align_offset + compact_size;
                 const reclaimed = all.reclaim(reclaim_start[0..reclaimed_len]);
-                const final_bytes = reclaimed[align_offset..][0..bytes.len];
-                std.mem.copyForwards(u8, final_bytes, bytes);
+                const final_bytes = reclaimed[align_offset..][0..compact_size];
+                std.mem.copyForwards(u8, final_bytes, compact_prefix);
                 return .{ .array = Array.fromCompactAllocation(final_bytes, depth, size) };
             }
 
-            const final_bytes = all.allocator().alignedAlloc(u8, Array.allocationAlignment(), bytes.len) catch @panic("out of memory");
-            std.mem.copyForwards(u8, final_bytes, bytes);
+            const final_bytes = all.allocator().alignedAlloc(u8, Array.allocationAlignment(), compact_size) catch @panic("out of memory");
+            std.mem.copyForwards(u8, final_bytes, compact_prefix);
             return .{ .array = Array.fromCompactAllocation(final_bytes, depth, size) };
         }
 
         const final_data = if (all.isNextAllocation(@ptrCast(result.data.ptr))) blk: {
-            const bytes = std.mem.sliceAsBytes(result.data);
+            const bytes = std.mem.sliceAsBytes(result_data);
             _ = all.reclaim(bytes);
             const ptr: [*]f64 = @ptrCast(@alignCast(bytes.ptr));
             break :blk ptr[0..size];
         } else blk: {
             const data = all.allocator().alloc(f64, size) catch @panic("out of memory");
-            std.mem.copyForwards(f64, data, result.data);
+            std.mem.copyForwards(f64, data, result_data);
             break :blk data;
         };
 
@@ -298,8 +307,12 @@ fn assertReturnedArrayInvariants(all: *ReservedBumpAllocator, array: Array) void
 }
 
 fn arraysEqualByValue(lhs: Array, rhs: Array) bool {
+    const lhs_data_len = prod(lhs.shape());
+    const rhs_data_len = prod(rhs.shape());
+    if (lhs.data.len < lhs_data_len or rhs.data.len < rhs_data_len) return false;
+
     return std.mem.eql(usize, lhs.shape(), rhs.shape()) and
-        std.mem.eql(f64, lhs.data, rhs.data);
+        std.mem.eql(f64, lhs.data[0..lhs_data_len], rhs.data[0..rhs_data_len]);
 }
 
 fn debugPrintArray(label: []const u8, array: Array) void {
