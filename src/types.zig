@@ -205,7 +205,8 @@ pub const Array = struct {
     }
 
     pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: Array) Value {
-        if (comptime debug_array_return_snapshot) {
+        //if (comptime debug_array_return_snapshot) {
+        if (comptime @import("builtin").mode == .Debug) {
             var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
             defer std.debug.assert(debug_gpa.deinit() == .ok);
 
