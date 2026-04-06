@@ -169,6 +169,49 @@ pub const Array = struct {
         _ = data_offset;
         return fromCompactAllocation(bytes, depth, size);
     }
+
+    pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result: Array) Value {
+        const depth = result.shape().len;
+        const size = result.data.len;
+        const meta_bytes = result.meta.allocationBytes();
+        const compact_bytes = result.compactAllocationBytes();
+
+        all.restore(checkpoint);
+
+        if (compact_bytes) |bytes| {
+            if (all.isNextAllocation(bytes.ptr)) {
+                _ = all.reclaim(bytes);
+                result.meta.status = .Exclusive;
+                return .{ .array = result };
+            }
+
+            const final_bytes = all.allocator().alignedAlloc(u8, Array.allocationAlignment(), bytes.len) catch @panic("out of memory");
+            std.mem.copyForwards(u8, final_bytes, bytes);
+            return .{ .array = Array.fromCompactAllocation(final_bytes, depth, size) };
+        }
+
+        const final_data = if (all.isNextAllocation(@ptrCast(result.data.ptr))) blk: {
+            const bytes = std.mem.sliceAsBytes(result.data);
+            _ = all.reclaim(bytes);
+            const ptr: [*]f64 = @ptrCast(@alignCast(bytes.ptr));
+            break :blk ptr[0..size];
+        } else blk: {
+            const data = all.allocator().alloc(f64, size) catch @panic("out of memory");
+            std.mem.copyForwards(f64, data, result.data);
+            break :blk data;
+        };
+
+        const final_meta = if (all.isNextAllocation(meta_bytes.ptr)) blk: {
+            _ = all.reclaim(meta_bytes);
+            result.meta.status = .Exclusive;
+            break :blk result.meta;
+        } else Metadata.initWithShape(all, .Exclusive, result.shape());
+
+        return .{ .array = .{
+            .data = final_data,
+            .meta = final_meta,
+        } };
+    }
 };
 
 fn prod(shape: []const usize) usize {
