@@ -172,6 +172,38 @@ pub const Array = struct {
         return fromCompactAllocation(bytes, depth, size);
     }
 
+    pub fn initWithDepthBefore(
+        allocator: *ReservedBumpAllocator,
+        checkpoint: usize,
+        last_allocation: []u8,
+        depth: usize,
+        size: usize,
+        moved_array: ?*Array,
+    ) Array {
+        const total_bytes = totalByteLen(depth, size);
+        const bytes = allocator.insertBeforeLastAllocation(checkpoint, last_allocation, total_bytes);
+        if (moved_array) |array| {
+            array.offsetTailPointersByBytes(last_allocation, total_bytes);
+        }
+        return fromCompactAllocation(bytes, depth, size);
+    }
+
+    fn offsetTailPointersByBytes(self: *Array, tail: []const u8, byte_offset: usize) void {
+        const data_bytes = std.mem.sliceAsBytes(self.data);
+        const data_ptr: [*]f64 = if (sliceContainsSlice(tail, data_bytes))
+            @ptrFromInt(@intFromPtr(self.data.ptr) + byte_offset)
+        else
+            self.data.ptr;
+        const meta: *Metadata = if (sliceContainsPtr(tail, @ptrCast(self.meta)))
+            @ptrFromInt(@intFromPtr(self.meta) + byte_offset)
+        else
+            self.meta;
+        self.* = .{
+            .data = data_ptr[0..self.data.len],
+            .meta = meta,
+        };
+    }
+
     pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: Array) Value {
         if (comptime debug_array_return_snapshot) {
             var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -328,6 +360,16 @@ fn prod(shape: []const usize) usize {
         len = len * dim;
     }
     return len;
+}
+
+fn sliceContainsPtr(container: []const u8, ptr: [*]const u8) bool {
+    return @intFromPtr(ptr) >= @intFromPtr(container.ptr) and
+        @intFromPtr(ptr) < (@intFromPtr(container.ptr) + container.len);
+}
+
+fn sliceContainsSlice(container: []const u8, slice: []const u8) bool {
+    return @intFromPtr(slice.ptr) >= @intFromPtr(container.ptr) and
+        (@intFromPtr(slice.ptr) + slice.len) <= (@intFromPtr(container.ptr) + container.len);
 }
 
 pub const Value = union(enum) {

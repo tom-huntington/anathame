@@ -129,6 +129,27 @@ pub const ReservedBumpAllocator = struct {
         return buf;
     }
 
+    pub fn insertBeforeLastAllocation(self: *ReservedBumpAllocator, checkpoint_: usize, last_allocation: []u8, insert_bytes: usize) []u8 {
+        const alignment = @alignOf(usize);
+        assert(checkpoint_ <= self.sentinel);
+        assert(self.ownsSlice(last_allocation));
+        assert(@intFromPtr(last_allocation.ptr) == @intFromPtr(self.base + checkpoint_));
+        assert(last_allocation.len == self.sentinel - checkpoint_);
+        assert(@intFromPtr(last_allocation.ptr) % alignment == 0);
+        assert(insert_bytes % alignment == 0);
+
+        const new_sentinel = self.sentinel + insert_bytes;
+        assert(new_sentinel <= self.reserved_len);
+
+        self.ensureCommitted(new_sentinel) catch @panic("out of memory");
+
+        const inserted = self.base[checkpoint_ .. checkpoint_ + insert_bytes];
+        const moved_last_allocation = self.base[checkpoint_ + insert_bytes .. new_sentinel];
+        std.mem.copyBackwards(u8, moved_last_allocation, last_allocation);
+        self.sentinel = new_sentinel;
+        return inserted;
+    }
+
     fn ensureCommitted(self: *ReservedBumpAllocator, sentinel: usize) Error!void {
         if (self.page_size == 0 or self.committed_len == self.reserved_len) return;
 
@@ -318,4 +339,28 @@ test "fixed buffer allocator reuses last allocation space" {
     try std.testing.expectEqual(@intFromPtr(second.ptr), @intFromPtr(third.ptr));
     try std.testing.expectEqual(@intFromPtr(first.ptr) + 16, @intFromPtr(third.ptr));
     try std.testing.expectEqual(buffer.len, allocator_impl.committedBytes());
+}
+
+test "fixed buffer allocator inserts before checkpoint tail" {
+    var buffer: [64]u8 = undefined;
+    var allocator_impl = try ReservedBumpAllocator.initFixedBuffer(&buffer);
+    defer allocator_impl.deinit();
+
+    const allocator = allocator_impl.allocator();
+
+    const prefix = try allocator.alloc(u8, 8);
+    @memcpy(prefix, "prefix!!");
+    const checkpoint_ = allocator_impl.checkpoint();
+
+    const tail = try allocator.alloc(u8, 16);
+    @memcpy(tail, "tail allocation!");
+
+    const last_allocation = allocator_impl.base[checkpoint_..allocator_impl.checkpoint()];
+    const inserted = allocator_impl.insertBeforeLastAllocation(checkpoint_, last_allocation, 8);
+    @memcpy(inserted, "insert!!");
+
+    try std.testing.expectEqualSlices(u8, "prefix!!", buffer[0..8]);
+    try std.testing.expectEqualSlices(u8, "insert!!", buffer[8..16]);
+    try std.testing.expectEqualSlices(u8, "tail allocation!", buffer[16..32]);
+    try std.testing.expectEqual(@as(usize, 32), allocator_impl.checkpoint());
 }

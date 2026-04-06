@@ -67,7 +67,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     };
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
-    const first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
+    var first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
     const kept_capacity = array.shape()[0];
     const output_item_len = switch (first_result) {
@@ -75,17 +75,23 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .array => |result| result.data.len,
     };
 
-    const output_shape = all.allocator().alloc(usize, switch (first_result) {
+    const output_depth = switch (first_result) {
         .scalar => 1,
         .array => |result| result.shape().len + 1,
-    }) catch @panic("out of memory");
-    output_shape[0] = kept_capacity;
+    };
+
+    const last_allocation = all.base[checkpoint..all.checkpoint()];
+    const moved_array: ?*types.Array = switch (first_result) {
+        .scalar => null,
+        .array => |*result| result,
+    };
+    var output = types.Array.initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
+    output.meta.shape[0] = kept_capacity;
     switch (first_result) {
         .scalar => {},
-        .array => |result| @memcpy(output_shape[1..], result.shape()),
+        .array => |result| @memcpy(output.meta.shape[1..], result.shape()),
     }
 
-    var output = types.Array.init(all, output_shape);
     storeGroupResult(output, 0, output_item_len, first_result);
 
     var kept_count: usize = 1;
