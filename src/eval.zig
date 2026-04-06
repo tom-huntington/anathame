@@ -99,7 +99,7 @@ fn evalTableFunc(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, table: 
         .scalar => |scalar| .{ .scalar = try evalTableScalar(table, scalar) },
         .array => |array| blk: {
             const data = result_dest orelse (allocator.allocator().alloc(f64, array.data.len) catch @panic("out of memory"));
-            const meta = types.Metadata.initWithShape(allocator, .Exclusive, array.shape);
+            const meta = types.Array.initWithShape(allocator, .Exclusive, array.shape);
 
             for (array.data, 0..) |item, i| {
                 data[i] = try evalTableScalar(table, item);
@@ -322,7 +322,7 @@ fn materializeArrayStrand(allocator: *ReservedBumpAllocator, items: []const Valu
     const shape = allocator.allocator().alloc(usize, first_shape.len + 1) catch @panic("out of memory");
     shape[0] = items.len;
     @memcpy(shape[1..], first_shape);
-    const meta = types.Metadata.initWithShape(allocator, .Exclusive, shape);
+    const meta = types.Array.initWithShape(allocator, .Exclusive, shape);
 
     var data_index: usize = 0;
     for (items) |item| {

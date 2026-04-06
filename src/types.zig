@@ -34,36 +34,36 @@ pub const Token = struct {
     lexeme: []const u8,
 };
 
-const metadata_shape_alignment = std.mem.Alignment.of(usize);
+const array_shape_alignment = std.mem.Alignment.of(usize);
 
 pub const CowStatus = enum {
     Exclusive,
     Shared,
 };
-pub const Metadata = struct {
+pub const Array = struct {
     data: []f64,
     status: CowStatus,
     shape: []usize,
 
     pub fn shapeOffset() usize {
-        return metadata_shape_alignment.forward(@sizeOf(Metadata));
+        return array_shape_alignment.forward(@sizeOf(@This()));
     }
 
-    pub fn metadataByteLen(depth: usize) usize {
+    pub fn headerByteLen(depth: usize) usize {
         return shapeOffset() + depth * @sizeOf(usize);
     }
 
-    pub fn allocationBytes(self: *Metadata) []u8 {
+    pub fn allocationBytes(self: *@This()) []u8 {
         const ptr: [*]u8 = @ptrCast(self);
-        return ptr[0..metadataByteLen(self.shape.len)];
+        return ptr[0..headerByteLen(self.shape.len)];
     }
 
     pub fn initWithShape(
         allocator: *ReservedBumpAllocator,
         status: CowStatus,
         shape: []const usize, // copied into inline storage after the header
-    ) *Metadata {
-        const header = initMetadataWithDepth(allocator, status, shape.len);
+    ) *@This() {
+        const header = initArrayWithDepth(allocator, status, shape.len);
         @memcpy(header.shape, shape);
         return header;
     }
@@ -73,14 +73,14 @@ pub const Metadata = struct {
     }
 
     pub fn dataOffset(depth: usize) usize {
-        return array_data_alignment.forward(metadataByteLen(depth));
+        return array_data_alignment.forward(headerByteLen(depth));
     }
 
     pub fn totalByteLen(depth: usize, size: usize) usize {
         return dataOffset(depth) + size * @sizeOf(f64);
     }
 
-    pub fn compactAllocationBytes(self: *Metadata) ?[]u8 {
+    pub fn compactAllocationBytes(self: *@This()) ?[]u8 {
         const meta_bytes = self.allocationBytes();
         const expected_data_ptr = meta_bytes.ptr + dataOffset(self.shape.len);
         if (@intFromPtr(self.data.ptr) != @intFromPtr(expected_data_ptr)) return null;
@@ -88,11 +88,11 @@ pub const Metadata = struct {
         return meta_bytes.ptr[0..totalByteLen(self.shape.len, self.data.len)];
     }
 
-    pub fn fromCompactAllocation(bytes: []u8, depth: usize, size: usize) *Metadata {
+    pub fn fromCompactAllocation(bytes: []u8, depth: usize, size: usize) *@This() {
         std.debug.assert(bytes.len >= totalByteLen(depth, size));
 
-        const meta: *Metadata = @ptrCast(@alignCast(bytes.ptr));
-        const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + Metadata.shapeOffset()));
+        const meta: *@This() = @ptrCast(@alignCast(bytes.ptr));
+        const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + @This().shapeOffset()));
         meta.* = .{
             .data = &.{},
             .status = CowStatus.Exclusive,
@@ -104,16 +104,16 @@ pub const Metadata = struct {
         return meta;
     }
 
-    pub fn move(self: *Metadata) *Metadata {
+    pub fn move(self: *@This()) *@This() {
         std.debug.assert(self.status == CowStatus.Exclusive);
         return self;
     }
-    pub fn manually_counted_move(self: *Metadata) *Metadata {
+    pub fn manually_counted_move(self: *@This()) *@This() {
         // up to programming to ensure there are no outstanding references
         self.status = CowStatus.Exclusive;
         return self;
     }
-    pub fn copy(self: *Metadata) *Metadata {
+    pub fn copy(self: *@This()) *@This() {
         self.status = CowStatus.Shared;
         return self;
     }
@@ -121,7 +121,7 @@ pub const Metadata = struct {
     pub fn init(
         allocator: *ReservedBumpAllocator,
         dims: []const usize,
-    ) *Metadata {
+    ) *@This() {
         const array = initWithDepth(allocator, dims.len, prod(dims));
         @memcpy(array.shape, dims);
         return array;
@@ -131,8 +131,8 @@ pub const Metadata = struct {
         allocator: *ReservedBumpAllocator,
         depth: usize,
         size: usize,
-    ) *Metadata {
-        const shape_offset = Metadata.shapeOffset();
+    ) *@This() {
+        const shape_offset = @This().shapeOffset();
         const data_offset = dataOffset(depth);
         const total_bytes = totalByteLen(depth, size);
         const bytes = allocator.allocator().alignedAlloc(u8, array_allocation_alignment, total_bytes) catch @panic("out of memory");
@@ -148,8 +148,8 @@ pub const Metadata = struct {
         last_allocation: []u8,
         depth: usize,
         size: usize,
-        moved_array: ?**Metadata,
-    ) *Metadata {
+        moved_array: ?**@This(),
+    ) *@This() {
         const total_bytes = totalByteLen(depth, size);
         const bytes = allocator.insertBeforeLastAllocation(checkpoint, last_allocation, total_bytes);
         if (moved_array) |array| {
@@ -158,7 +158,7 @@ pub const Metadata = struct {
         return fromCompactAllocation(bytes, depth, size);
     }
 
-    pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *Metadata) Value {
+    pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *@This()) Value {
         //if (comptime debug_array_return_snapshot) {
         if (comptime @import("builtin").mode == .Debug) {
             var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -175,7 +175,7 @@ pub const Metadata = struct {
         } else return ReturnImpl(all, checkpoint, result_before);
     }
 
-    pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: *Metadata) Value {
+    pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: *@This()) Value {
         const depth = result.shape.len;
         const size = prod(result.shape);
         if (result.data.len < size) {
@@ -200,17 +200,17 @@ pub const Metadata = struct {
             if (all.ownsSlice(bytes) and @intFromPtr(bytes.ptr) >= @intFromPtr(all.base + all.sentinel)) {
                 // Reclaim the gap too; allocating first can debug-fill and clobber the source.
                 const reclaim_start = all.base + all.sentinel;
-                const align_offset = std.mem.alignPointerOffset(reclaim_start, Metadata.allocationAlignment().toByteUnits()) orelse unreachable;
+                const align_offset = std.mem.alignPointerOffset(reclaim_start, @This().allocationAlignment().toByteUnits()) orelse unreachable;
                 const reclaimed_len = align_offset + compact_size;
                 const reclaimed = all.reclaim(reclaim_start[0..reclaimed_len]);
                 const final_bytes = reclaimed[align_offset..][0..compact_size];
                 std.mem.copyForwards(u8, final_bytes, compact_prefix);
-                return .{ .array = Metadata.fromCompactAllocation(final_bytes, depth, size) };
+                return .{ .array = @This().fromCompactAllocation(final_bytes, depth, size) };
             }
 
-            const final_bytes = all.allocator().alignedAlloc(u8, Metadata.allocationAlignment(), compact_size) catch @panic("out of memory");
+            const final_bytes = all.allocator().alignedAlloc(u8, @This().allocationAlignment(), compact_size) catch @panic("out of memory");
             std.mem.copyForwards(u8, final_bytes, compact_prefix);
-            return .{ .array = Metadata.fromCompactAllocation(final_bytes, depth, size) };
+            return .{ .array = @This().fromCompactAllocation(final_bytes, depth, size) };
         }
 
         const final_data = if (all.isNextAllocation(@ptrCast(result.data.ptr))) blk: {
@@ -228,28 +228,26 @@ pub const Metadata = struct {
             _ = all.reclaim(meta_bytes);
             result.status = .Exclusive;
             break :blk result;
-        } else Metadata.initWithShape(all, .Exclusive, result.shape);
+        } else @This().initWithShape(all, .Exclusive, result.shape);
 
         final_meta.data = final_data;
         return .{ .array = final_meta };
     }
 };
 
-pub const Array = Metadata;
-
-const metadata_header_alignment = std.mem.Alignment.of(Metadata);
+const array_header_alignment = std.mem.Alignment.of(Array);
 const array_data_alignment = std.mem.Alignment.of(f64);
-const array_allocation_alignment = std.mem.Alignment.fromByteUnits(@max(@alignOf(Metadata), @alignOf(f64)));
+const array_allocation_alignment = std.mem.Alignment.fromByteUnits(@max(@alignOf(Array), @alignOf(f64)));
 
-fn initMetadataWithDepth(
+fn initArrayWithDepth(
     allocator: *ReservedBumpAllocator,
     status: CowStatus,
     depth: usize,
-) *Metadata {
-    const shape_offset = Metadata.shapeOffset();
-    const total_bytes = Metadata.metadataByteLen(depth);
-    const bytes = allocator.allocator().alignedAlloc(u8, metadata_header_alignment, total_bytes) catch @panic("out of memory");
-    const header: *Metadata = @ptrCast(@alignCast(bytes.ptr));
+) *Array {
+    const shape_offset = Array.shapeOffset();
+    const total_bytes = Array.headerByteLen(depth);
+    const bytes = allocator.allocator().alignedAlloc(u8, array_header_alignment, total_bytes) catch @panic("out of memory");
+    const header: *Array = @ptrCast(@alignCast(bytes.ptr));
     const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
     header.* = .{
         .data = &.{},
@@ -259,7 +257,7 @@ fn initMetadataWithDepth(
     return header;
 }
 
-fn offsetTailArrayPointerByBytes(array_ptr: **Metadata, tail: []const u8, byte_offset: usize) void {
+fn offsetTailArrayPointerByBytes(array_ptr: **Array, tail: []const u8, byte_offset: usize) void {
     var array = array_ptr.*;
     array = if (sliceContainsPtr(tail, @ptrCast(array)))
         @ptrFromInt(@intFromPtr(array) + byte_offset)
@@ -288,7 +286,7 @@ fn debugCopyArray(allocator: std.mem.Allocator, array: *Array) *Array {
     const shape = allocator.dupe(usize, array.shape) catch @panic("out of memory");
     errdefer allocator.free(shape);
 
-    const meta = allocator.create(Metadata) catch @panic("out of memory");
+    const meta = allocator.create(Array) catch @panic("out of memory");
     meta.* = .{
         .data = data,
         .status = array.status,
@@ -369,7 +367,7 @@ fn sliceContainsSlice(container: []const u8, slice: []const u8) bool {
 
 pub const Value = union(enum) {
     scalar: f64,
-    array: *Metadata,
+    array: *Array,
 };
 
 pub const Combinator = enum {
