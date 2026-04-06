@@ -679,7 +679,8 @@ pub const Parser = struct {
         if (rows.items.len == 0) {
             const data = try self.value_allocator.allocator().alloc(f64, 0);
             const meta = types.Metadata.initWithShape(self.value_allocator, .Exclusive, &.{ 0, 0 });
-            return .{ .array = .{ .data = data, .meta = meta } };
+            meta.data = data;
+            return .{ .array = meta };
         }
 
         return try self.materializeLiteralArray(rows.items);
@@ -690,7 +691,7 @@ pub const Parser = struct {
 
         const first_shape = switch (items[0]) {
             .scalar => &[_]usize{},
-            .array => |array| array.shape(),
+            .array => |array| array.shape,
         };
         const elem_len = switch (items[0]) {
             .scalar => @as(usize, 1),
@@ -703,7 +704,7 @@ pub const Parser = struct {
                     if (first_shape.len != 0) return error.UnexpectedToken;
                 },
                 .array => |array| {
-                    if (!std.mem.eql(usize, first_shape, array.shape())) return error.UnexpectedToken;
+                    if (!std.mem.eql(usize, first_shape, array.shape)) return error.UnexpectedToken;
                     if (array.data.len != elem_len) return error.UnexpectedToken;
                 },
             }
@@ -729,7 +730,8 @@ pub const Parser = struct {
             }
         }
 
-        return .{ .array = .{ .data = data, .meta = meta } };
+        meta.data = data;
+        return .{ .array = meta };
     }
 
     fn parseRawStringValue(self: *Parser, lexeme: []const u8) ParseError!Value {
@@ -739,7 +741,8 @@ pub const Parser = struct {
         for (bytes, 0..) |byte, i| {
             data[i] = @floatFromInt(byte);
         }
-        return .{ .array = .{ .data = data, .meta = meta } };
+        meta.data = data;
+        return .{ .array = meta };
     }
 
     fn buildInfix(self: *Parser, tok: Token, left: *Expr, right: *Expr) ParseError!*Expr {

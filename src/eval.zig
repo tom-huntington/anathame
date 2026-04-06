@@ -92,29 +92,27 @@ fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.F
 
 fn evalTableFunc(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {
     if (args.len != 1) return error.ArityMismatch;
-    const lookup_shape = table.lookup.shape();
+    const lookup_shape = table.lookup.shape;
     if (lookup_shape.len != 2 or lookup_shape[1] != 2) return error.NotImplemented;
 
     return switch (args[0]) {
         .scalar => |scalar| .{ .scalar = try evalTableScalar(table, scalar) },
         .array => |array| blk: {
             const data = result_dest orelse (allocator.allocator().alloc(f64, array.data.len) catch @panic("out of memory"));
-            const meta = types.Metadata.initWithShape(allocator, .Exclusive, array.shape());
+            const meta = types.Metadata.initWithShape(allocator, .Exclusive, array.shape);
 
             for (array.data, 0..) |item, i| {
                 data[i] = try evalTableScalar(table, item);
             }
 
-            break :blk .{ .array = .{
-                .data = data,
-                .meta = meta,
-            } };
+            meta.data = data;
+            break :blk .{ .array = meta };
         },
     };
 }
 
 fn evalTableScalar(table: anytype, key: f64) EvalError!f64 {
-    const row_count = table.lookup.shape()[0];
+    const row_count = table.lookup.shape[0];
     for (0..row_count) |row| {
         const row_offset = row * 2;
         const candidate = table.lookup.data[row_offset];
@@ -301,7 +299,7 @@ fn materializeArrayStrand(allocator: *ReservedBumpAllocator, items: []const Valu
 
     const first_shape = switch (items[0]) {
         .scalar => &[_]usize{},
-        .array => |array| array.shape(),
+        .array => |array| array.shape,
     };
     const elem_len = switch (items[0]) {
         .scalar => @as(usize, 1),
@@ -314,7 +312,7 @@ fn materializeArrayStrand(allocator: *ReservedBumpAllocator, items: []const Valu
                 if (first_shape.len != 0) return error.UnsupportedValueKind;
             },
             .array => |array| {
-                if (!std.mem.eql(usize, first_shape, array.shape())) return error.UnsupportedValueKind;
+                if (!std.mem.eql(usize, first_shape, array.shape)) return error.UnsupportedValueKind;
                 if (array.data.len != elem_len) return error.UnsupportedValueKind;
             },
         }
@@ -340,5 +338,6 @@ fn materializeArrayStrand(allocator: *ReservedBumpAllocator, items: []const Valu
         }
     }
 
-    return .{ .array = .{ .data = data, .meta = meta } };
+    meta.data = data;
+    return .{ .array = meta };
 }

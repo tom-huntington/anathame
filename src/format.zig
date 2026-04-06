@@ -43,7 +43,7 @@ fn fmtValue(allocator: Allocator, value: Value, is_char: bool, params: GridFmtPa
             }
             return gridFromOwnedRow(allocator, try formatNumber(allocator, scalar));
         },
-        .array => |array| try fmtArrayValue(allocator, array.data, array.shape(), is_char, params),
+        .array => |array| try fmtArrayValue(allocator, array.data, array.shape, is_char, params),
     };
 }
 

@@ -21,11 +21,11 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
         .array => |aa| {
             switch (b) {
                 .array => |ba| {
-                    if (!std.mem.eql(usize, aa.shape(), ba.shape())) {
+                    if (!std.mem.eql(usize, aa.shape, ba.shape)) {
                         @panic("not implemented");
                     }
 
-                    var result = types.Array.init(all, aa.shape());
+                    var result = types.Array.init(all, aa.shape);
 
                     for (aa.data, ba.data, 0..) |lhs, rhs, i| {
                         result.data[i] = lhs + rhs;
@@ -56,7 +56,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
             return .{ .scalar = scalar * scalar };
         },
         .array => |array| {
-            var result = types.Array.init(all, array.shape());
+            var result = types.Array.init(all, array.shape);
 
             for (array.data, 0..) |item, i| {
                 result.data[i] = item * item;
@@ -91,7 +91,7 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         else => @panic("strided expects scalar stride"),
     };
 
-    if (array.shape().len != 1) @panic("strided only supports rank-1 arrays");
+    if (array.shape.len != 1) @panic("strided only supports rank-1 arrays");
     if (inner_size == 0) @panic("strided inner size must be greater than zero");
 
     const step = inner_size + stride - 1;
@@ -128,7 +128,7 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
             return .{ .scalar = if (lhs != rhs) 1 else 0 };
         },
         .array => |lhs| {
-            var result = types.Array.init(all, lhs.shape());
+            var result = types.Array.init(all, lhs.shape);
 
             for (lhs.data, 0..) |item, i| {
                 result.data[i] = if (item != rhs) 1 else 0;
@@ -148,7 +148,7 @@ pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) 
         else => @panic("first expects an array"),
     };
 
-    if (array.shape().len != 1) @panic("first only supports rank-1 arrays");
+    if (array.shape.len != 1) @panic("first only supports rank-1 arrays");
     if (array.data.len == 0) @panic("first requires a non-empty array");
 
     return .{ .scalar = array.data[0] };

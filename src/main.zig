@@ -9,7 +9,7 @@ const types = @import("types.zig");
 const format = @import("format.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
 
-fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !types.Array {
+fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !*types.Array {
     const data = try allocator.allocator().alloc(f64, bytes.len);
     const meta = types.Metadata.initWithShape(allocator, .Exclusive, &.{bytes.len});
 
@@ -17,10 +17,8 @@ fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !types.Arr
         data[i] = @floatFromInt(byte);
     }
 
-    return .{
-        .data = data,
-        .meta = meta,
-    };
+    meta.data = data;
+    return meta;
 }
 
 pub const std_options: std.Options = .{
@@ -77,9 +75,14 @@ pub fn main() !void {
     var arg0_data = [_]f64{ 1, 2 };
     var arg1_data = [_]f64{ 4, 5 };
     const arg_meta = types.Metadata.initWithShape(&runtime_alloc, .Exclusive, &.{8});
+    arg_meta.data = arg0_data[0..];
     const args = [_]types.Value{
-        .{ .array = .{ .data = arg0_data[0..], .meta = arg_meta } },
-        .{ .array = .{ .data = arg1_data[0..], .meta = arg_meta } },
+        .{ .array = arg_meta },
+        .{ .array = blk: {
+            const meta = types.Metadata.initWithShape(&runtime_alloc, .Exclusive, &.{8});
+            meta.data = arg1_data[0..];
+            break :blk meta;
+        } },
         .{ .array = input_array },
     };
     const result = switch (file_ast.main.arity) {

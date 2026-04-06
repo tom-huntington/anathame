@@ -22,7 +22,7 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
         else => @panic("reduce expects an array"),
     };
 
-    if (array.shape().len != 1) @panic("reduce only supports rank-1 arrays");
+    if (array.shape.len != 1) @panic("reduce only supports rank-1 arrays");
     if (array.data.len == 0) @panic("reduce requires a non-empty array");
 
     var acc: Value = .{
@@ -54,12 +54,12 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         else => @panic("partition expects an array"),
     };
 
-    if (mask.shape().len != 1) @panic("partition markers must be rank 1");
-    if (array.shape().len == 0) @panic("partition expects an array with rows");
-    if (mask.shape()[0] != array.shape()[0]) @panic("partition markers length must match row count");
+    if (mask.shape.len != 1) @panic("partition markers must be rank 1");
+    if (array.shape.len == 0) @panic("partition expects an array with rows");
+    if (mask.shape[0] != array.shape[0]) @panic("partition markers length must match row count");
 
     var runs = PartitionRuns.init(mask.data);
-    const row_size = rowSize(array.shape());
+    const row_size = rowSize(array.shape);
 
     const first_run = findNextIncludedRun(&runs) orelse {
         const empty = types.Array.init(all, &.{0});
@@ -69,7 +69,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
     var first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
-    const kept_capacity = array.shape()[0];
+    const kept_capacity = array.shape[0];
     const output_item_len = switch (first_result) {
         .scalar => @as(usize, 1),
         .array => |result| result.data.len,
@@ -77,19 +77,19 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
 
     const output_depth = switch (first_result) {
         .scalar => 1,
-        .array => |result| result.shape().len + 1,
+        .array => |result| result.shape.len + 1,
     };
 
     const last_allocation = all.base[checkpoint..all.checkpoint()];
-    const moved_array: ?*types.Array = switch (first_result) {
+    const moved_array: ?**types.Array = switch (first_result) {
         .scalar => null,
         .array => |*result| result,
     };
     var output = types.Array.initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
-    output.meta.shape[0] = kept_capacity;
+    output.shape[0] = kept_capacity;
     switch (first_result) {
         .scalar => {},
-        .array => |result| @memcpy(output.meta.shape[1..], result.shape()),
+        .array => |result| @memcpy(output.shape[1..], result.shape),
     }
 
     storeGroupResult(output, 0, output_item_len, first_result);
@@ -104,7 +104,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         kept_count += 1;
     }
 
-    output.meta.shape[0] = kept_count;
+    output.shape[0] = kept_count;
     return types.Array.Return(all, checkpoint, output);
 }
 
@@ -162,21 +162,20 @@ fn rowSize(shape: []const usize) usize {
 
 fn makeGroupView(
     all: *ReservedBumpAllocator,
-    array: types.Array,
+    array: *types.Array,
     row_size: usize,
     start: usize,
     len: usize,
-) types.Array {
-    const group_shape = all.allocator().alloc(usize, array.shape().len) catch @panic("out of memory");
+) *types.Array {
+    const group_shape = all.allocator().alloc(usize, array.shape.len) catch @panic("out of memory");
     group_shape[0] = len;
-    @memcpy(group_shape[1..], array.shape()[1..]);
+    @memcpy(group_shape[1..], array.shape[1..]);
 
     const slice_start = start * row_size;
     const slice_end = (start + len) * row_size;
-    return .{
-        .data = array.data[slice_start..slice_end],
-        .meta = types.Metadata.initWithShape(all, .Shared, group_shape),
-    };
+    const meta = types.Metadata.initWithShape(all, .Shared, group_shape);
+    meta.data = array.data[slice_start..slice_end];
+    return meta;
 }
 
 fn assertSamePartitionShape(expected: Value, actual: Value) void {
@@ -188,7 +187,7 @@ fn assertSamePartitionShape(expected: Value, actual: Value) void {
         .array => |expected_array| switch (actual) {
             .scalar => @panic("partition function result shape changed"),
             .array => |actual_array| {
-                if (!std.mem.eql(usize, expected_array.shape(), actual_array.shape())) {
+                if (!std.mem.eql(usize, expected_array.shape, actual_array.shape)) {
                     @panic("partition function result shape changed");
                 }
             },
@@ -196,7 +195,7 @@ fn assertSamePartitionShape(expected: Value, actual: Value) void {
     }
 }
 
-fn storeGroupResult(output: types.Array, group_index: usize, output_item_len: usize, result: Value) void {
+fn storeGroupResult(output: *types.Array, group_index: usize, output_item_len: usize, result: Value) void {
     const dest = output.data[group_index * output_item_len .. (group_index + 1) * output_item_len];
     switch (result) {
         .scalar => |scalar| dest[0] = scalar,
