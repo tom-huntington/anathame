@@ -16,6 +16,14 @@ pub fn build(b: *std.Build) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
+    const debug_array_return_snapshot = b.option(
+        bool,
+        "debug-array-return-snapshot",
+        "Capture Array.Return inputs with GPA-backed copies before bump-allocator restore",
+    ) orelse false;
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "debug_array_return_snapshot", debug_array_return_snapshot);
+    const build_options_module = build_options.createModule();
     // It's also possible to define more custom flags to toggle optional features
     // of this build script using `b.option()`. All defined flags (including
     // target and optimize options) will be listed when running `zig build --help`
@@ -37,6 +45,9 @@ pub fn build(b: *std.Build) void {
         // the root file.
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .imports = &.{
+            .{ .name = "build_options", .module = build_options_module },
+        },
     });
 
     const reserved_buffer_allocator = b.dependency("ReservedBumpAllocator", .{});
@@ -79,6 +90,7 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "anathame", .module = mod },
+                .{ .name = "build_options", .module = build_options_module },
                 .{ .name = "ReservedBumpAllocator", .module = reserved_buffer_allocator.module("ReservedBumpAllocator") },
             },
         }),
