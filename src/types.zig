@@ -42,13 +42,26 @@ pub const Metadata = struct {
     status: CowStatus,
     shape: []usize,
 
+    pub fn shapeOffset() usize {
+        return metadata_shape_alignment.forward(@sizeOf(Metadata));
+    }
+
+    pub fn totalByteLen(depth: usize) usize {
+        return shapeOffset() + depth * @sizeOf(usize);
+    }
+
+    pub fn allocationBytes(self: *Metadata) []u8 {
+        const ptr: [*]u8 = @ptrCast(self);
+        return ptr[0..totalByteLen(self.shape.len)];
+    }
+
     pub fn initWithDepth(
         allocator: *ReservedBumpAllocator,
         status: CowStatus,
         depth: usize,
     ) *Metadata {
-        const shape_offset = metadata_shape_alignment.forward(@sizeOf(Metadata));
-        const total_bytes = shape_offset + depth * @sizeOf(usize);
+        const shape_offset = shapeOffset();
+        const total_bytes = totalByteLen(depth);
         const bytes = allocator.allocator().alignedAlloc(u8, metadata_header_alignment, total_bytes) catch @panic("out of memory");
         const header: *Metadata = @ptrCast(@alignCast(bytes.ptr));
         const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
@@ -78,8 +91,45 @@ pub const Array = struct {
     data: []f64,
     meta: *Metadata,
 
+    pub fn allocationAlignment() std.mem.Alignment {
+        return array_allocation_alignment;
+    }
+
     pub fn shape(self: Array) []const usize {
         return self.meta.shape;
+    }
+
+    pub fn dataOffset(depth: usize) usize {
+        return array_data_alignment.forward(Metadata.totalByteLen(depth));
+    }
+
+    pub fn totalByteLen(depth: usize, size: usize) usize {
+        return dataOffset(depth) + size * @sizeOf(f64);
+    }
+
+    pub fn compactAllocationBytes(self: Array) ?[]u8 {
+        const meta_bytes = self.meta.allocationBytes();
+        const expected_data_ptr = meta_bytes.ptr + dataOffset(self.shape().len);
+        if (@intFromPtr(self.data.ptr) != @intFromPtr(expected_data_ptr)) return null;
+
+        return meta_bytes.ptr[0..totalByteLen(self.shape().len, self.data.len)];
+    }
+
+    pub fn fromCompactAllocation(bytes: []u8, depth: usize, size: usize) Array {
+        std.debug.assert(bytes.len >= totalByteLen(depth, size));
+
+        const meta: *Metadata = @ptrCast(@alignCast(bytes.ptr));
+        const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + Metadata.shapeOffset()));
+        meta.* = .{
+            .status = CowStatus.Exclusive,
+            .shape = shape_ptr[0..depth],
+        };
+
+        const data_ptr: [*]f64 = @ptrCast(@alignCast(bytes.ptr + dataOffset(depth)));
+        return .{
+            .data = data_ptr[0..size],
+            .meta = meta,
+        };
     }
 
     pub fn move(self: Array) Array {
@@ -110,23 +160,14 @@ pub const Array = struct {
         depth: usize,
         size: usize,
     ) Array {
-        const shape_offset = metadata_shape_alignment.forward(@sizeOf(Metadata));
-        const data_offset = array_data_alignment.forward(shape_offset + depth * @sizeOf(usize));
-        const total_bytes = data_offset + size * @sizeOf(f64);
+        const shape_offset = Metadata.shapeOffset();
+        const data_offset = dataOffset(depth);
+        const total_bytes = totalByteLen(depth, size);
         const bytes = allocator.allocator().alignedAlloc(u8, array_allocation_alignment, total_bytes) catch @panic("out of memory");
 
-        const meta: *Metadata = @ptrCast(@alignCast(bytes.ptr));
-        const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
-        meta.* = .{
-            .status = CowStatus.Exclusive,
-            .shape = shape_ptr[0..depth],
-        };
-
-        const data_ptr: [*]f64 = @ptrCast(@alignCast(bytes.ptr + data_offset));
-        return .{
-            .data = data_ptr[0..size],
-            .meta = meta,
-        };
+        _ = shape_offset;
+        _ = data_offset;
+        return fromCompactAllocation(bytes, depth, size);
     }
 };
 

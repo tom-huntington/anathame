@@ -113,6 +113,22 @@ pub const ReservedBumpAllocator = struct {
         return @intFromPtr(buf.ptr) + buf.len == @intFromPtr(self.base) + self.sentinel;
     }
 
+    pub fn isNextAllocation(self: *const ReservedBumpAllocator, ptr: [*]u8) bool {
+        return @intFromPtr(ptr) == @intFromPtr(self.base) + self.sentinel;
+    }
+
+    pub fn reclaim(self: *ReservedBumpAllocator, buf: []u8) []u8 {
+        assert(self.ownsSlice(buf));
+        assert(self.isNextAllocation(buf.ptr));
+
+        const new_sentinel = self.sentinel + buf.len;
+        assert(new_sentinel <= self.reserved_len);
+
+        self.ensureCommitted(new_sentinel) catch @panic("out of memory");
+        self.sentinel = new_sentinel;
+        return buf;
+    }
+
     fn ensureCommitted(self: *ReservedBumpAllocator, sentinel: usize) Error!void {
         if (self.page_size == 0 or self.committed_len == self.reserved_len) return;
 
@@ -214,7 +230,7 @@ pub const ReservedBumpAllocator = struct {
         return self.sentinel;
     }
 
-    pub fn restore(self: *@This(), checkpoint_: usize) usize {
+    pub fn restore(self: *@This(), checkpoint_: usize) void {
         std.debug.assert(checkpoint_ <= self.committed_len);
         std.debug.assert(checkpoint_ <= self.reserved_len);
         self.sentinel = checkpoint_;
