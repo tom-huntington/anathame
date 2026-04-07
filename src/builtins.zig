@@ -101,7 +101,6 @@ fn expectNonNegativeInteger(value: f64) usize {
 
 pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value) Value {
     const checkpoint = all.checkpoint();
-    _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
         else => @panic("strided expects array as first argument"),
@@ -127,12 +126,22 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         outer_size += 1;
     }
 
-    var result = types.Array.initWithShape(all, &.{ outer_size, inner_size });
+    const result_len = outer_size * inner_size;
+    const result_shape = all.allocator().alloc(usize, 2) catch @panic("out of memory");
+    result_shape[0] = outer_size;
+    result_shape[1] = inner_size;
+
+    var result = if (result_dest) |dest|
+        types.Array{ .data = dest[0..result_len], .status = .Shared, .shape = result_shape }
+    else if (array.status == .Exclusive and step >= inner_size)
+        types.Array{ .data = array.data[0..result_len], .status = .Exclusive, .shape = result_shape }
+    else
+        types.Array.initWithShape(all, result_shape);
 
     start = 0;
     var out_index: usize = 0;
     while (start + inner_size <= array.data.len) : (start += step) {
-        @memcpy(result.data[out_index .. out_index + inner_size], array.data[start .. start + inner_size]);
+        std.mem.copyForwards(f64, result.data[out_index .. out_index + inner_size], array.data[start .. start + inner_size]);
         out_index += inner_size;
     }
 
@@ -141,7 +150,6 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
 
 pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const checkpoint = all.checkpoint();
-    _ = result_dest;
     const rhs = switch (args[1]) {
         .scalar => |scalar| scalar,
         else => @panic("not_eq expects args[1] to be scalar"),
@@ -149,13 +157,23 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
 
     switch (args[0]) {
         .scalar => |lhs| {
-            return .{ .scalar = if (lhs != rhs) 1 else 0 };
+            const res: f64 = if (lhs != rhs) 1.0 else 0.0;
+            if (result_dest) |dest|
+                dest[0] = res;
+            return .{ .scalar = res };
         },
         .array => |lhs| {
-            var result = types.Array.initWithShape(all, lhs.shape);
+            if (result_dest == null and lhs.status == .Exclusive) {
+                for (lhs.data) |*item| {
+                    item.* = if (item.* != rhs) 1.0 else 0.0;
+                }
+                return lhs.Return(all, checkpoint);
+            }
 
-            for (lhs.data, 0..) |item, i| {
-                result.data[i] = if (item != rhs) 1 else 0;
+            var result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, lhs);
+
+            for (lhs.data, result.data) |item, *dst| {
+                dst.* = if (item != rhs) 1.0 else 0.0;
             }
 
             return result.Return(all, checkpoint);
