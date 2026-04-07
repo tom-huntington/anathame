@@ -64,7 +64,7 @@ fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.F
                 },
                 .S => {
                     //
-                    const value = try evalFuncInContext(ctx, null, com.first_arg, &.{args[0].newref()});
+                    const value = try evalFuncInContext(ctx, null, com.first_arg, &.{args[0].shared()});
                     std.debug.assert(args.len == 1);
                     std.debug.assert(com.remaining_args.len == 1);
                     const args2 = [_]Value{ args[0], value };

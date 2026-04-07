@@ -41,19 +41,6 @@ pub const Array = struct {
     status: CowStatus,
     shape: []usize,
 
-    pub fn move(self: *@This()) *@This() {
-        std.debug.assert(self.status == CowStatus.Exclusive);
-        return self;
-    }
-    pub fn newref(self: *@This()) *@This() {
-        self.status = CowStatus.Shared;
-        return self;
-    }
-    pub fn manually_borrow_counted_move(self: *@This()) *@This() {
-        self.status = CowStatus.Exclusive;
-        return self;
-    }
-
     pub fn initWithDepth(
         allocator: *ReservedBumpAllocator,
         depth: usize,
@@ -80,7 +67,7 @@ pub const Value = union(enum) {
     scalar: f64,
     array: Array,
 
-    pub fn newref(self: *const @This()) @This() {
+    pub fn shared(self: *const @This()) @This() {
         var r = self.*;
         switch (r) {
             .array => {
