@@ -99,7 +99,7 @@ pub const Combinator = enum {
     pub fn arity(self: Combinator) u32 {
         return switch (self) {
             .B, .B1, .S => 1,
-            .Sig, .D, .Delta, .Phi, .Psi, .D1, .D2, .N, .V, .X, .Xi, .Phi1 => std.debug.panic("TODO: define arity for combinator {s}", .{@tagName(self)}),
+            .Sig, .D, .Delta, .Phi, .Psi, .D1, .D2, .N, .V, .X, .Xi, .Phi1 => std.debug.panic("not implemnted arity for combinator {s}", .{@tagName(self)}),
         };
     }
 };
@@ -136,6 +136,7 @@ pub const Expr = union(enum) {
 
     pub const ValueExpr = union(enum) {
         literal: Value,
+        // TODO remove strand??
         strand: struct { left: *Expr, right: *Expr },
         apply: struct { func: *Expr, arg: *Expr },
         ident: []const u8,

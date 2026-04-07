@@ -6,6 +6,7 @@ const Value = types.Value;
 
 pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const checkpoint = all.checkpoint();
+    // TODO factor out checkpoint and Array.Return into a decorator function and compose with type errasure
     const av = args[0];
     const bv = args[1];
     if (std.meta.activeTag(av) == std.meta.activeTag(bv)) {

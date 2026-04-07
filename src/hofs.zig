@@ -61,6 +61,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     if (array.shape.len == 0) @panic("partition expects an array with rows");
     if (mask.shape[0] != array.shape[0]) @panic("partition markers length must match row count");
 
+    // TODO loop over mask to find number of groups?? or just over allocate??
     var runs = PartitionRuns.init(mask.data);
     const row_size = rowSize(array.shape);
 
@@ -70,6 +71,8 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     };
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
+
+    // TODO need to add ctx to HOF signature
     var first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
     const kept_capacity = array.shape[0];
@@ -88,6 +91,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .scalar => null,
         .array => |*result| result,
     };
+    // TODO change initWithDepthBefore signature to remove checkpoint. Also change to initWithShapeBefore
     var output = @import("array_helpers.zig").initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
     output.shape[0] = kept_capacity;
     switch (first_result) {
