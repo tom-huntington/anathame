@@ -4,6 +4,9 @@ const CowStatus = @import("types.zig").CowStatus;
 const Value = @import("types.zig").Value;
 const std = @import("std");
 
+const build_options = @import("build_options");
+const debug_array_return_snapshot = build_options.debug_array_return_snapshot;
+
 pub const array_header_alignment = std.mem.Alignment.of(Array);
 pub const array_data_alignment = std.mem.Alignment.of(f64);
 pub const array_allocation_alignment = std.mem.Alignment.fromByteUnits(@max(@alignOf(Array), @alignOf(f64)));

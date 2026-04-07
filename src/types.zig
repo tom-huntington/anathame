@@ -1,7 +1,5 @@
 const std = @import("std");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
-const build_options = @import("build_options");
-const debug_array_return_snapshot = build_options.debug_array_return_snapshot;
 
 pub const TokenTag = enum {
     ident,
@@ -43,25 +41,16 @@ pub const Array = struct {
     status: CowStatus,
     shape: []usize,
 
-    pub fn initWithShape(
-        allocator: *ReservedBumpAllocator,
-        shape: []const usize, // copied into inline storage after the header
-    ) *@This() {
-        const array = initWithDepth(allocator, shape.len, @import("array_helpers.zig").prod(shape));
-        @memcpy(array.shape, shape);
-        return array;
-    }
-
     pub fn move(self: *@This()) *@This() {
         std.debug.assert(self.status == CowStatus.Exclusive);
         return self;
     }
-    pub fn manually_borrow_counted_move(self: *@This()) *@This() {
-        self.status = CowStatus.Exclusive;
-        return self;
-    }
     pub fn copy(self: *@This()) *@This() {
         self.status = CowStatus.Shared;
+        return self;
+    }
+    pub fn manually_borrow_counted_move(self: *@This()) *@This() {
+        self.status = CowStatus.Exclusive;
         return self;
     }
 
@@ -71,6 +60,15 @@ pub const Array = struct {
         size: usize,
     ) *@This() {
         return @import("array_helpers.zig").initWithDepth(allocator, depth, size);
+    }
+
+    pub fn initWithShape(
+        allocator: *ReservedBumpAllocator,
+        shape: []const usize, // copied into inline storage after the header
+    ) *@This() {
+        const array = initWithDepth(allocator, shape.len, @import("array_helpers.zig").prod(shape));
+        @memcpy(array.shape, shape);
+        return array;
     }
 
     pub fn Return(self: *@This(), all: *ReservedBumpAllocator, checkpoint: usize) Value {
