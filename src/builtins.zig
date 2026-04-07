@@ -183,7 +183,6 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
 
 pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     _ = all;
-    _ = result_dest;
 
     const array = switch (args[0]) {
         .array => |array| array,
@@ -193,5 +192,7 @@ pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) 
     if (array.shape.len != 1) @panic("first only supports rank-1 arrays");
     if (array.data.len == 0) @panic("first requires a non-empty array");
 
-    return .{ .scalar = array.data[0] };
+    const result = array.data[0];
+    if (result_dest) |dst| dst[0] = result;
+    return .{ .scalar = result };
 }
