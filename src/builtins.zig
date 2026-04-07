@@ -31,7 +31,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                         result.data[i] = lhs + rhs;
                     }
 
-                    return types.Array.Return(all, checkpoint, result);
+                    return result.Return(all, checkpoint);
                 },
                 .scalar => {},
             }
@@ -62,7 +62,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
                 result.data[i] = item * item;
             }
 
-            return types.Array.Return(all, checkpoint, result);
+            return result.Return(all, checkpoint);
         },
     }
     @panic("not implemented");
@@ -112,7 +112,7 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         out_index += inner_size;
     }
 
-    return types.Array.Return(all, checkpoint, result);
+    return result.Return(all, checkpoint);
 }
 
 pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
@@ -134,7 +134,7 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
                 result.data[i] = if (item != rhs) 1 else 0;
             }
 
-            return types.Array.Return(all, checkpoint, result);
+            return result.Return(all, checkpoint);
         },
     }
 }

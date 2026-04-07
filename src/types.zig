@@ -73,8 +73,8 @@ pub const Array = struct {
         return @import("array_helpers.zig").initWithDepth(allocator, depth, size);
     }
 
-    pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *@This()) Value {
-        return @import("array_helpers.zig").Return(all, checkpoint, result_before);
+    pub fn Return(self: *@This(), all: *ReservedBumpAllocator, checkpoint: usize) Value {
+        return @import("array_helpers.zig").Return(all, checkpoint, self);
     }
 };
 
