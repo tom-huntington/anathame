@@ -45,7 +45,7 @@ pub const Array = struct {
         std.debug.assert(self.status == CowStatus.Exclusive);
         return self;
     }
-    pub fn copy(self: *@This()) *@This() {
+    pub fn newref(self: *@This()) *@This() {
         self.status = CowStatus.Shared;
         return self;
     }
@@ -79,6 +79,28 @@ pub const Array = struct {
 pub const Value = union(enum) {
     scalar: f64,
     array: Array,
+
+    pub inline fn move(self: *@This()) *@This() {
+        switch (self) {
+            .array => |s| s.move(),
+            else => {},
+        }
+        return self;
+    }
+    pub inline fn newref(self: *@This()) *@This() {
+        switch (self.*) {
+            .array => |s| _ = s.newref(),
+            else => {},
+        }
+        return self;
+    }
+    pub inline fn manually_borrow_counted_move(self: *@This()) *@This() {
+        switch (self) {
+            .array => |s| s.manually_borrow_counted_move(),
+            else => {},
+        }
+        return self;
+    }
 };
 
 pub const Combinator = enum {
