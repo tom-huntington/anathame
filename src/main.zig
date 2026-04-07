@@ -50,8 +50,7 @@ pub fn main() !void {
 
     //std.debug.print("{f}", .{std.zig.fmtString(input)});
     const source =
-        \\ add
-        //\\  not_eq,@\n )s partition first
+        \\  not_eq,@\n )s partition first
     ;
     std.debug.print("soure: {s}\n", .{source});
 
@@ -66,27 +65,27 @@ pub fn main() !void {
     const file_ast: parse.FileAst = try parser.parseFile();
     stringprint.printfmt("main: {}\n", .{file_ast.main});
 
-    var arg0_data = [_]f64{ 1, 2 };
-    var arg1_data = [_]f64{ 4, 5 };
-    var shape2 = [_]u64{2};
-    const array0 = types.Array{ .data = arg0_data[0..], .status = .Shared, .shape = shape2[0..] };
-    const array1 = types.Array{ .data = arg1_data[0..], .status = .Shared, .shape = shape2[0..] };
-    var arg_meta = types.Array.initWithShape(&runtime_alloc, &.{8});
-    arg_meta.data = arg0_data[0..];
-    const args = [_]types.Value{
-        .{ .array = array0 },
-        .{ .array = array1 },
-        .{ .array = arg_meta },
-        .{ .array = blk: {
-            var meta = types.Array.initWithShape(&runtime_alloc, &.{8});
-            meta.data = arg1_data[0..];
-            break :blk meta;
-        } },
-        .{ .array = input_array },
-    };
+    // var arg0_data = [_]f64{ 1, 2 };
+    // var arg1_data = [_]f64{ 4, 5 };
+    //var shape2 = [_]u64{2};
+    //const array0 = types.Array{ .data = arg0_data[0..], .status = .Shared, .shape = shape2[0..] };
+    //const array1 = types.Array{ .data = arg1_data[0..], .status = .Shared, .shape = shape2[0..] };
+    // var arg_meta = types.Array.initWithShape(&runtime_alloc, &.{8});
+    // arg_meta.data = arg0_data[0..];
+    // const args = [_]types.Value{
+    //     //.{ .array = array0 },
+    //     //.{ .array = array1 },
+    //     .{ .array = arg_meta },
+    //     .{ .array = blk: {
+    //         var meta = types.Array.initWithShape(&runtime_alloc, &.{8});
+    //         meta.data = arg1_data[0..];
+    //         break :blk meta;
+    //     } },
+    // };
+    const textInput: types.Value = .{ .array = input_array };
     const result = switch (file_ast.main.arity) {
-        2 => try eval.evalFunc(&runtime_alloc, file_ast.main, args[0..2]),
-        //1 => try eval.evalFunc(&runtime_alloc, file_ast.main, args[2..3]),
+        //2 => try eval.evalFunc(&runtime_alloc, file_ast.main, args[0..2]),
+        1 => try eval.evalFunc(&runtime_alloc, file_ast.main, &.{textInput}),
         else => return error.ArityMismatch,
     };
     const rendered = try format.valueString(ast_alloc.allocator(), result, true);

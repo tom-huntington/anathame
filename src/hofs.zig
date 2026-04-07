@@ -61,18 +61,19 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     if (array.shape.len == 0) @panic("partition expects an array with rows");
     if (mask.shape[0] != array.shape[0]) @panic("partition markers length must match row count");
 
-    var runs = PartitionRuns.init(mask.data);
     const row_size = rowSize(array.shape);
+    const groups = collectPartitionGroups(all, mask.data);
+    const num_groups = groups.len;
 
-    const first_run = findNextIncludedRun(&runs) orelse {
+    if (num_groups == 0) {
         var empty = types.Array.initWithShape(all, &.{0});
         return empty.Return(all, checkpoint);
-    };
+    }
+    const first_partition_group = groups[0];
 
-    const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
+    const first_group = makeGroupByKey(all, array, row_size, mask.data, first_partition_group);
     var first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
-    const kept_capacity = array.shape[0];
     const output_item_len = switch (first_result) {
         .scalar => @as(usize, 1),
         .array => |result| result.data.len,
@@ -88,8 +89,8 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .scalar => null,
         .array => |*result| result,
     };
-    var output = @import("array_helpers.zig").initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
-    output.shape[0] = kept_capacity;
+    var output = @import("array_helpers.zig").initWithDepthBefore(all, checkpoint, last_allocation, output_depth, num_groups * output_item_len, moved_array);
+    output.shape[0] = num_groups;
     switch (first_result) {
         .scalar => {},
         .array => |result| @memcpy(output.shape[1..], result.shape),
@@ -97,9 +98,12 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
 
     storeGroupResult(&output, 0, output_item_len, first_result);
 
+    const output_groups = collectPartitionGroups(all, mask.data);
+    std.debug.assert(output_groups.len == num_groups);
+
     var kept_count: usize = 1;
-    while (findNextIncludedRun(&runs)) |run| {
-        const group = makeGroupView(all, array, row_size, run.start, run.len);
+    for (output_groups[1..]) |partition_group| {
+        const group = makeGroupByKey(all, array, row_size, mask.data, partition_group);
         const dest = output.data[kept_count * output_item_len .. (kept_count + 1) * output_item_len];
         const result = @import("eval.zig").evalFuncTo(all, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
         assertSamePartitionShape(first_result, result);
@@ -111,39 +115,34 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     return output.Return(all, checkpoint);
 }
 
-const PartitionRun = struct {
-    start: usize,
-    len: usize,
+const PartitionGroup = struct {
     key: i64,
+    rows: usize,
 };
 
-const PartitionRuns = struct {
-    markers: []const f64,
-    index: usize = 0,
+fn collectPartitionGroups(all: *ReservedBumpAllocator, markers: []const f64) []PartitionGroup {
+    const groups = all.allocator().alloc(PartitionGroup, markers.len) catch @panic("out of memory");
+    var len: usize = 0;
 
-    fn init(markers: []const f64) PartitionRuns {
-        return .{ .markers = markers };
+    for (markers) |marker| {
+        const key = expectIntegerMarker(marker);
+        if (key <= 0) continue;
+
+        const group_index = findPartitionGroup(groups[0..len], key);
+        if (group_index) |i| {
+            groups[i].rows += 1;
+        } else {
+            groups[len] = .{ .key = key, .rows = 1 };
+            len += 1;
+        }
     }
 
-    fn next(self: *PartitionRuns) ?PartitionRun {
-        if (self.index >= self.markers.len) return null;
+    return groups[0..len];
+}
 
-        const start = self.index;
-        const key = expectIntegerMarker(self.markers[start]);
-        self.index += 1;
-        while (self.index < self.markers.len and self.markers[self.index] == self.markers[start]) : (self.index += 1) {}
-
-        return .{
-            .start = start,
-            .len = self.index - start,
-            .key = key,
-        };
-    }
-};
-
-fn findNextIncludedRun(runs: *PartitionRuns) ?PartitionRun {
-    while (runs.next()) |run| {
-        if (run.key > 0) return run;
+fn findPartitionGroup(groups: []const PartitionGroup, key: i64) ?usize {
+    for (groups, 0..) |group, i| {
+        if (group.key == key) return i;
     }
     return null;
 }
@@ -163,21 +162,27 @@ fn rowSize(shape: []const usize) usize {
     return size;
 }
 
-fn makeGroupView(
+fn makeGroupByKey(
     all: *ReservedBumpAllocator,
     array: types.Array,
     row_size: usize,
-    start: usize,
-    len: usize,
+    markers: []const f64,
+    group: PartitionGroup,
 ) types.Array {
-    const group_shape = all.allocator().alloc(usize, array.shape.len) catch @panic("out of memory");
-    group_shape[0] = len;
-    @memcpy(group_shape[1..], array.shape[1..]);
+    var meta = types.Array.initWithDepth(all, array.shape.len, group.rows * row_size);
+    meta.shape[0] = group.rows;
+    @memcpy(meta.shape[1..], array.shape[1..]);
 
-    const slice_start = start * row_size;
-    const slice_end = (start + len) * row_size;
-    var meta = types.Array.initWithShape(all, group_shape);
-    meta.data = array.data[slice_start..slice_end];
+    var dest_offset: usize = 0;
+    for (markers, 0..) |marker, row| {
+        if (expectIntegerMarker(marker) != group.key) continue;
+
+        const slice_start = row * row_size;
+        const slice_end = slice_start + row_size;
+        @memcpy(meta.data[dest_offset .. dest_offset + row_size], array.data[slice_start..slice_end]);
+        dest_offset += row_size;
+    }
+
     return meta;
 }
 
