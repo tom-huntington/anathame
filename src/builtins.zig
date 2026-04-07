@@ -21,14 +21,15 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                 if (!std.mem.eql(usize, a.shape, b.shape)) {
                     @panic("not implemented");
                 }
+                if (result_dest == null) {
+                    if (if (a.status == .Exclusive) .{ a, b } else if (b.status == .Exclusive) .{ b, a } else null) |pair| {
+                        const inplace, const arg = pair;
 
-                if (if (a.status == .Exclusive) .{ a, b } else if (b.status == .Exclusive) .{ b, a } else null) |pair| {
-                    const inplace, const arg = pair;
-
-                    for (inplace.data, arg.data) |*inp, el| {
-                        inp.* += el;
+                        for (inplace.data, arg.data) |*inp, el| {
+                            inp.* += el;
+                        }
+                        return inplace.Return(all, checkpoint);
                     }
-                    return inplace.Return(all, checkpoint);
                 }
 
                 const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
@@ -71,13 +72,14 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
             return .{ .scalar = scalar * scalar };
         },
         .array => |array| {
-            if (array.status == .Exclusive) {
-                for (array.data) |*inp| {
-                    inp.* *= inp.*;
+            if (result_dest == null) {
+                if (array.status == .Exclusive) {
+                    for (array.data) |*inp| {
+                        inp.* *= inp.*;
+                    }
+                    return array.Return(all, checkpoint);
                 }
-                return array.Return(all, checkpoint);
             }
-
             const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, array);
 
             for (array.data, result.data) |item, *dst| {
