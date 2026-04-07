@@ -1,6 +1,6 @@
 const std = @import("std");
 const types = @import("types.zig");
-const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Expr = types.Expr;
 const Value = types.Value;
 

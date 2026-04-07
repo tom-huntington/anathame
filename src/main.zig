@@ -7,7 +7,7 @@ const lex = @import("lex.zig");
 const eval = @import("eval.zig");
 const types = @import("types.zig");
 const format = @import("format.zig");
-const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 
 fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !*types.Array {
     const data = try allocator.allocator().alloc(f64, bytes.len);

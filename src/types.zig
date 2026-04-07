@@ -1,5 +1,5 @@
 const std = @import("std");
-const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 
 pub const TokenTag = enum {
     ident,

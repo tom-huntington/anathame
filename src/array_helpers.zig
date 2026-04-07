@@ -1,4 +1,4 @@
-const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator;
+const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Array = @import("types.zig").Array;
 const CowStatus = @import("types.zig").CowStatus;
 const Value = @import("types.zig").Value;
