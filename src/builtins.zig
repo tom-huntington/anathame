@@ -26,14 +26,22 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                     if (!std.mem.eql(usize, aa.shape, ba.shape)) {
                         @panic("not implemented");
                     }
-                    if (if (aa.status == .Exclusive) .{ aa, ba } else if (ba.status == .Exclusive) .{ ba, aa } else null) |pair| {
-                        for (pair[1].data, 0..) |rhs, i| {
-                            pair[0].data[i] += rhs;
+                    if (aa.status == .Exclusive) {
+                        var result = aa;
+                        for (ba.data, 0..) |rhs, i| {
+                            result.data[i] += rhs;
                         }
-                        return pair[0].Return(all, checkpoint);
+                        return result.Return(all, checkpoint);
+                    }
+                    if (ba.status == .Exclusive) {
+                        var result = ba;
+                        for (aa.data, 0..) |rhs, i| {
+                            result.data[i] += rhs;
+                        }
+                        return result.Return(all, checkpoint);
                     }
 
-                    const result =
+                    var result =
                         // if (result_dest) |dest|
                         //types.Array.initWithDest(all, aa.shape, dest)
                         //else

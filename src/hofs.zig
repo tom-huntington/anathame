@@ -38,7 +38,10 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
 
     return switch (acc) {
         .scalar => acc,
-        .array => |result| result.Return(all, checkpoint),
+        .array => |result| blk: {
+            var final = result;
+            break :blk final.Return(all, checkpoint);
+        },
     };
 }
 
@@ -62,7 +65,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     const row_size = rowSize(array.shape);
 
     const first_run = findNextIncludedRun(&runs) orelse {
-        const empty = types.Array.initWithShape(all, &.{0});
+        var empty = types.Array.initWithShape(all, &.{0});
         return empty.Return(all, checkpoint);
     };
 
@@ -81,7 +84,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     };
 
     const last_allocation = all.base[checkpoint..all.checkpoint()];
-    const moved_array: ?**types.Array = switch (first_result) {
+    const moved_array: ?*types.Array = switch (first_result) {
         .scalar => null,
         .array => |*result| result,
     };
@@ -92,7 +95,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .array => |result| @memcpy(output.shape[1..], result.shape),
     }
 
-    storeGroupResult(output, 0, output_item_len, first_result);
+    storeGroupResult(&output, 0, output_item_len, first_result);
 
     var kept_count: usize = 1;
     while (findNextIncludedRun(&runs)) |run| {
@@ -100,7 +103,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         const dest = output.data[kept_count * output_item_len .. (kept_count + 1) * output_item_len];
         const result = @import("eval.zig").evalFuncTo(all, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
         assertSamePartitionShape(first_result, result);
-        storeGroupResult(output, kept_count, output_item_len, result);
+        storeGroupResult(&output, kept_count, output_item_len, result);
         kept_count += 1;
     }
 
@@ -162,18 +165,18 @@ fn rowSize(shape: []const usize) usize {
 
 fn makeGroupView(
     all: *ReservedBumpAllocator,
-    array: *types.Array,
+    array: types.Array,
     row_size: usize,
     start: usize,
     len: usize,
-) *types.Array {
+) types.Array {
     const group_shape = all.allocator().alloc(usize, array.shape.len) catch @panic("out of memory");
     group_shape[0] = len;
     @memcpy(group_shape[1..], array.shape[1..]);
 
     const slice_start = start * row_size;
     const slice_end = (start + len) * row_size;
-    const meta = types.Array.initWithShape(all, group_shape);
+    var meta = types.Array.initWithShape(all, group_shape);
     meta.data = array.data[slice_start..slice_end];
     return meta;
 }

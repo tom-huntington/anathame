@@ -677,9 +677,7 @@ pub const Parser = struct {
         }
 
         if (rows.items.len == 0) {
-            const data = try self.value_allocator.allocator().alloc(f64, 0);
             const meta = types.Array.initWithShape(self.value_allocator, &.{ 0, 0 });
-            meta.data = data;
             return .{ .array = meta };
         }
 
@@ -710,38 +708,34 @@ pub const Parser = struct {
             }
         }
 
-        const data = try self.value_allocator.allocator().alloc(f64, items.len * elem_len);
         const shape = try self.value_allocator.allocator().alloc(usize, first_shape.len + 1);
         shape[0] = items.len;
         @memcpy(shape[1..], first_shape);
-        const meta = types.Array.initWithShape(self.value_allocator, shape);
+        var meta = types.Array.initWithShape(self.value_allocator, shape);
 
         var data_index: usize = 0;
         for (items) |item| {
             switch (item) {
                 .scalar => |scalar| {
-                    data[data_index] = scalar;
+                    meta.data[data_index] = scalar;
                     data_index += 1;
                 },
                 .array => |array| {
-                    @memcpy(data[data_index .. data_index + array.data.len], array.data);
+                    @memcpy(meta.data[data_index .. data_index + array.data.len], array.data);
                     data_index += array.data.len;
                 },
             }
         }
 
-        meta.data = data;
         return .{ .array = meta };
     }
 
     fn parseRawStringValue(self: *Parser, lexeme: []const u8) ParseError!Value {
         const bytes = if (lexeme.len > 0) lexeme[1..] else lexeme;
-        const data = try self.value_allocator.allocator().alloc(f64, bytes.len);
-        const meta = types.Array.initWithShape(self.value_allocator, &.{bytes.len});
+        var meta = types.Array.initWithShape(self.value_allocator, &.{bytes.len});
         for (bytes, 0..) |byte, i| {
-            data[i] = @floatFromInt(byte);
+            meta.data[i] = @floatFromInt(byte);
         }
-        meta.data = data;
         return .{ .array = meta };
     }
 

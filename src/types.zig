@@ -58,27 +58,27 @@ pub const Array = struct {
         allocator: *ReservedBumpAllocator,
         depth: usize,
         size: usize,
-    ) *@This() {
+    ) @This() {
         return @import("array_helpers.zig").initWithDepth(allocator, depth, size);
     }
 
     pub fn initWithShape(
         allocator: *ReservedBumpAllocator,
-        shape: []const usize, // copied into inline storage after the header
-    ) *@This() {
+        shape: []const usize,
+    ) @This() {
         const array = initWithDepth(allocator, shape.len, @import("array_helpers.zig").prod(shape));
         @memcpy(array.shape, shape);
         return array;
     }
 
-    pub fn Return(self: *@This(), all: *ReservedBumpAllocator, checkpoint: usize) Value {
+    pub fn Return(self: *const @This(), all: *ReservedBumpAllocator, checkpoint: usize) Value {
         return @import("array_helpers.zig").Return(all, checkpoint, self);
     }
 };
 
 pub const Value = union(enum) {
     scalar: f64,
-    array: *Array,
+    array: Array,
 };
 
 pub const Combinator = enum {
@@ -128,7 +128,7 @@ pub const Expr = union(enum) {
         type: union(enum) {
             combinator: struct { op: Combinator, first_arg: *FuncExpr, remaining_args: []*FuncExpr },
             hof: Hof,
-            table: struct { lookup: *Array, unmatched: enum { Error, Identity } },
+            table: struct { lookup: Array, unmatched: enum { Error, Identity } },
             partial_apply_permute: struct { func: *FuncExpr, arguments: []ValueExpr, permutation_index: u32 },
             scope: *FuncExpr,
             userFn: struct { left: []const u8, right: ?[]const u8, body: *Expr },
