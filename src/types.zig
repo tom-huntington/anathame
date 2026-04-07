@@ -80,26 +80,15 @@ pub const Value = union(enum) {
     scalar: f64,
     array: Array,
 
-    pub inline fn move(self: *@This()) *@This() {
-        switch (self) {
-            .array => |s| s.move(),
+    pub fn newref(self: *const @This()) @This() {
+        var r = self.*;
+        switch (r) {
+            .array => {
+                r.array.status = .Shared;
+            },
             else => {},
         }
-        return self;
-    }
-    pub inline fn newref(self: *@This()) *@This() {
-        switch (self.*) {
-            .array => |s| _ = s.newref(),
-            else => {},
-        }
-        return self;
-    }
-    pub inline fn manually_borrow_counted_move(self: *@This()) *@This() {
-        switch (self) {
-            .array => |s| s.manually_borrow_counted_move(),
-            else => {},
-        }
-        return self;
+        return r;
     }
 };
 
