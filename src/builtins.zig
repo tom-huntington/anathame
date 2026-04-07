@@ -41,14 +41,20 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                         return result.Return(all, checkpoint);
                     }
 
-                    var result =
-                        // if (result_dest) |dest|
-                        //types.Array.initWithDest(all, aa.shape, dest)
-                        //else
-                        types.Array.initWithShape(all, aa.shape);
+                    if (if (aa.status == .Exclusive) .{ aa, ba } else if (ba.status == .Exclusive) .{ ba, aa } else null) |pair| {
+                        const inplace = pair[0];
+                        const arg = pair[1];
 
-                    for (aa.data, ba.data, 0..) |lhs, rhs, i| {
-                        result.data[i] = lhs + rhs;
+                        for (inplace.data, arg.data) |*inp, el| {
+                            inp.* += el;
+                        }
+                        return inplace.Return(all, checkpoint);
+                    }
+
+                    var result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(aa, ba));
+
+                    for (aa.data, ba.data, result.data) |lhs, rhs, *d| {
+                        d.* = lhs + rhs;
                     }
 
                     return result.Return(all, checkpoint);

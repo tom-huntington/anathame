@@ -225,3 +225,14 @@ fn offsetTailArraySlicesByBytes(array: *Array, tail: []const u8, byte_offset: us
     array.data = data_ptr[0..array.data.len];
     array.shape = shape_ptr[0..array.shape.len];
 }
+
+pub inline fn topmost_shape(a: Array, b: Array) Array {
+    return if (@intFromPtr(a.data.ptr) < @intFromPtr(b.data.ptr)) b else a;
+}
+
+pub inline fn InitialiteOutofplaceResult(all: *ReservedBumpAllocator, result_dest: ?[]f64, arg: Array) Array {
+    return if (result_dest) |dest|
+        Array{ .data = dest[0..arg.data.len], .status = .Shared, .shape = arg.shape }
+    else
+        Array.initWithShape(all, arg.shape);
+}
