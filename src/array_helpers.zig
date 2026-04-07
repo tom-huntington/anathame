@@ -12,24 +12,6 @@ pub const array_data_alignment = std.mem.Alignment.of(f64);
 pub const array_allocation_alignment = std.mem.Alignment.fromByteUnits(@max(@alignOf(Array), @alignOf(f64)));
 const array_shape_alignment = std.mem.Alignment.of(usize);
 
-// pub fn initArrayWithDepth(
-//     allocator: *ReservedBumpAllocator,
-//     status: CowStatus,
-//     depth: usize,
-// ) *Array {
-//     const shape_offset = shapeOffset();
-//     const total_bytes = headerByteLen(depth);
-//     const bytes = allocator.allocator().alignedAlloc(u8, array_header_alignment, total_bytes) catch @panic("out of memory");
-//     const header: *Array = @ptrCast(@alignCast(bytes.ptr));
-//     const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
-//     header.* = .{
-//         .data = &.{},
-//         .status = status,
-//         .shape = shape_ptr[0..depth],
-//     };
-//     return header;
-// }
-
 pub fn offsetTailArrayPointerByBytes(array_ptr: **Array, tail: []const u8, byte_offset: usize) void {
     var array = array_ptr.*;
     array = if (sliceContainsPtr(tail, @ptrCast(array)))
