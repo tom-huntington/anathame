@@ -32,13 +32,13 @@ pub const Token = struct {
     lexeme: []const u8,
 };
 
-pub const CowStatus = enum {
+pub const Ownership = enum {
     Exclusive,
     Shared,
 };
 pub const Array = struct {
     data: []f64,
-    status: CowStatus,
+    ownership: Ownership,
     shape: []usize,
 
     pub fn initWithDepth(
@@ -71,7 +71,7 @@ pub const Value = union(enum) {
         var r = self.*;
         switch (r) {
             .array => {
-                r.array.status = .Shared;
+                r.array.ownership = .Shared;
             },
             else => {},
         }

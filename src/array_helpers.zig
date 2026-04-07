@@ -19,7 +19,7 @@ fn debugCopyArray(allocator: std.mem.Allocator, array: *const Array) *Array {
     const meta = allocator.create(Array) catch @panic("out of memory");
     meta.* = .{
         .data = data,
-        .status = array.status,
+        .ownership = array.ownership,
         .shape = shape,
     };
 
@@ -156,7 +156,7 @@ pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: *const
 
     return .{ .array = .{
         .data = final_data.?,
-        .status = .Exclusive,
+        .ownership = .Exclusive,
         .shape = final_shape.?,
     } };
 }
@@ -176,7 +176,7 @@ pub fn initWithDepth(
 ) Array {
     return .{
         .data = allocator.allocator().alloc(f64, size) catch @panic("out of memory"),
-        .status = .Exclusive,
+        .ownership = .Exclusive,
         .shape = allocator.allocator().alloc(usize, depth) catch @panic("out of memory"),
     };
 }
@@ -202,7 +202,7 @@ pub fn initWithDepthBefore(
     const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
     return .{
         .data = data_ptr[0..size],
-        .status = .Exclusive,
+        .ownership = .Exclusive,
         .shape = shape_ptr[0..depth],
     };
 }
@@ -232,7 +232,7 @@ pub inline fn topmost_shape(a: Array, b: Array) Array {
 
 pub inline fn InitOutofplaceResult(all: *ReservedBumpAllocator, result_dest: ?[]f64, arg: Array) Array {
     return if (result_dest) |dest|
-        Array{ .data = dest[0..arg.data.len], .status = .Shared, .shape = arg.shape }
+        Array{ .data = dest[0..arg.data.len], .ownership = .Shared, .shape = arg.shape }
     else
         Array.initWithShape(all, arg.shape);
 }

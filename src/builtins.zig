@@ -22,7 +22,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                     @panic("not implemented");
                 }
                 if (result_dest == null) {
-                    if (if (a.status == .Exclusive) .{ a, b } else if (b.status == .Exclusive) .{ b, a } else null) |pair| {
+                    if (if (a.ownership == .Exclusive) .{ a, b } else if (b.ownership == .Exclusive) .{ b, a } else null) |pair| {
                         const inplace, const arg = pair;
 
                         for (inplace.data, arg.data) |*inp, el| {
@@ -45,7 +45,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
             .scalar => |a| .{ bv.array, a },
         };
         const arr, const val = pair;
-        switch (arr.status) {
+        switch (arr.ownership) {
             .Exclusive => {
                 for (arr.data) |*inp| {
                     inp.* += val;
@@ -73,7 +73,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
         },
         .array => |array| {
             if (result_dest == null) {
-                if (array.status == .Exclusive) {
+                if (array.ownership == .Exclusive) {
                     for (array.data) |*inp| {
                         inp.* *= inp.*;
                     }
@@ -132,9 +132,9 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
     result_shape[1] = inner_size;
 
     var result = if (result_dest) |dest|
-        types.Array{ .data = dest[0..result_len], .status = .Shared, .shape = result_shape }
-    else if (array.status == .Exclusive and step >= inner_size)
-        types.Array{ .data = array.data[0..result_len], .status = .Exclusive, .shape = result_shape }
+        types.Array{ .data = dest[0..result_len], .ownership = .Shared, .shape = result_shape }
+    else if (array.ownership == .Exclusive and step >= inner_size)
+        types.Array{ .data = array.data[0..result_len], .ownership = .Exclusive, .shape = result_shape }
     else
         types.Array.initWithShape(all, result_shape);
 
@@ -163,7 +163,7 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
             return .{ .scalar = res };
         },
         .array => |lhs| {
-            if (result_dest == null and lhs.status == .Exclusive) {
+            if (result_dest == null and lhs.ownership == .Exclusive) {
                 for (lhs.data) |*item| {
                     item.* = if (item.* != rhs) 1.0 else 0.0;
                 }
