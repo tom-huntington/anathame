@@ -65,7 +65,8 @@ fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.F
                 .S => {
                     //
                     const value = try evalFuncInContext(ctx, null, com.first_arg, args);
-                    //can you assert that both com.remaining_args and args are size 1
+                    std.debug.assert(args.len == 1);
+                    std.debug.assert(com.remaining_args.len == 1);
                     const args2 = [_]Value{ args[0], value };
                     const value2 = try evalFuncInContext(ctx, result_dest, com.remaining_args[0], &args2);
                     return value2;
