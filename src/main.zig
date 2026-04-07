@@ -6,7 +6,7 @@ const parse = @import("parse.zig");
 const lex = @import("lex.zig");
 const eval = @import("eval.zig");
 const types = @import("types.zig");
-const format = @import("format.zig");
+const format = @import("fmt.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 
 fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !types.Array {
