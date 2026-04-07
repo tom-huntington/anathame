@@ -6,14 +6,16 @@ const Value = types.Value;
 
 pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const checkpoint = all.checkpoint();
-    _ = result_dest;
     const a = args[0];
     const b = args[1];
     switch (a) {
         .scalar => |as| {
             switch (b) {
                 .scalar => |bs| {
-                    return .{ .scalar = as + bs };
+                    const res = as + bs;
+                    if (result_dest) |dest|
+                        dest[0] = res;
+                    return .{ .scalar = res };
                 },
                 .array => {},
             }
@@ -24,8 +26,18 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                     if (!std.mem.eql(usize, aa.shape, ba.shape)) {
                         @panic("not implemented");
                     }
+                    if (if (aa.status == .Exclusive) .{ aa, ba } else if (ba.status == .Exclusive) .{ ba, aa } else null) |pair| {
+                        for (pair[1].data, 0..) |rhs, i| {
+                            pair[0].data[i] += rhs;
+                        }
+                        return pair[0].Return(all, checkpoint);
+                    }
 
-                    var result = types.Array.initWithShape(all, aa.shape);
+                    const result =
+                        // if (result_dest) |dest|
+                        //types.Array.initWithDest(all, aa.shape, dest)
+                        //else
+                        types.Array.initWithShape(all, aa.shape);
 
                     for (aa.data, ba.data, 0..) |lhs, rhs, i| {
                         result.data[i] = lhs + rhs;
