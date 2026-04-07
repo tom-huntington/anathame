@@ -68,9 +68,9 @@ pub fn main() !void {
 
     var arg0_data = [_]f64{ 1, 2 };
     var arg1_data = [_]f64{ 4, 5 };
-    const shape2 = try runtime_alloc.allocator().alloc(u64, 2);
-    const array0 = types.Array{ .data = arg0_data[0..], .status = .Shared, .shape = shape2 };
-    const array1 = types.Array{ .data = arg1_data[0..], .status = .Shared, .shape = shape2 };
+    var shape2 = [_]u64{2};
+    const array0 = types.Array{ .data = arg0_data[0..], .status = .Shared, .shape = shape2[0..] };
+    const array1 = types.Array{ .data = arg1_data[0..], .status = .Shared, .shape = shape2[0..] };
     var arg_meta = types.Array.initWithShape(&runtime_alloc, &.{8});
     arg_meta.data = arg0_data[0..];
     const args = [_]types.Value{
