@@ -6,65 +6,63 @@ const Value = types.Value;
 
 pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const checkpoint = all.checkpoint();
-    const a = args[0];
-    const b = args[1];
-    switch (a) {
-        .scalar => |as| {
-            switch (b) {
-                .scalar => |bs| {
-                    const res = as + bs;
-                    if (result_dest) |dest|
-                        dest[0] = res;
-                    return .{ .scalar = res };
-                },
-                .array => {},
-            }
-        },
-        .array => |aa| {
-            switch (b) {
-                .array => |ba| {
-                    if (!std.mem.eql(usize, aa.shape, ba.shape)) {
-                        @panic("not implemented");
-                    }
-                    if (aa.status == .Exclusive) {
-                        var result = aa;
-                        for (ba.data, 0..) |rhs, i| {
-                            result.data[i] += rhs;
-                        }
-                        return result.Return(all, checkpoint);
-                    }
-                    if (ba.status == .Exclusive) {
-                        var result = ba;
-                        for (aa.data, 0..) |rhs, i| {
-                            result.data[i] += rhs;
-                        }
-                        return result.Return(all, checkpoint);
-                    }
+    const av = args[0];
+    const bv = args[1];
+    if (std.meta.activeTag(av) == std.meta.activeTag(bv)) {
+        switch (av) {
+            .scalar => |a| {
+                const res = a + bv.scalar;
+                if (result_dest) |dest|
+                    dest[0] = res;
+                return .{ .scalar = res };
+            },
+            .array => |a| {
+                const b = bv.array;
+                if (!std.mem.eql(usize, a.shape, b.shape)) {
+                    @panic("not implemented");
+                }
 
-                    if (if (aa.status == .Exclusive) .{ aa, ba } else if (ba.status == .Exclusive) .{ ba, aa } else null) |pair| {
-                        const inplace = pair[0];
-                        const arg = pair[1];
+                if (if (a.status == .Exclusive) .{ a, b } else if (b.status == .Exclusive) .{ b, a } else null) |pair| {
+                    const inplace, const arg = pair;
 
-                        for (inplace.data, arg.data) |*inp, el| {
-                            inp.* += el;
-                        }
-                        return inplace.Return(all, checkpoint);
+                    for (inplace.data, arg.data) |*inp, el| {
+                        inp.* += el;
                     }
+                    return inplace.Return(all, checkpoint);
+                }
 
-                    var result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(aa, ba));
-
-                    for (aa.data, ba.data, result.data) |lhs, rhs, *d| {
-                        d.* = lhs + rhs;
-                    }
-
-                    return result.Return(all, checkpoint);
-                },
-                .scalar => {},
-            }
-        },
+                const result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
+                for (a.data, b.data, result.data) |lhs, rhs, *d| {
+                    d.* = lhs + rhs;
+                }
+                return result.Return(all, checkpoint);
+            },
+        }
+    } else {
+        const pair = switch (av) {
+            .array => |a| .{ a, bv.scalar },
+            .scalar => |a| .{ bv.array, a },
+        };
+        const arr, const val = pair;
+        switch (arr.status) {
+            .Exclusive => {
+                for (arr.data) |*inp| {
+                    inp.* += val;
+                }
+                return arr.Return(all, checkpoint);
+            },
+            .Shared => {
+                const result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, arr);
+                for (arr.data, result.data) |el, *d| {
+                    d.* = el + val;
+                }
+                return result.Return(all, checkpoint);
+            },
+        }
     }
     @panic("not implemented");
 }
+
 pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
     const a = args[0];
     const b = args[1];
