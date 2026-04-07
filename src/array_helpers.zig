@@ -230,7 +230,7 @@ pub inline fn topmost_shape(a: Array, b: Array) Array {
     return if (@intFromPtr(a.data.ptr) < @intFromPtr(b.data.ptr)) b else a;
 }
 
-pub inline fn InitialiteOutofplaceResult(all: *ReservedBumpAllocator, result_dest: ?[]f64, arg: Array) Array {
+pub inline fn InitOutofplaceResult(all: *ReservedBumpAllocator, result_dest: ?[]f64, arg: Array) Array {
     return if (result_dest) |dest|
         Array{ .data = dest[0..arg.data.len], .status = .Shared, .shape = arg.shape }
     else

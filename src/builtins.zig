@@ -31,7 +31,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                     return inplace.Return(all, checkpoint);
                 }
 
-                const result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
                 for (a.data, b.data, result.data) |lhs, rhs, *d| {
                     d.* = lhs + rhs;
                 }
@@ -52,7 +52,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                 return arr.Return(all, checkpoint);
             },
             .Shared => {
-                const result = @import("array_helpers.zig").InitialiteOutofplaceResult(all, result_dest, arr);
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
                 for (arr.data, result.data) |el, *d| {
                     d.* = el + val;
                 }
@@ -63,27 +63,25 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
     @panic("not implemented");
 }
 
-pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
-    const a = args[0];
-    const b = args[1];
-    _ = a;
-    _ = all;
-    _ = result_dest;
-    return b;
-}
 pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     const checkpoint = all.checkpoint();
-    _ = result_dest;
     const a = args[0];
     switch (a) {
         .scalar => |scalar| {
             return .{ .scalar = scalar * scalar };
         },
         .array => |array| {
-            var result = types.Array.initWithShape(all, array.shape);
+            if (array.status == .Exclusive) {
+                for (array.data) |*inp| {
+                    inp.* *= inp.*;
+                }
+                return array.Return(all, checkpoint);
+            }
 
-            for (array.data, 0..) |item, i| {
-                result.data[i] = item * item;
+            const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, array);
+
+            for (array.data, result.data) |item, *dst| {
+                dst.* = item * item;
             }
 
             return result.Return(all, checkpoint);
