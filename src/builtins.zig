@@ -25,7 +25,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                         @panic("not implemented");
                     }
 
-                    var result = types.Array.init(all, aa.shape);
+                    var result = types.Array.initWithShape(all, aa.shape);
 
                     for (aa.data, ba.data, 0..) |lhs, rhs, i| {
                         result.data[i] = lhs + rhs;
@@ -56,7 +56,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
             return .{ .scalar = scalar * scalar };
         },
         .array => |array| {
-            var result = types.Array.init(all, array.shape);
+            var result = types.Array.initWithShape(all, array.shape);
 
             for (array.data, 0..) |item, i| {
                 result.data[i] = item * item;
@@ -103,7 +103,7 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         outer_size += 1;
     }
 
-    var result = types.Array.init(all, &.{ outer_size, inner_size });
+    var result = types.Array.initWithShape(all, &.{ outer_size, inner_size });
 
     start = 0;
     var out_index: usize = 0;
@@ -128,7 +128,7 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
             return .{ .scalar = if (lhs != rhs) 1 else 0 };
         },
         .array => |lhs| {
-            var result = types.Array.init(all, lhs.shape);
+            var result = types.Array.initWithShape(all, lhs.shape);
 
             for (lhs.data, 0..) |item, i| {
                 result.data[i] = if (item != rhs) 1 else 0;

@@ -45,35 +45,24 @@ pub const Array = struct {
 
     pub fn initWithShape(
         allocator: *ReservedBumpAllocator,
-        status: CowStatus,
         shape: []const usize, // copied into inline storage after the header
     ) *@This() {
-        const header = @import("array_helpers.zig").initArrayWithDepth(allocator, status, shape.len);
-        @memcpy(header.shape, shape);
-        return header;
+        const array = initWithDepth(allocator, shape.len, @import("array_helpers.zig").prod(shape));
+        @memcpy(array.shape, shape);
+        return array;
     }
 
     pub fn move(self: *@This()) *@This() {
         std.debug.assert(self.status == CowStatus.Exclusive);
         return self;
     }
-    pub fn manually_counted_move(self: *@This()) *@This() {
-        // up to programming to ensure there are no outstanding references
+    pub fn manually_borrow_counted_move(self: *@This()) *@This() {
         self.status = CowStatus.Exclusive;
         return self;
     }
     pub fn copy(self: *@This()) *@This() {
         self.status = CowStatus.Shared;
         return self;
-    }
-
-    pub fn init(
-        allocator: *ReservedBumpAllocator,
-        dims: []const usize,
-    ) *@This() {
-        const array = initWithDepth(allocator, dims.len, @import("array_helpers.zig").prod(dims));
-        @memcpy(array.shape, dims);
-        return array;
     }
 
     pub fn initWithDepth(
@@ -84,19 +73,8 @@ pub const Array = struct {
         return @import("array_helpers.zig").initWithDepth(allocator, depth, size);
     }
 
-    pub fn initWithDepthBefore(
-        allocator: *ReservedBumpAllocator,
-        checkpoint: usize,
-        last_allocation: []u8,
-        depth: usize,
-        size: usize,
-        moved_array: ?**@This(),
-    ) *@This() {
-        return @import("array_helpers.zig").initWithDepthBefore(allocator, checkpoint, last_allocation, depth, size, moved_array);
-    }
-
     pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *@This()) Value {
-        return @import("array_helpers.zig").ArrayReturn(all, checkpoint, result_before);
+        return @import("array_helpers.zig").Return(all, checkpoint, result_before);
     }
 };
 

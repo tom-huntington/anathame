@@ -62,7 +62,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     const row_size = rowSize(array.shape);
 
     const first_run = findNextIncludedRun(&runs) orelse {
-        const empty = types.Array.init(all, &.{0});
+        const empty = types.Array.initWithShape(all, &.{0});
         return types.Array.Return(all, checkpoint, empty);
     };
 
@@ -85,7 +85,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .scalar => null,
         .array => |*result| result,
     };
-    var output = types.Array.initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
+    var output = @import("array_helpers.zig").initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
     output.shape[0] = kept_capacity;
     switch (first_result) {
         .scalar => {},
@@ -173,7 +173,7 @@ fn makeGroupView(
 
     const slice_start = start * row_size;
     const slice_end = (start + len) * row_size;
-    const meta = types.Array.initWithShape(all, .Shared, group_shape);
+    const meta = types.Array.initWithShape(all, group_shape);
     meta.data = array.data[slice_start..slice_end];
     return meta;
 }

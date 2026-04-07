@@ -9,23 +9,23 @@ pub const array_data_alignment = std.mem.Alignment.of(f64);
 pub const array_allocation_alignment = std.mem.Alignment.fromByteUnits(@max(@alignOf(Array), @alignOf(f64)));
 const array_shape_alignment = std.mem.Alignment.of(usize);
 
-pub fn initArrayWithDepth(
-    allocator: *ReservedBumpAllocator,
-    status: CowStatus,
-    depth: usize,
-) *Array {
-    const shape_offset = shapeOffset();
-    const total_bytes = headerByteLen(depth);
-    const bytes = allocator.allocator().alignedAlloc(u8, array_header_alignment, total_bytes) catch @panic("out of memory");
-    const header: *Array = @ptrCast(@alignCast(bytes.ptr));
-    const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
-    header.* = .{
-        .data = &.{},
-        .status = status,
-        .shape = shape_ptr[0..depth],
-    };
-    return header;
-}
+// pub fn initArrayWithDepth(
+//     allocator: *ReservedBumpAllocator,
+//     status: CowStatus,
+//     depth: usize,
+// ) *Array {
+//     const shape_offset = shapeOffset();
+//     const total_bytes = headerByteLen(depth);
+//     const bytes = allocator.allocator().alignedAlloc(u8, array_header_alignment, total_bytes) catch @panic("out of memory");
+//     const header: *Array = @ptrCast(@alignCast(bytes.ptr));
+//     const shape_ptr: [*]usize = @ptrCast(@alignCast(bytes.ptr + shape_offset));
+//     header.* = .{
+//         .data = &.{},
+//         .status = status,
+//         .shape = shape_ptr[0..depth],
+//     };
+//     return header;
+// }
 
 pub fn offsetTailArrayPointerByBytes(array_ptr: **Array, tail: []const u8, byte_offset: usize) void {
     var array = array_ptr.*;
@@ -127,7 +127,7 @@ fn sliceContainsSlice(container: []const u8, slice: []const u8) bool {
         (@intFromPtr(slice.ptr) + slice.len) <= (@intFromPtr(container.ptr) + container.len);
 }
 
-pub fn ArrayReturn(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *Array) Value {
+pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *Array) Value {
     //if (comptime debug_array_return_snapshot) {
     if (comptime @import("builtin").mode == .Debug) {
         var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -197,7 +197,7 @@ pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: *Array
         _ = all.reclaim(meta_bytes);
         result.status = .Exclusive;
         break :blk result;
-    } else Array.initWithShape(all, .Exclusive, result.shape);
+    } else Array.initWithShape(all, result.shape);
 
     final_meta.data = final_data;
     return .{ .array = final_meta };
@@ -248,7 +248,7 @@ pub fn totalByteLen(depth: usize, size: usize) usize {
 }
 
 pub fn shapeOffset() usize {
-    return array_shape_alignment.forward(@sizeOf(@This()));
+    return array_shape_alignment.forward(@sizeOf(Array));
 }
 
 pub fn headerByteLen(depth: usize) usize {
@@ -265,13 +265,9 @@ pub fn initWithDepth(
     depth: usize,
     size: usize,
 ) *Array {
-    const shape_offset = shapeOffset();
-    const data_offset = dataOffset(depth);
     const total_bytes = totalByteLen(depth, size);
     const bytes = allocator.allocator().alignedAlloc(u8, array_allocation_alignment, total_bytes) catch @panic("out of memory");
 
-    _ = shape_offset;
-    _ = data_offset;
     return @import("array_helpers.zig").fromCompactAllocation(bytes, depth, size);
 }
 

@@ -11,7 +11,7 @@ const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAlloc
 
 fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !*types.Array {
     const data = try allocator.allocator().alloc(f64, bytes.len);
-    const meta = types.Array.initWithShape(allocator, .Exclusive, &.{bytes.len});
+    const meta = types.Array.initWithShape(allocator, &.{bytes.len});
 
     for (bytes, 0..) |byte, i| {
         data[i] = @floatFromInt(byte);
@@ -74,12 +74,12 @@ pub fn main() !void {
 
     var arg0_data = [_]f64{ 1, 2 };
     var arg1_data = [_]f64{ 4, 5 };
-    const arg_meta = types.Array.initWithShape(&runtime_alloc, .Exclusive, &.{8});
+    const arg_meta = types.Array.initWithShape(&runtime_alloc, &.{8});
     arg_meta.data = arg0_data[0..];
     const args = [_]types.Value{
         .{ .array = arg_meta },
         .{ .array = blk: {
-            const meta = types.Array.initWithShape(&runtime_alloc, .Exclusive, &.{8});
+            const meta = types.Array.initWithShape(&runtime_alloc, &.{8});
             meta.data = arg1_data[0..];
             break :blk meta;
         } },
