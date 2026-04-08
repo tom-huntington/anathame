@@ -6,7 +6,7 @@ const MyMap = std.StaticStringMap([]const u8).initComptime(.{
     .{ "∑", "Reduce" },
     .{ "§", "\\" },
     .{ "¶", "\\\\" },
-    .{ "ϴ", "Partition" },
+    .{ "ϴ⊟", "Partition" },
     .{ "⊞", "Outerproduct" },
 });
 
@@ -14,7 +14,6 @@ const a =
     \\ inner prodct ⦿sum‿mul 
     \\ No spaces between Hof and argument
     \\ dotprod
-    \\ϴ()
 ;
 
 // 1. Circled Operators (Similar to ⊗)
@@ -33,3 +32,9 @@ const a =
 // ✳ Eight Spoked Asterisk (U+2733)
 // ✴ Eight Pointed Black Star (U+2734)
 // ✱ U+2731 — Heavy Asterisk
+
+// repeat ↻ⁿ for dyadic return
+// ↻₁ for n times
+// ↻ for fix
+
+//[fn1 fn2 fn3 fn4] turn into function that behaves like phi combinator with concatenate
