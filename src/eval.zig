@@ -19,6 +19,7 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
             if (args.len != builtin.arity) return error.ArityMismatch;
             return builtin.pointer(ctx.allocator, result_dest, args);
         },
+        .pair_builtin => return error.UnsupportedFunctionKind,
         .scope => |scoped| return evalFunc(ctx, result_dest, scoped, args),
         .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {

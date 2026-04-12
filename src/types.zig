@@ -110,6 +110,13 @@ pub const Builtin = struct {
     pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) Value,
 };
 
+pub const PairBuiltinResult = struct { Value, Value };
+
+pub const PairBuiltin = struct {
+    arity: u32,
+    pointer: *const fn (*ReservedBumpAllocator, []const Value) PairBuiltinResult,
+};
+
 pub const Hof = struct {
     arity: u32,
     funcArg: *Expr.FuncExpr,
@@ -132,6 +139,7 @@ pub const Expr = union(enum) {
             scope: *FuncExpr,
             userFn: struct { left: []const u8, right: ?[]const u8, body: *Expr },
             builtin: Builtin,
+            pair_builtin: PairBuiltin,
         },
     };
 

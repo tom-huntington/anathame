@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtins = @import("builtins.zig");
+const pair_builtins = @import("pair_builtins.zig");
 const hofs = @import("hofs.zig");
 const types = @import("types.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
@@ -9,6 +10,7 @@ const Expr = types.Expr;
 const TokenTag = types.TokenTag;
 const Combinator = types.Combinator;
 const Builtin = types.Builtin;
+const PairBuiltin = types.PairBuiltin;
 const Hof = types.Hof;
 const EvalContext = @import("eval.zig").EvalContext;
 
@@ -99,6 +101,7 @@ pub const Parser = struct {
 
     pub fn parseFile(self: *Parser) ParseError!FileAst {
         try self.populateBuiltins();
+        try self.populatePairBuiltins();
         try self.populateHofs();
 
         var consts: std.ArrayList(ConstDef) = .empty;
@@ -158,6 +161,26 @@ pub const Parser = struct {
                     if (builtinFromParams(params, member)) |builtin| {
                         const expr = try self.allocExpr(.{
                             .func = .{ .arity = builtin.arity, .type = .{ .builtin = builtin } },
+                        });
+                        try self.symbols.put(decl.name, .{ .expr = expr });
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
+    pub fn populatePairBuiltins(self: *Parser) ParseError!void {
+        inline for (@typeInfo(pair_builtins).@"struct".decls) |decl| {
+            const member = @field(pair_builtins, decl.name);
+            const member_info = @typeInfo(@TypeOf(member));
+
+            switch (member_info) {
+                .@"fn" => {
+                    const params = member_info.@"fn".params;
+                    if (pairBuiltinFromParams(params, member)) |builtin| {
+                        const expr = try self.allocExpr(.{
+                            .func = .{ .arity = builtin.arity, .type = .{ .pair_builtin = builtin } },
                         });
                         try self.symbols.put(decl.name, .{ .expr = expr });
                     }
@@ -850,6 +873,35 @@ fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (
             const checkpoint = allocator.checkpoint();
             const res = member(allocator, result_dest, @constCast(typed_args));
             return res.Return(allocator, checkpoint);
+        }
+    }.call;
+}
+
+fn pairBuiltinFromParams(comptime params: anytype, comptime member: anytype) ?PairBuiltin {
+    if (params.len != 2) return null;
+    if ((params[0].type orelse return null) != *ReservedBumpAllocator) return null;
+
+    const args_type = params[1].type orelse return null;
+    const args_info = @typeInfo(args_type);
+    if (args_info != .pointer) return null;
+    if (args_info.pointer.size != .one) return null;
+    const child_info = @typeInfo(args_info.pointer.child);
+    if (child_info != .array) return null;
+    if (child_info.array.child != Value) return null;
+
+    const arity: u32 = @intCast(child_info.array.len);
+    return .{
+        .arity = arity,
+        .pointer = makePairBuiltinWrapper(arity, member),
+    };
+}
+
+fn makePairBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, []const Value) types.PairBuiltinResult {
+    return &struct {
+        fn call(allocator: *ReservedBumpAllocator, args: []const Value) types.PairBuiltinResult {
+            std.debug.assert(args.len == arity);
+            const typed_args: *const [arity]Value = @ptrCast(args.ptr);
+            return member(allocator, @constCast(typed_args));
         }
     }.call;
 }
