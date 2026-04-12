@@ -82,7 +82,7 @@ pub fn main() !void {
     //     } },
     // };
     const textInput: types.Value = .{ .array = input_array };
-    var ctx = types.EvalContext.init(&runtime_alloc);
+    var ctx = eval.EvalContext.init(&runtime_alloc);
     defer ctx.deinit();
     const result = switch (file_ast.main.arity) {
         //2 => try eval.evalFunc(&ctx, null, file_ast.main, args[0..2]),

@@ -3,7 +3,6 @@ const types = @import("types.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Expr = types.Expr;
 const Value = types.Value;
-const EvalContext = types.EvalContext;
 
 pub const EvalError = error{
     ArityMismatch,
@@ -97,6 +96,22 @@ fn evalTableScalar(table: anytype, key: f64) EvalError!f64 {
         .Identity => key,
     };
 }
+
+pub const EvalContext = struct {
+    allocator: *ReservedBumpAllocator,
+    bindings: std.StringHashMap(Value),
+
+    pub fn init(allocator: *ReservedBumpAllocator) EvalContext {
+        return .{
+            .allocator = allocator,
+            .bindings = std.StringHashMap(Value).init(allocator.allocator()),
+        };
+    }
+
+    pub fn deinit(self: *EvalContext) void {
+        self.bindings.deinit();
+    }
+};
 
 fn evalUserFunc(ctx: *EvalContext, result_dest: ?[]f64, user_fn: anytype, args: []const Value) EvalError!Value {
     const old_left = ctx.bindings.get(user_fn.left);

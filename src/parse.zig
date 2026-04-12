@@ -10,7 +10,7 @@ const TokenTag = types.TokenTag;
 const Combinator = types.Combinator;
 const Builtin = types.Builtin;
 const Hof = types.Hof;
-const EvalContext = types.EvalContext;
+const EvalContext = @import("eval.zig").EvalContext;
 
 pub const ConstDef = struct {
     name: []const u8,

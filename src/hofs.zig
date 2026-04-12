@@ -3,7 +3,7 @@ const types = @import("types.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Expr = types.Expr;
 const Value = types.Value;
-const EvalContext = types.EvalContext;
+const EvalContext = @import("eval.zig").EvalContext;
 
 pub fn isHofName(name: []const u8) bool {
     inline for (@typeInfo(@This()).@"struct".decls) |decl| {
