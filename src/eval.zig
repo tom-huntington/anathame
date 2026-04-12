@@ -40,14 +40,15 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
 
                     const arg0, const arg1 = switch (com_args[0].type) {
                         .pair_builtin => |pair_builtin| try evalBuiltinPair(ctx, pair_builtin, args),
-                        else => .{
-                            args[0].shared(),
-                            try evalFunc(ctx, null, com_args[0], args),
-                        },
+                        else => .{ args[0].shared(), args[0] },
                     };
-                    const value2 = try evalFunc(ctx, null, com_args[1], &.{arg0});
-                    const value3 = try evalFunc(ctx, null, com_args[2], &.{arg1});
-                    const res = try evalFunc(ctx, result_dest, com_args[3], &.{ value2, value3 });
+                    const index_offset: usize = switch (com_args[0].type) {
+                        .pair_builtin => 1,
+                        else => 0,
+                    };
+                    const value2 = try evalFunc(ctx, null, com_args[index_offset], &.{arg0});
+                    const value3 = try evalFunc(ctx, null, com_args[index_offset + 1], &.{arg1});
+                    const res = try evalFunc(ctx, result_dest, com_args[index_offset + 2], &.{ value2, value3 });
                     return res;
                 },
                 .S => {
