@@ -107,8 +107,7 @@ pub const Combinator = enum {
 
 pub const Builtin = struct {
     arity: u32,
-    ret_arity: u32,
-    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) []const Value,
+    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) Value,
 };
 
 pub const Hof = struct {

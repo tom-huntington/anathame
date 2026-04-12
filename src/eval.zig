@@ -7,7 +7,6 @@ const Value = types.Value;
 pub const EvalError = error{
     ArityMismatch,
     NotImplemented,
-    MultiValueResult,
     TableMiss,
     UnsupportedFunctionKind,
     UnsupportedValueKind,
@@ -15,29 +14,22 @@ pub const EvalError = error{
 };
 
 pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
-    const values = try evalFuncValues(ctx, result_dest, func, args);
-    if (values.len != 1) return error.MultiValueResult;
-    return values[0];
-}
-
-fn evalFuncValues(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError![]const Value {
     switch (func.type) {
         .builtin => |builtin| {
             if (args.len != builtin.arity) return error.ArityMismatch;
-            if (result_dest != null and builtin.ret_arity != 1) return error.MultiValueResult;
             return builtin.pointer(ctx.allocator, result_dest, args);
         },
-        .scope => |scoped| return evalFuncValues(ctx, result_dest, scoped, args),
-        .userFn => |user_fn| return evalUserFuncValues(ctx, result_dest, user_fn, args),
+        .scope => |scoped| return evalFunc(ctx, result_dest, scoped, args),
+        .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {
             switch (com.op) {
                 .B1, .B => {
-                    var values = try evalFuncValues(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
+                    var value = try evalFunc(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
                     for (com.remaining_args, 0..) |arg, i| {
                         const child_dest = if (i + 1 == com.remaining_args.len) result_dest else null;
-                        values = try evalFuncValues(ctx, child_dest, arg, values);
+                        value = try evalFunc(ctx, child_dest, arg, &.{value});
                     }
-                    return values;
+                    return value;
                 },
                 .S => {
                     //
@@ -45,7 +37,8 @@ fn evalFuncValues(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.Func
                     std.debug.assert(args.len == 1);
                     std.debug.assert(com.remaining_args.len == 1);
                     const args2 = [_]Value{ args[0], value };
-                    return evalFuncValues(ctx, result_dest, com.remaining_args[0], &args2);
+                    const value2 = try evalFunc(ctx, result_dest, com.remaining_args[0], &args2);
+                    return value2;
                 },
                 else => {
                     @panic("not implemented");
@@ -54,56 +47,17 @@ fn evalFuncValues(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.Func
         },
         .hof => |hof| {
             if (args.len != hof.arity) return error.ArityMismatch;
-            return oneValue(ctx, hof.pointer(ctx, result_dest, args, hof.funcArg.*));
+            return hof.pointer(ctx, result_dest, args, hof.funcArg.*);
         },
-        .partial_apply_permute => |partial| return applyRightArgsValues(ctx, result_dest, partial, args),
-        .table => |table| return oneValue(ctx, try evalTableFunc(ctx.allocator, result_dest, table, args)),
-    }
-}
-
-fn oneValue(ctx: *EvalContext, value: Value) []const Value {
-    const values = ctx.allocator.allocator().alloc(Value, 1) catch @panic("out of memory");
-    values[0] = value;
-    return values;
-}
-
-fn evalUserFuncValues(ctx: *EvalContext, result_dest: ?[]f64, user_fn: anytype, args: []const Value) EvalError![]const Value {
-    const old_left = ctx.bindings.get(user_fn.left);
-    defer restoreBinding(ctx, user_fn.left, old_left);
-
-    switch (args.len) {
-        1 => {
-            if (user_fn.right != null) return error.ArityMismatch;
-            try putBinding(ctx, user_fn.left, args[0]);
+        .partial_apply_permute => |partial| {
+            const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");
+            for (partial.arguments, 0..) |*expr, i| {
+                right[i] = try evalValueExpr(ctx, null, expr);
+            }
+            return applyRightArgs(ctx, result_dest, partial.func, args, right, partial.permutation_index);
         },
-        2 => {
-            const right_name = user_fn.right orelse return error.ArityMismatch;
-            const old_right = ctx.bindings.get(right_name);
-            defer restoreBinding(ctx, right_name, old_right);
-
-            try putBinding(ctx, user_fn.left, args[0]);
-            try putBinding(ctx, right_name, args[1]);
-        },
-        else => return error.ArityMismatch,
+        .table => |table| return evalTableFunc(ctx.allocator, result_dest, table, args),
     }
-
-    return switch (user_fn.body.*) {
-        .func => |*body_func| evalFuncValues(ctx, result_dest, body_func, args),
-        .value => |*body_value| oneValue(ctx, try evalValueExpr(ctx, result_dest, body_value)),
-    };
-}
-
-fn applyRightArgsValues(
-    ctx: *EvalContext,
-    result_dest: ?[]f64,
-    partial: anytype,
-    args: []const Value,
-) EvalError![]const Value {
-    const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");
-    for (partial.arguments, 0..) |*expr, i| {
-        right[i] = try evalValueExpr(ctx, null, expr);
-    }
-    return applyRightArgsValuesForFunc(ctx, result_dest, partial.func, args, right, partial.permutation_index);
 }
 
 fn evalTableFunc(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {
@@ -159,6 +113,32 @@ pub const EvalContext = struct {
     }
 };
 
+fn evalUserFunc(ctx: *EvalContext, result_dest: ?[]f64, user_fn: anytype, args: []const Value) EvalError!Value {
+    const old_left = ctx.bindings.get(user_fn.left);
+    defer restoreBinding(ctx, user_fn.left, old_left);
+
+    switch (args.len) {
+        1 => {
+            if (user_fn.right != null) return error.ArityMismatch;
+            try putBinding(ctx, user_fn.left, args[0]);
+        },
+        2 => {
+            const right_name = user_fn.right orelse return error.ArityMismatch;
+            const old_right = ctx.bindings.get(right_name);
+            defer restoreBinding(ctx, right_name, old_right);
+
+            try putBinding(ctx, user_fn.left, args[0]);
+            try putBinding(ctx, right_name, args[1]);
+        },
+        else => return error.ArityMismatch,
+    }
+
+    return switch (user_fn.body.*) {
+        .func => |*body_func| evalFunc(ctx, result_dest, body_func, args),
+        .value => |*body_value| evalValueExpr(ctx, result_dest, body_value),
+    };
+}
+
 fn putBinding(ctx: *EvalContext, name: []const u8, value: Value) EvalError!void {
     ctx.bindings.put(name, value) catch @panic("out of memory");
 }
@@ -212,19 +192,19 @@ fn evalArgs(ctx: *EvalContext, expr: *const Expr) EvalError![]const Value {
     };
 }
 
-fn applyRightArgsValuesForFunc(
+fn applyRightArgs(
     ctx: *EvalContext,
     result_dest: ?[]f64,
     func: *const Expr.FuncExpr,
     args: []const Value,
     right: []const Value,
     permutation_index: u32,
-) EvalError![]const Value {
+) EvalError!Value {
     const combined = ctx.allocator.allocator().alloc(Value, args.len + right.len) catch @panic("out of memory");
     @memcpy(combined[0..args.len], args);
     @memcpy(combined[args.len..], right);
     if (permutation_index == 0 or combined.len <= 1) {
-        return evalFuncValues(ctx, result_dest, func, combined);
+        return evalFunc(ctx, result_dest, func, combined);
     }
 
     const order = try nthPermutation(ctx.allocator, combined.len, permutation_index);
@@ -232,7 +212,7 @@ fn applyRightArgsValuesForFunc(
     for (order, 0..) |source_index, i| {
         permuted[i] = combined[source_index];
     }
-    return evalFuncValues(ctx, result_dest, func, permuted);
+    return evalFunc(ctx, result_dest, func, permuted);
 }
 
 fn nthPermutation(allocator: *ReservedBumpAllocator, len: usize, permutation_index: u32) EvalError![]usize {
