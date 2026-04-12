@@ -192,3 +192,40 @@ pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) 
     if (result_dest) |dst| dst[0] = result;
     return .{ .scalar = result };
 }
+
+pub fn split_at(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) struct { Value, Value } {
+    _ = result_dest;
+
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("split_at expects array as first argument"),
+    };
+    const index = switch (args[1]) {
+        .scalar => |scalar| expectNonNegativeInteger(scalar),
+        else => @panic("split_at expects scalar index"),
+    };
+
+    if (array.shape.len != 1) @panic("split_at only supports rank-1 arrays");
+    if (index > array.data.len) @panic("split_at index out of bounds");
+
+    const left_shape = all.allocator().alloc(usize, 1) catch @panic("out of memory");
+    left_shape[0] = index;
+    const right_shape = all.allocator().alloc(usize, 1) catch @panic("out of memory");
+    right_shape[0] = array.data.len - index;
+
+    const left = types.Array{
+        .data = array.data[0..index],
+        .ownership = .Shared,
+        .shape = left_shape,
+    };
+    const right = types.Array{
+        .data = array.data[index..],
+        .ownership = .Shared,
+        .shape = right_shape,
+    };
+
+    return .{
+        .{ .array = left },
+        .{ .array = right },
+    };
+}

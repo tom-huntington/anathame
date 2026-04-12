@@ -836,20 +836,50 @@ fn builtinFromParams(comptime params: anytype, comptime member: anytype) ?Builti
     if (child_info.array.child != Value) return null;
 
     const arity: u32 = @intCast(child_info.array.len);
+    const ret_arity = builtinReturnArity(@typeInfo(@TypeOf(member)).@"fn".return_type orelse return null) orelse return null;
     return .{
         .arity = arity,
+        .ret_arity = ret_arity,
         .pointer = makeBuiltinWrapper(arity, member),
     };
 }
 
-fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) Value {
+fn builtinReturnArity(comptime return_type: type) ?u32 {
+    if (return_type == Value) return 1;
+
+    const return_info = @typeInfo(return_type);
+    if (return_info != .@"struct") return null;
+    if (!return_info.@"struct".is_tuple) return null;
+
+    const fields = return_info.@"struct".fields;
+    if (fields.len == 0) return null;
+    inline for (fields) |field| {
+        if (field.type != Value) return null;
+    }
+
+    return @intCast(fields.len);
+}
+
+fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, ?[]f64, []const Value) []const Value {
     return &struct {
-        fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value) Value {
+        fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value) []const Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
             const checkpoint = allocator.checkpoint();
             const res = member(allocator, result_dest, @constCast(typed_args));
-            return res.Return(allocator, checkpoint);
+            if (@TypeOf(res) == Value) {
+                const values = allocator.allocator().alloc(Value, 1) catch @panic("out of memory");
+                values[0] = res.Return(allocator, checkpoint);
+                return values;
+            }
+
+            if (result_dest != null) @panic("multi-result builtin cannot write to result_dest");
+            const fields = @typeInfo(@TypeOf(res)).@"struct".fields;
+            const values = allocator.allocator().alloc(Value, fields.len) catch @panic("out of memory");
+            inline for (fields, 0..) |field, i| {
+                values[i] = @field(res, field.name);
+            }
+            return values;
         }
     }.call;
 }
@@ -1028,4 +1058,39 @@ test "adjacent function expressions compose" {
 
     try std.testing.expectEqual(Combinator.B, composed.op);
     try std.testing.expectEqual(@as(usize, 1), composed.remaining_args.len);
+}
+
+test "tuple-returning builtin feeds following binary function" {
+    const lex = @import("lex.zig");
+    const eval = @import("eval.zig");
+
+    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer ast_alloc.deinit();
+    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer runtime_alloc.deinit();
+
+    const source =
+        \\split_at,2 add
+    ;
+    var lexed = try lex.lex(&ast_alloc, source);
+    defer lexed.deinit(&ast_alloc);
+
+    var parser = Parser.init(&ast_alloc, &runtime_alloc, source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+
+    const file_ast = try parser.parseFile();
+    const input = types.Array.initWithShape(&runtime_alloc, &.{4});
+    @memcpy(input.data, &[_]f64{ 1, 2, 3, 4 });
+
+    var ctx = eval.EvalContext.init(&runtime_alloc);
+    defer ctx.deinit();
+
+    const result = try eval.evalFunc(&ctx, null, file_ast.main, &.{.{ .array = input }});
+    const array = switch (result) {
+        .array => |array| array,
+        else => return error.ExpectedValue,
+    };
+
+    try std.testing.expectEqualSlices(usize, &.{2}, array.shape);
+    try std.testing.expectEqualSlices(f64, &.{ 4, 6 }, array.data);
 }
