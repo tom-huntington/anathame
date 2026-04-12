@@ -5,8 +5,6 @@ const Expr = types.Expr;
 const Value = types.Value;
 
 pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
-    const checkpoint = all.checkpoint();
-    // TODO factor out checkpoint and Array.Return into a decorator function and compose with type errasure
     const av = args[0];
     const bv = args[1];
     if (std.meta.activeTag(av) == std.meta.activeTag(bv)) {
@@ -29,7 +27,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                         for (inplace.data, arg.data) |*inp, el| {
                             inp.* += el;
                         }
-                        return inplace.Return(all, checkpoint);
+                        return .{ .array = inplace };
                     }
                 }
 
@@ -37,7 +35,7 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                 for (a.data, b.data, result.data) |lhs, rhs, *d| {
                     d.* = lhs + rhs;
                 }
-                return result.Return(all, checkpoint);
+                return .{ .array = result };
             },
         }
     } else {
@@ -51,14 +49,14 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
                 for (arr.data) |*inp| {
                     inp.* += val;
                 }
-                return arr.Return(all, checkpoint);
+                return .{ .array = arr };
             },
             .Shared => {
                 const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
                 for (arr.data, result.data) |el, *d| {
                     d.* = el + val;
                 }
-                return result.Return(all, checkpoint);
+                return .{ .array = result };
             },
         }
     }
@@ -66,7 +64,6 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
 }
 
 pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
-    const checkpoint = all.checkpoint();
     const a = args[0];
     switch (a) {
         .scalar => |scalar| {
@@ -78,7 +75,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
                     for (array.data) |*inp| {
                         inp.* *= inp.*;
                     }
-                    return array.Return(all, checkpoint);
+                    return .{ .array = array };
                 }
             }
             const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, array);
@@ -87,7 +84,7 @@ pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Val
                 dst.* = item * item;
             }
 
-            return result.Return(all, checkpoint);
+            return .{ .array = result };
         },
     }
     @panic("not implemented");
@@ -101,7 +98,6 @@ fn expectNonNegativeInteger(value: f64) usize {
 }
 
 pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value) Value {
-    const checkpoint = all.checkpoint();
     const array = switch (args[0]) {
         .array => |array| array,
         else => @panic("strided expects array as first argument"),
@@ -146,11 +142,10 @@ pub fn strided(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[3]Value
         out_index += inner_size;
     }
 
-    return result.Return(all, checkpoint);
+    return .{ .array = result };
 }
 
 pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
-    const checkpoint = all.checkpoint();
     const rhs = switch (args[1]) {
         .scalar => |scalar| scalar,
         else => @panic("not_eq expects args[1] to be scalar"),
@@ -168,16 +163,16 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
                 for (lhs.data) |*item| {
                     item.* = if (item.* != rhs) 1.0 else 0.0;
                 }
-                return lhs.Return(all, checkpoint);
+                return .{ .array = lhs };
             }
 
-            var result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, lhs);
+            const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, lhs);
 
             for (lhs.data, result.data) |item, *dst| {
                 dst.* = if (item != rhs) 1.0 else 0.0;
             }
 
-            return result.Return(all, checkpoint);
+            return .{ .array = result };
         },
     }
 }

@@ -39,8 +39,9 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
     return switch (acc) {
         .scalar => acc,
         .array => |result| blk: {
-            var final = result;
-            break :blk final.Return(all, checkpoint);
+            const final = result;
+            const final_value: Value = .{ .array = final };
+            break :blk final_value.Return(all, checkpoint);
         },
     };
 }
@@ -66,8 +67,9 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     const row_size = rowSize(array.shape);
 
     const first_run = findNextIncludedRun(&runs) orelse {
-        var empty = types.Array.initWithShape(all, &.{0});
-        return empty.Return(all, checkpoint);
+        const empty = types.Array.initWithShape(all, &.{0});
+        const empty_value: Value = .{ .array = empty };
+        return empty_value.Return(all, checkpoint);
     };
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
@@ -112,7 +114,8 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     }
 
     output.shape[0] = kept_count;
-    return output.Return(all, checkpoint);
+    const output_value: Value = .{ .array = output };
+    return output_value.Return(all, checkpoint);
 }
 
 const PartitionRun = struct {

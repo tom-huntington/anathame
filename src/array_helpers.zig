@@ -101,8 +101,8 @@ fn preserveTailSlice(all: *ReservedBumpAllocator, comptime T: type, slice: []T) 
 }
 
 pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before_: *const Value) Value {
-    switch (result_before_) {
-        .array => |result_before| {
+    switch (result_before_.*) {
+        .array => |*result_before| {
             //if (comptime debug_array_return_snapshot) {
             if (comptime @import("builtin").mode == .Debug) {
                 var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -118,7 +118,7 @@ pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before_: *c
                 return result_after;
             } else return ReturnImpl(all, checkpoint, result_before);
         },
-        .value => return result_before_,
+        .scalar => return result_before_.*,
     }
 }
 
