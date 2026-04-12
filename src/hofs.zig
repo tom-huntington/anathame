@@ -30,7 +30,7 @@ pub fn reduce(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: E
     };
 
     for (array.data[1..]) |item| {
-        acc = @import("eval.zig").evalFuncInContext(ctx, null, &fn_arg, &.{
+        acc = @import("eval.zig").evalFunc(ctx, null, &fn_arg, &.{
             acc,
             .{ .scalar = item },
         }) catch @panic("reduce function evaluation failed");
@@ -66,7 +66,7 @@ pub fn partition(ctx: *EvalContext, result_dest: ?[]f64, args: *[2]Value, fn_arg
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
 
-    const first_result = @import("eval.zig").evalFuncInContext(ctx, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
+    const first_result = @import("eval.zig").evalFunc(ctx, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
     const kept_capacity = array.shape[0];
     const output_item_len = switch (first_result) {
@@ -92,7 +92,7 @@ pub fn partition(ctx: *EvalContext, result_dest: ?[]f64, args: *[2]Value, fn_arg
     while (findNextIncludedRun(&runs)) |run| {
         const group = makeGroupView(all, array, row_size, run.start, run.len);
         const dest = output.data[kept_count * output_item_len .. (kept_count + 1) * output_item_len];
-        const result = @import("eval.zig").evalFuncInContext(ctx, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
+        const result = @import("eval.zig").evalFunc(ctx, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
         assertSamePartitionShape(first_result, result);
         storeGroupResult(&output, kept_count, output_item_len, result);
         kept_count += 1;

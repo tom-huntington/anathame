@@ -14,37 +14,31 @@ pub const EvalError = error{
     UnboundIdentifier,
 };
 
-pub fn evalFunc(allocator: *ReservedBumpAllocator, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
-    var ctx = EvalContext.init(allocator);
-    defer ctx.deinit();
-    return evalFuncInContext(&ctx, null, func, args);
-}
-
-pub fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
+pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
     switch (func.type) {
         .builtin => |builtin| {
             if (args.len != builtin.arity) return error.ArityMismatch;
             return builtin.pointer(ctx.allocator, result_dest, args);
         },
-        .scope => |scoped| return evalFuncInContext(ctx, result_dest, scoped, args),
+        .scope => |scoped| return evalFunc(ctx, result_dest, scoped, args),
         .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {
             switch (com.op) {
                 .B1, .B => {
-                    var value = try evalFuncInContext(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
+                    var value = try evalFunc(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
                     for (com.remaining_args, 0..) |arg, i| {
                         const child_dest = if (i + 1 == com.remaining_args.len) result_dest else null;
-                        value = try evalFuncInContext(ctx, child_dest, arg, &.{value});
+                        value = try evalFunc(ctx, child_dest, arg, &.{value});
                     }
                     return value;
                 },
                 .S => {
                     //
-                    const value = try evalFuncInContext(ctx, null, com.first_arg, &.{args[0].shared()});
+                    const value = try evalFunc(ctx, null, com.first_arg, &.{args[0].shared()});
                     std.debug.assert(args.len == 1);
                     std.debug.assert(com.remaining_args.len == 1);
                     const args2 = [_]Value{ args[0], value };
-                    const value2 = try evalFuncInContext(ctx, result_dest, com.remaining_args[0], &args2);
+                    const value2 = try evalFunc(ctx, result_dest, com.remaining_args[0], &args2);
                     return value2;
                 },
                 else => {
@@ -125,7 +119,7 @@ fn evalUserFunc(ctx: *EvalContext, result_dest: ?[]f64, user_fn: anytype, args: 
     }
 
     return switch (user_fn.body.*) {
-        .func => |*body_func| evalFuncInContext(ctx, result_dest, body_func, args),
+        .func => |*body_func| evalFunc(ctx, result_dest, body_func, args),
         .value => |*body_value| evalValueExpr(ctx, result_dest, body_value),
     };
 }
@@ -159,7 +153,7 @@ fn evalValueExpr(ctx: *EvalContext, result_dest: ?[]f64, expr: *const Expr.Value
                 .func => |*func| func,
                 .value => return error.UnsupportedValueKind,
             };
-            return evalFuncInContext(ctx, result_dest, func, try evalArgs(ctx, apply.arg));
+            return evalFunc(ctx, result_dest, func, try evalArgs(ctx, apply.arg));
         },
     };
 }
@@ -195,7 +189,7 @@ fn applyRightArgs(
     @memcpy(combined[0..args.len], args);
     @memcpy(combined[args.len..], right);
     if (permutation_index == 0 or combined.len <= 1) {
-        return evalFuncInContext(ctx, result_dest, func, combined);
+        return evalFunc(ctx, result_dest, func, combined);
     }
 
     const order = try nthPermutation(ctx.allocator, combined.len, permutation_index);
@@ -203,7 +197,7 @@ fn applyRightArgs(
     for (order, 0..) |source_index, i| {
         permuted[i] = combined[source_index];
     }
-    return evalFuncInContext(ctx, result_dest, func, permuted);
+    return evalFunc(ctx, result_dest, func, permuted);
 }
 
 fn nthPermutation(allocator: *ReservedBumpAllocator, len: usize, permutation_index: u32) EvalError![]usize {
