@@ -63,6 +63,98 @@ pub fn add(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
     @panic("not implemented");
 }
 
+pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const av = args[0];
+    const bv = args[1];
+    if (std.meta.activeTag(av) == std.meta.activeTag(bv)) {
+        switch (av) {
+            .scalar => |a| {
+                const res = a * bv.scalar;
+                if (result_dest) |dest|
+                    dest[0] = res;
+                return .{ .scalar = res };
+            },
+            .array => |a| {
+                const b = bv.array;
+                if (!std.mem.eql(usize, a.shape, b.shape)) {
+                    @panic("not implemented");
+                }
+                if (result_dest == null) {
+                    if (if (a.ownership == .Exclusive) .{ a, b } else if (b.ownership == .Exclusive) .{ b, a } else null) |pair| {
+                        const inplace, const arg = pair;
+
+                        for (inplace.data, arg.data) |*inp, el| {
+                            inp.* *= el;
+                        }
+                        return .{ .array = inplace };
+                    }
+                }
+
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
+                for (a.data, b.data, result.data) |lhs, rhs, *d| {
+                    d.* = lhs * rhs;
+                }
+                return .{ .array = result };
+            },
+        }
+    } else {
+        const pair = switch (av) {
+            .array => |a| .{ a, bv.scalar },
+            .scalar => |a| .{ bv.array, a },
+        };
+        const arr, const val = pair;
+        switch (arr.ownership) {
+            .Exclusive => {
+                for (arr.data) |*inp| {
+                    inp.* *= val;
+                }
+                return .{ .array = arr };
+            },
+            .Shared => {
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
+                for (arr.data, result.data) |el, *d| {
+                    d.* = el * val;
+                }
+                return .{ .array = result };
+            },
+        }
+    }
+    @panic("not implemented");
+}
+
+pub fn parse(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("parse expects an array"),
+    };
+
+    var bytes = all.allocator().alloc(u8, array.data.len * 4) catch @panic("out of memory");
+    var len: usize = 0;
+    for (array.data) |value| {
+        if (!std.math.isFinite(value) or value < 0 or @floor(value) != value) {
+            @panic("parse expects integer unicode values");
+        }
+
+        const codepoint: u21 = std.math.cast(u21, @as(u64, @intFromFloat(value))) orelse {
+            @panic("parse expects valid unicode values");
+        };
+        if (!std.unicode.utf8ValidCodepoint(codepoint)) {
+            @panic("parse expects valid unicode values");
+        }
+
+        len += std.unicode.utf8Encode(codepoint, bytes[len..]) catch {
+            @panic("parse expects valid unicode values");
+        };
+    }
+
+    const res = std.fmt.parseFloat(f64, bytes[0..len]) catch {
+        @panic("parse expects a number");
+    };
+    if (result_dest) |dest|
+        dest[0] = res;
+    return .{ .scalar = res };
+}
+
 pub fn sq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     const a = args[0];
     switch (a) {
@@ -191,4 +283,37 @@ pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) 
     const result = array.data[0];
     if (result_dest) |dst| dst[0] = result;
     return .{ .scalar = result };
+}
+
+test "mul multiplies scalars and arrays" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var scalar_args = [_]Value{ .{ .scalar = 6 }, .{ .scalar = 7 } };
+    try std.testing.expectEqual(@as(f64, 42), mul(&all, null, &scalar_args).scalar);
+
+    var shape = [_]usize{2};
+    var data = [_]f64{ 3, 4 };
+    var array_args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } },
+        .{ .scalar = 2 },
+    };
+
+    const result = mul(&all, null, &array_args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 6, 8 }, result.data);
+    try std.testing.expectEqualSlices(usize, &shape, result.shape);
+}
+
+test "parse converts unicode value arrays to numbers" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{5};
+    var data = [_]f64{ '-', '1', '2', '.', '5' };
+    var args = [_]Value{.{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } }};
+
+    var dest = [_]f64{0};
+    const result = parse(&all, dest[0..], &args);
+    try std.testing.expectEqual(@as(f64, -12.5), result.scalar);
+    try std.testing.expectEqual(@as(f64, -12.5), dest[0]);
 }
