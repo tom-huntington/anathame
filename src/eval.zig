@@ -32,11 +32,27 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                     }
                     return value;
                 },
+                .Phi => {
+                    std.debug.assert(args.len == 1);
+                    std.debug.assert(com.remaining_args.len == 3);
+
+                    const arg0, const arg1 = switch (com.first_arg.type) {
+                        .pair_builtin => |pair_builtin| try evalBuiltinPair(ctx, pair_builtin, args),
+                        else => .{
+                            args[0].shared(),
+                            try evalFunc(ctx, null, com.first_arg, args),
+                        },
+                    };
+                    const value2 = try evalFunc(ctx, null, com.remaining_args[0], &.{arg0});
+                    const value3 = try evalFunc(ctx, null, com.remaining_args[1], &.{arg1});
+                    const res = try evalFunc(ctx, result_dest, com.remaining_args[2], &.{ value2, value3 });
+                    return res;
+                },
                 .S => {
                     //
-                    const value = try evalFunc(ctx, null, com.first_arg, &.{args[0].shared()});
                     std.debug.assert(args.len == 1);
                     std.debug.assert(com.remaining_args.len == 1);
+                    const value = try evalFunc(ctx, null, com.first_arg, &.{args[0].shared()});
                     const args2 = [_]Value{ args[0], value };
                     const value2 = try evalFunc(ctx, result_dest, com.remaining_args[0], &args2);
                     return value2;
@@ -59,6 +75,17 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
         },
         .table => |table| return evalTableFunc(ctx.allocator, result_dest, table, args),
     }
+}
+
+fn evalBuiltinPair(ctx: *EvalContext, pair_builtin: types.PairBuiltin, args: []const Value) EvalError!types.PairBuiltinResult {
+    if (args.len != pair_builtin.arity) return error.ArityMismatch;
+
+    const checkpoint = ctx.allocator.checkpoint();
+    const result = pair_builtin.pointer(ctx.allocator, args);
+    return .{
+        result[0].Return(ctx.allocator, checkpoint),
+        result[1].Return(ctx.allocator, checkpoint),
+    };
 }
 
 fn evalTableFunc(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, table: anytype, args: []const Value) EvalError!Value {

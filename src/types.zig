@@ -99,9 +99,18 @@ pub const Combinator = enum {
 
     pub fn arity(self: Combinator) u32 {
         return switch (self) {
-            .B, .B1, .S => 1,
-            .Sig, .D, .Delta, .Phi, .Psi, .D1, .D2, .N, .V, .X, .Xi, .Phi1 => std.debug.panic("not implemnted arity for combinator {s}", .{@tagName(self)}),
+            .B, .B1, .S, .Phi => 1,
+            .Sig, .D, .Delta, .Psi, .D1, .D2, .N, .V, .X, .Xi, .Phi1 => std.debug.panic("not implemnted arity for combinator {s}", .{@tagName(self)}),
         };
+    }
+
+    pub fn fromName(name: []const u8) ?Combinator {
+        inline for (std.meta.fields(Combinator)) |field| {
+            if (std.ascii.eqlIgnoreCase(name, field.name)) {
+                return @field(Combinator, field.name);
+            }
+        }
+        return null;
     }
 };
 

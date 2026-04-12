@@ -218,8 +218,5 @@ fn scanCharLiteral(text: []const u8) !usize {
 
 fn isCombinatorLexeme(lexeme: []const u8) bool {
     const name = if (lexeme.len > 0 and (lexeme[0] == '(' or lexeme[0] == ')')) lexeme[1..] else lexeme;
-    if (name.len == 0 or name.len > 5) return false;
-
-    var out: [5]u8 = undefined;
-    return std.meta.stringToEnum(types.Combinator, std.ascii.upperString(&out, name)) != null;
+    return types.Combinator.fromName(name) != null;
 }

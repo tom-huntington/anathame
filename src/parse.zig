@@ -962,9 +962,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
 fn parseCombinator(tok: Token) ?Combinator {
     const ident = tok.lexeme;
     const name = if (ident.len > 0 and (ident[0] == '(' or ident[0] == ')')) ident[1..] else ident;
-    if (name.len == 0) return null;
-    var out: [5]u8 = undefined;
-    return std.meta.stringToEnum(Combinator, std.ascii.upperString(&out, name));
+    return Combinator.fromName(name);
 }
 
 fn firstNonWhitespaceIndex(line: []const Token) ?usize {
