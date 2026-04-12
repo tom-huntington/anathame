@@ -23,38 +23,40 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
         .scope => |scoped| return evalFunc(ctx, result_dest, scoped, args),
         .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {
+            const com_args = com.args;
             switch (com.op) {
                 .B1, .B => {
-                    var value = try evalFunc(ctx, if (com.remaining_args.len == 0) result_dest else null, com.first_arg, args);
-                    for (com.remaining_args, 0..) |arg, i| {
-                        const child_dest = if (i + 1 == com.remaining_args.len) result_dest else null;
+                    std.debug.assert(com_args.len >= 1);
+                    var value = try evalFunc(ctx, if (com_args.len == 1) result_dest else null, com_args[0], args);
+                    for (com_args[1..], 0..) |arg, i| {
+                        const child_dest = if (i + 1 == com_args[1..].len) result_dest else null;
                         value = try evalFunc(ctx, child_dest, arg, &.{value});
                     }
                     return value;
                 },
                 .Phi => {
                     std.debug.assert(args.len == 1);
-                    std.debug.assert(com.remaining_args.len == 3);
+                    std.debug.assert(com_args.len == 4);
 
-                    const arg0, const arg1 = switch (com.first_arg.type) {
+                    const arg0, const arg1 = switch (com_args[0].type) {
                         .pair_builtin => |pair_builtin| try evalBuiltinPair(ctx, pair_builtin, args),
                         else => .{
                             args[0].shared(),
-                            try evalFunc(ctx, null, com.first_arg, args),
+                            try evalFunc(ctx, null, com_args[0], args),
                         },
                     };
-                    const value2 = try evalFunc(ctx, null, com.remaining_args[0], &.{arg0});
-                    const value3 = try evalFunc(ctx, null, com.remaining_args[1], &.{arg1});
-                    const res = try evalFunc(ctx, result_dest, com.remaining_args[2], &.{ value2, value3 });
+                    const value2 = try evalFunc(ctx, null, com_args[1], &.{arg0});
+                    const value3 = try evalFunc(ctx, null, com_args[2], &.{arg1});
+                    const res = try evalFunc(ctx, result_dest, com_args[3], &.{ value2, value3 });
                     return res;
                 },
                 .S => {
                     //
                     std.debug.assert(args.len == 1);
-                    std.debug.assert(com.remaining_args.len == 1);
-                    const value = try evalFunc(ctx, null, com.first_arg, &.{args[0].shared()});
+                    std.debug.assert(com_args.len == 2);
+                    const value = try evalFunc(ctx, null, com_args[0], &.{args[0].shared()});
                     const args2 = [_]Value{ args[0], value };
-                    const value2 = try evalFunc(ctx, result_dest, com.remaining_args[0], &args2);
+                    const value2 = try evalFunc(ctx, result_dest, com_args[1], &args2);
                     return value2;
                 },
                 else => {

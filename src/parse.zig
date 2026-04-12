@@ -301,12 +301,13 @@ pub const Parser = struct {
         if (left.* != .func) return error.ExpectedFunction;
 
         const op = parseCombinator(tok) orelse return error.UnknownCombinator;
-        var remaining_args: std.ArrayList(*Expr.FuncExpr) = .empty;
-        errdefer remaining_args.deinit(self.allocator.allocator());
+        var args: std.ArrayList(*Expr.FuncExpr) = .empty;
+        errdefer args.deinit(self.allocator.allocator());
+        try args.append(self.allocator.allocator(), &left.func);
 
         const first_remaining = try self.parseExpr(index, end_index, infixInfo(.combinator).?.rbp, end_tag);
         if (first_remaining.* != .func) return error.ExpectedFunction;
-        try remaining_args.append(self.allocator.allocator(), &first_remaining.func);
+        try args.append(self.allocator.allocator(), &first_remaining.func);
 
         while (true) {
             self.skipWhitespace(index, end_index);
@@ -321,10 +322,10 @@ pub const Parser = struct {
 
             const arg = try self.parseExpr(index, end_index, infixInfo(.combinator).?.rbp, end_tag);
             if (arg.* != .func) return error.ExpectedFunction;
-            try remaining_args.append(self.allocator.allocator(), &arg.func);
+            try args.append(self.allocator.allocator(), &arg.func);
         }
 
-        return self.allocCombinatorExpr(op, &left.func, try remaining_args.toOwnedSlice(self.allocator.allocator()));
+        return self.allocCombinatorExpr(op, try args.toOwnedSlice(self.allocator.allocator()));
     }
 
     fn maybeParseImplicitApply(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag, left: *Expr) ParseError!*Expr {
@@ -405,10 +406,11 @@ pub const Parser = struct {
         };
         if (right.* != .func) return left;
 
-        const remaining_args = try self.allocator.allocator().alloc(*Expr.FuncExpr, 1);
-        remaining_args[0] = &right.func;
+        const args = try self.allocator.allocator().alloc(*Expr.FuncExpr, 2);
+        args[0] = &left.func;
+        args[1] = &right.func;
         index.* = compose_index;
-        return self.allocCombinatorExpr(.B, &left.func, remaining_args);
+        return self.allocCombinatorExpr(.B, args);
     }
 
     fn parsePrefix(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag) ParseError!*Expr {
@@ -820,12 +822,11 @@ pub const Parser = struct {
         };
     }
 
-    fn allocCombinatorExpr(self: *Parser, op: Combinator, first_arg: *Expr.FuncExpr, remaining_args: []*Expr.FuncExpr) ParseError!*Expr {
+    fn allocCombinatorExpr(self: *Parser, op: Combinator, args: []*Expr.FuncExpr) ParseError!*Expr {
         return self.allocExpr(.{
             .func = .{ .arity = op.arity(), .type = .{ .combinator = .{
                 .op = op,
-                .first_arg = first_arg,
-                .remaining_args = remaining_args,
+                .args = args,
             } } },
         });
     }
@@ -1077,5 +1078,5 @@ test "adjacent function expressions compose" {
     };
 
     try std.testing.expectEqual(Combinator.B, composed.op);
-    try std.testing.expectEqual(@as(usize, 1), composed.remaining_args.len);
+    try std.testing.expectEqual(@as(usize, 2), composed.args.len);
 }
