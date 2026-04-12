@@ -36,7 +36,6 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                 },
                 .Phi => {
                     std.debug.assert(args.len == 1);
-                    std.debug.assert(com_args.len == 4);
 
                     const arg0, const arg1 = switch (com_args[0].type) {
                         .pair_builtin => |pair_builtin| try evalBuiltinPair(ctx, pair_builtin, args),
@@ -46,6 +45,7 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                         .pair_builtin => 1,
                         else => 0,
                     };
+                    std.debug.assert(com_args.len == 3 + index_offset);
                     const value2 = try evalFunc(ctx, null, com_args[index_offset], &.{arg0});
                     const value3 = try evalFunc(ctx, null, com_args[index_offset + 1], &.{arg1});
                     const res = try evalFunc(ctx, result_dest, com_args[index_offset + 2], &.{ value2, value3 });
