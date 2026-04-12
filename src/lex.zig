@@ -164,8 +164,8 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                     var j = i;
                     while (j < line.len and (std.ascii.isAlphanumeric(line[j]) or line[j] == '_')) : (j += 1) {}
                     const lexeme = line[i..j];
-                    const tag: TokenTag = if (std.mem.eql(u8, lexeme, "table"))
-                        .table
+                    const tag: TokenTag = if (std.mem.eql(u8, lexeme, "cases"))
+                        .cases
                     else if (hofs.isHofName(lexeme))
                         .hof
                     else

@@ -4,7 +4,7 @@ const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAlloc
 
 pub const TokenTag = enum {
     ident,
-    table,
+    cases,
     combinator,
     arrow,
     number,
