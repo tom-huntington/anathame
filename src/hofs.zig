@@ -15,7 +15,6 @@ pub fn isHofName(name: []const u8) bool {
 }
 
 pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
-    const checkpoint = all.checkpoint();
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
@@ -36,18 +35,10 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
         }) catch @panic("reduce function evaluation failed");
     }
 
-    return switch (acc) {
-        .scalar => acc,
-        .array => |result| blk: {
-            const final = result;
-            const final_value: Value = .{ .array = final };
-            break :blk final_value.Return(all, checkpoint);
-        },
-    };
+    return acc;
 }
 
 pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
-    const checkpoint = all.checkpoint();
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |arr| arr,
@@ -68,14 +59,13 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
 
     const first_run = findNextIncludedRun(&runs) orelse {
         const empty = types.Array.initWithShape(all, &.{0});
-        const empty_value: Value = .{ .array = empty };
-        return empty_value.Return(all, checkpoint);
+        return .{ .array = empty };
     };
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
 
     // TODO need to add ctx to HOF signature
-    var first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
+    const first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
     const kept_capacity = array.shape[0];
     const output_item_len = switch (first_result) {
@@ -88,13 +78,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
         .array => |result| result.shape.len + 1,
     };
 
-    const last_allocation = all.base[checkpoint..all.checkpoint()];
-    const moved_array: ?*types.Array = switch (first_result) {
-        .scalar => null,
-        .array => |*result| result,
-    };
-    // TODO change initWithDepthBefore signature to remove checkpoint. Also change to initWithShapeBefore
-    var output = @import("array_helpers.zig").initWithDepthBefore(all, checkpoint, last_allocation, output_depth, kept_capacity * output_item_len, moved_array);
+    var output = types.Array.initWithDepth(all, output_depth, kept_capacity * output_item_len);
     output.shape[0] = kept_capacity;
     switch (first_result) {
         .scalar => {},
@@ -114,8 +98,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     }
 
     output.shape[0] = kept_count;
-    const output_value: Value = .{ .array = output };
-    return output_value.Return(all, checkpoint);
+    return .{ .array = output };
 }
 
 const PartitionRun = struct {

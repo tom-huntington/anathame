@@ -852,7 +852,9 @@ fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*Res
         fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
-            return member(allocator, result_dest, @constCast(typed_args), fn_arg);
+            const checkpoint = allocator.checkpoint();
+            const res = member(allocator, result_dest, @constCast(typed_args), fn_arg);
+            return res.Return(allocator, checkpoint);
         }
     }.call;
 }
