@@ -3,6 +3,7 @@ const types = @import("types.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Expr = types.Expr;
 const Value = types.Value;
+const EvalContext = types.EvalContext;
 
 pub const EvalError = error{
     ArityMismatch,
@@ -13,38 +14,13 @@ pub const EvalError = error{
     UnboundIdentifier,
 };
 
-const EvalContext = struct {
-    allocator: *ReservedBumpAllocator,
-    bindings: std.StringHashMap(Value),
-
-    fn init(allocator: *ReservedBumpAllocator) EvalContext {
-        return .{
-            .allocator = allocator,
-            .bindings = std.StringHashMap(Value).init(allocator.allocator()),
-        };
-    }
-
-    fn deinit(self: *EvalContext) void {
-        self.bindings.deinit();
-    }
-};
-
 pub fn evalFunc(allocator: *ReservedBumpAllocator, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
-    return evalFuncTo(allocator, null, func, args);
-}
-
-pub fn evalFuncTo(
-    allocator: *ReservedBumpAllocator,
-    result_dest: ?[]f64,
-    func: *const Expr.FuncExpr,
-    args: []const Value,
-) EvalError!Value {
     var ctx = EvalContext.init(allocator);
     defer ctx.deinit();
-    return evalFuncInContext(&ctx, result_dest, func, args);
+    return evalFuncInContext(&ctx, null, func, args);
 }
 
-fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
+pub fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncExpr, args: []const Value) EvalError!Value {
     switch (func.type) {
         .builtin => |builtin| {
             if (args.len != builtin.arity) return error.ArityMismatch;
@@ -78,7 +54,7 @@ fn evalFuncInContext(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.F
         },
         .hof => |hof| {
             if (args.len != hof.arity) return error.ArityMismatch;
-            return hof.pointer(ctx.allocator, result_dest, args, hof.funcArg.*);
+            return hof.pointer(ctx, result_dest, args, hof.funcArg.*);
         },
         .partial_apply_permute => |partial| {
             const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");

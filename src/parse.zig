@@ -10,6 +10,7 @@ const TokenTag = types.TokenTag;
 const Combinator = types.Combinator;
 const Builtin = types.Builtin;
 const Hof = types.Hof;
+const EvalContext = types.EvalContext;
 
 pub const ConstDef = struct {
     name: []const u8,
@@ -27,7 +28,7 @@ pub const Symbol = struct {
 
 const HofSymbol = struct {
     arity: u32,
-    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*EvalContext, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 const StatementKind = enum {
@@ -828,6 +829,7 @@ fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (
 
 fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol {
     if (params.len != 4) return null;
+    if ((params[0].type orelse return null) != *EvalContext) return null;
     if ((params[1].type orelse return null) != ?[]f64) return null;
     if ((params[3].type orelse return null) != Expr.FuncExpr) return null;
 
@@ -847,13 +849,14 @@ fn hofFromParams(comptime params: anytype, comptime member: anytype) ?HofSymbol 
     };
 }
 
-fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value {
+fn makeHofWrapper(comptime arity: u32, comptime member: anytype) *const fn (*EvalContext, ?[]f64, []const Value, Expr.FuncExpr) Value {
     return &struct {
-        fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
+        fn call(ctx: *EvalContext, result_dest: ?[]f64, args: []const Value, fn_arg: Expr.FuncExpr) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
+            const allocator = ctx.allocator;
             const checkpoint = allocator.checkpoint();
-            const res = member(allocator, result_dest, @constCast(typed_args), fn_arg);
+            const res = member(ctx, result_dest, @constCast(typed_args), fn_arg);
             return res.Return(allocator, checkpoint);
         }
     }.call;

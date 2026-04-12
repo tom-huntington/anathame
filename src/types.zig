@@ -79,6 +79,22 @@ pub const Value = union(enum) {
     }
 };
 
+pub const EvalContext = struct {
+    allocator: *ReservedBumpAllocator,
+    bindings: std.StringHashMap(Value),
+
+    pub fn init(allocator: *ReservedBumpAllocator) EvalContext {
+        return .{
+            .allocator = allocator,
+            .bindings = std.StringHashMap(Value).init(allocator.allocator()),
+        };
+    }
+
+    pub fn deinit(self: *EvalContext) void {
+        self.bindings.deinit();
+    }
+};
+
 pub const Combinator = enum {
     B,
     B1,
@@ -112,7 +128,7 @@ pub const Builtin = struct {
 pub const Hof = struct {
     arity: u32,
     funcArg: *Expr.FuncExpr,
-    pointer: *const fn (*ReservedBumpAllocator, ?[]f64, []const Value, Expr.FuncExpr) Value,
+    pointer: *const fn (*EvalContext, ?[]f64, []const Value, Expr.FuncExpr) Value,
 };
 
 pub const PartialApply = enum { comma, caret };

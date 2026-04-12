@@ -3,6 +3,7 @@ const types = @import("types.zig");
 const ReservedBumpAllocator = @import("ReservedBumpAllocator").ReservedBumpAllocator; // ../vendor/ReservedBumpAllocator/root.zig
 const Expr = types.Expr;
 const Value = types.Value;
+const EvalContext = types.EvalContext;
 
 pub fn isHofName(name: []const u8) bool {
     inline for (@typeInfo(@This()).@"struct".decls) |decl| {
@@ -14,7 +15,7 @@ pub fn isHofName(name: []const u8) bool {
     return false;
 }
 
-pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
+pub fn reduce(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,
@@ -29,7 +30,7 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
     };
 
     for (array.data[1..]) |item| {
-        acc = @import("eval.zig").evalFunc(all, &fn_arg, &.{
+        acc = @import("eval.zig").evalFuncInContext(ctx, null, &fn_arg, &.{
             acc,
             .{ .scalar = item },
         }) catch @panic("reduce function evaluation failed");
@@ -38,7 +39,8 @@ pub fn reduce(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value,
     return acc;
 }
 
-pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
+pub fn partition(ctx: *EvalContext, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
+    const all = ctx.allocator;
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |arr| arr,
@@ -64,8 +66,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
 
     const first_group = makeGroupView(all, array, row_size, first_run.start, first_run.len);
 
-    // TODO need to add ctx to HOF signature
-    const first_result = @import("eval.zig").evalFuncTo(all, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
+    const first_result = @import("eval.zig").evalFuncInContext(ctx, null, &fn_arg, &.{.{ .array = first_group }}) catch @panic("partition function evaluation failed");
 
     const kept_capacity = array.shape[0];
     const output_item_len = switch (first_result) {
@@ -91,7 +92,7 @@ pub fn partition(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Val
     while (findNextIncludedRun(&runs)) |run| {
         const group = makeGroupView(all, array, row_size, run.start, run.len);
         const dest = output.data[kept_count * output_item_len .. (kept_count + 1) * output_item_len];
-        const result = @import("eval.zig").evalFuncTo(all, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
+        const result = @import("eval.zig").evalFuncInContext(ctx, dest, &fn_arg, &.{.{ .array = group }}) catch @panic("partition function evaluation failed");
         assertSamePartitionShape(first_result, result);
         storeGroupResult(&output, kept_count, output_item_len, result);
         kept_count += 1;
@@ -202,6 +203,7 @@ fn isHofFunction(comptime member: anytype) bool {
 
     const params = member_info.@"fn".params;
     if (params.len != 4) return false;
+    if ((params[0].type orelse return false) != *EvalContext) return false;
     if ((params[1].type orelse return false) != ?[]f64) return false;
     if ((params[3].type orelse return false) != Expr.FuncExpr) return false;
 
