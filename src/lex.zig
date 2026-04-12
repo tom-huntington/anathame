@@ -65,6 +65,10 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                 if (i + 1 < line.len and line[i + 1] == '>') {
                     try tokens.append(alloc, .{ .tag = .arrow, .start = start, .end = start + 2, .lexeme = line[i .. i + 2] });
                     i += 2;
+                } else if (i + 1 < line.len and std.ascii.isDigit(line[i + 1])) {
+                    const j = try scanNumber(line, i);
+                    try tokens.append(alloc, .{ .tag = .number, .start = start, .end = base + j, .lexeme = line[i..j] });
+                    i = j;
                 } else {
                     return error.UnexpectedChar;
                 }
@@ -81,8 +85,13 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                 if (i + 1 < line.len and std.ascii.isAlphabetic(line[i + 1])) {
                     var j = i + 1;
                     while (j < line.len and std.ascii.isAlphanumeric(line[j])) : (j += 1) {}
-                    try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
-                    i = j;
+                    if (isCombinatorLexeme(line[i..j])) {
+                        try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
+                        i = j;
+                    } else {
+                        try tokens.append(alloc, .{ .tag = .lparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                        i += 1;
+                    }
                 } else {
                     try tokens.append(alloc, .{ .tag = .lparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                     i += 1;
@@ -93,8 +102,13 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                 if (i + 1 < line.len and std.ascii.isAlphabetic(line[i + 1])) {
                     var j = i + 1;
                     while (j < line.len and std.ascii.isAlphanumeric(line[j])) : (j += 1) {}
-                    try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
-                    i = j;
+                    if (isCombinatorLexeme(line[i..j])) {
+                        try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
+                        i = j;
+                    } else {
+                        try tokens.append(alloc, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                        i += 1;
+                    }
                 } else {
                     try tokens.append(alloc, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                     i += 1;
@@ -137,10 +151,7 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
             },
             '@' => {
                 if (i + 1 >= line.len) return error.UnexpectedChar;
-                const literal_len: usize = if (line[i + 1] == '\\') blk: {
-                    if (i + 2 >= line.len) return error.UnexpectedChar;
-                    break :blk 3;
-                } else 2;
+                const literal_len = try scanCharLiteral(line[i..]);
                 try tokens.append(alloc, .{
                     .tag = .char_lit,
                     .start = start,
@@ -151,13 +162,7 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
             },
             else => {
                 if (std.ascii.isDigit(c)) {
-                    var j = i;
-                    while (j < line.len and std.ascii.isDigit(line[j])) : (j += 1) {}
-                    if (j < line.len and line[j] == '.') {
-                        j += 1;
-                        if (j >= line.len or !std.ascii.isDigit(line[j])) return error.InvalidNumber;
-                        while (j < line.len and std.ascii.isDigit(line[j])) : (j += 1) {}
-                    }
+                    const j = try scanNumber(line, i);
                     try tokens.append(alloc, .{ .tag = .number, .start = start, .end = base + j, .lexeme = line[i..j] });
                     i = j;
                 } else if (std.ascii.isAlphabetic(c)) {
@@ -178,4 +183,55 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
             },
         }
     }
+}
+
+fn scanNumber(line: []const u8, start: usize) !usize {
+    var j = start;
+    if (line[j] == '-') j += 1;
+
+    while (j < line.len and std.ascii.isDigit(line[j])) : (j += 1) {}
+    if (j < line.len and line[j] == '.') {
+        j += 1;
+        if (j >= line.len or !std.ascii.isDigit(line[j])) return error.InvalidNumber;
+        while (j < line.len and std.ascii.isDigit(line[j])) : (j += 1) {}
+    }
+
+    return j;
+}
+
+fn scanCharLiteral(text: []const u8) !usize {
+    std.debug.assert(text.len > 0 and text[0] == '@');
+    if (text.len < 2) return error.UnexpectedChar;
+
+    if (text[1] == '\\') {
+        if (text.len < 3) return error.UnexpectedChar;
+        if (text[2] == 'x') {
+            if (text.len < 5 or !std.ascii.isHex(text[3]) or !std.ascii.isHex(text[4])) {
+                return error.UnexpectedChar;
+            }
+            return 5;
+        }
+        if (text[2] == 'u') {
+            if (text.len < 5 or text[3] != '{') return error.UnexpectedChar;
+            var j: usize = 4;
+            while (j < text.len and text[j] != '}') : (j += 1) {
+                if (!std.ascii.isHex(text[j])) return error.UnexpectedChar;
+            }
+            if (j >= text.len or j == 4) return error.UnexpectedChar;
+            return j + 1;
+        }
+        return 3;
+    }
+
+    const scalar_len = try std.unicode.utf8ByteSequenceLength(text[1]);
+    if (1 + scalar_len > text.len) return error.UnexpectedChar;
+    return 1 + scalar_len;
+}
+
+fn isCombinatorLexeme(lexeme: []const u8) bool {
+    const name = if (lexeme.len > 0 and (lexeme[0] == '(' or lexeme[0] == ')')) lexeme[1..] else lexeme;
+    if (name.len == 0 or name.len > 5) return false;
+
+    var out: [5]u8 = undefined;
+    return std.meta.stringToEnum(types.Combinator, std.ascii.upperString(&out, name)) != null;
 }
