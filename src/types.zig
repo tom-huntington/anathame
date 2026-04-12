@@ -140,6 +140,6 @@ pub const Expr = union(enum) {
         // TODO remove strand??
         strand: struct { left: *Expr, right: *Expr },
         apply: struct { func: *Expr, arg: *Expr },
-        ident: []const u8,
+        param_ident: []const u8,
     };
 };

@@ -382,7 +382,7 @@ pub const Parser = struct {
                 }
                 if (self.isLocalParam(name)) {
                     return self.allocExpr(.{
-                        .value = .{ .ident = name },
+                        .value = .{ .param_ident = name },
                     });
                 }
                 const sym = self.symbols.get(name) orelse return error.UnknownIdentifier;
@@ -564,7 +564,7 @@ pub const Parser = struct {
             => .{ .literal = try self.parseLiteralValue(tok, index, end_index) },
             .ident => blk: {
                 if (self.isLocalParam(tok.lexeme)) {
-                    break :blk .{ .ident = tok.lexeme };
+                    break :blk .{ .param_ident = tok.lexeme };
                 }
 
                 const sym = self.symbols.get(tok.lexeme) orelse return error.UnknownIdentifier;

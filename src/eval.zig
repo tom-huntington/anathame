@@ -161,7 +161,7 @@ fn evalExpr(ctx: *EvalContext, expr: *const Expr) EvalError!Value {
 fn evalValueExpr(ctx: *EvalContext, result_dest: ?[]f64, expr: *const Expr.ValueExpr) EvalError!Value {
     return switch (expr.*) {
         .literal => |literal| literal,
-        .ident => |name| ctx.bindings.get(name) orelse error.UnboundIdentifier,
+        .param_ident => |name| ctx.bindings.get(name) orelse error.UnboundIdentifier,
         .strand => |strand| evalStrand(ctx, strand.left, strand.right),
         .apply => |apply| {
             const func = switch (apply.func.*) {
@@ -177,7 +177,7 @@ fn evalArgs(ctx: *EvalContext, expr: *const Expr) EvalError![]const Value {
     return switch (expr.*) {
         .func => return error.UnsupportedValueKind,
         .value => |value_expr| switch (value_expr) {
-            .literal, .ident, .apply => blk: {
+            .literal, .param_ident, .apply => blk: {
                 const args = ctx.allocator.allocator().alloc(Value, 1) catch @panic("out of memory");
                 args[0] = try evalExpr(ctx, expr);
                 break :blk args;
