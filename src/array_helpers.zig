@@ -100,21 +100,26 @@ fn preserveTailSlice(all: *ReservedBumpAllocator, comptime T: type, slice: []T) 
     return ptr[0..slice.len];
 }
 
-pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before: *const Array) Value {
-    //if (comptime debug_array_return_snapshot) {
-    if (comptime @import("builtin").mode == .Debug) {
-        var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-        defer std.debug.assert(debug_gpa.deinit() == .ok);
+pub fn Return(all: *ReservedBumpAllocator, checkpoint: usize, result_before_: *const Value) Value {
+    switch (result_before_) {
+        .array => |result_before| {
+            //if (comptime debug_array_return_snapshot) {
+            if (comptime @import("builtin").mode == .Debug) {
+                var debug_gpa = std.heap.GeneralPurposeAllocator(.{}).init;
+                defer std.debug.assert(debug_gpa.deinit() == .ok);
 
-        const debug_allocator = debug_gpa.allocator();
-        const deep_copy = debugCopyArray(debug_allocator, result_before);
-        defer destroyDebugCopy(debug_allocator, deep_copy);
+                const debug_allocator = debug_gpa.allocator();
+                const deep_copy = debugCopyArray(debug_allocator, result_before);
+                defer destroyDebugCopy(debug_allocator, deep_copy);
 
-        const result_after = ReturnImpl(all, checkpoint, result_before);
-        assertReturnedArrayUnchanged(deep_copy, &result_after.array);
-        assertReturnedArrayInvariants(all, &result_after.array);
-        return result_after;
-    } else return ReturnImpl(all, checkpoint, result_before);
+                const result_after = ReturnImpl(all, checkpoint, result_before);
+                assertReturnedArrayUnchanged(deep_copy, &result_after.array);
+                assertReturnedArrayInvariants(all, &result_after.array);
+                return result_after;
+            } else return ReturnImpl(all, checkpoint, result_before);
+        },
+        .value => return result_before_,
+    }
 }
 
 pub fn ReturnImpl(all: *ReservedBumpAllocator, checkpoint: usize, result: *const Array) Value {

@@ -819,7 +819,9 @@ fn makeBuiltinWrapper(comptime arity: u32, comptime member: anytype) *const fn (
         fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value) Value {
             std.debug.assert(args.len == arity);
             const typed_args: *const [arity]Value = @ptrCast(args.ptr);
-            return member(allocator, result_dest, @constCast(typed_args));
+            const checkpoint = allocator.checkpoint();
+            const res = member(allocator, result_dest, @constCast(typed_args));
+            return res.Return(allocator, checkpoint);
         }
     }.call;
 }

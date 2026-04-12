@@ -57,10 +57,6 @@ pub const Array = struct {
         @memcpy(array.shape, shape);
         return array;
     }
-
-    pub fn Return(self: *const @This(), all: *ReservedBumpAllocator, checkpoint: usize) Value {
-        return @import("array_helpers.zig").Return(all, checkpoint, self);
-    }
 };
 
 pub const Value = union(enum) {
@@ -76,6 +72,10 @@ pub const Value = union(enum) {
             else => {},
         }
         return r;
+    }
+
+    pub fn Return(self: *const @This(), all: *ReservedBumpAllocator, checkpoint: usize) @This() {
+        return @import("array_helpers.zig").Return(all, checkpoint, self);
     }
 };
 
