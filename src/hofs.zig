@@ -39,6 +39,44 @@ pub fn reduce(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: E
     return acc;
 }
 
+pub fn Scan(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
+    const all = ctx.allocator;
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("Scan expects an array"),
+    };
+
+    if (array.shape.len != 1) @panic("Scan only supports rank-1 arrays");
+    if (array.data.len == 0) @panic("Scan requires a non-empty array");
+
+    const result_data = if (result_dest) |dest| blk: {
+        if (dest.len < array.data.len) @panic("Scan result destination too small");
+        break :blk dest[0..array.data.len];
+    } else all.allocator().alloc(f64, array.data.len) catch @panic("out of memory");
+
+    result_data[0] = array.data[0];
+    var acc: Value = .{ .scalar = array.data[0] };
+
+    for (array.data[1..], 1..) |item, i| {
+        const result = @import("eval.zig").evalFunc(ctx, result_data[i .. i + 1], &fn_arg, &.{
+            acc,
+            .{ .scalar = item },
+        }) catch @panic("Scan function evaluation failed");
+        acc = switch (result) {
+            .scalar => result,
+            .array => @panic("Scan function must return a scalar"),
+        };
+    }
+
+    const result_shape = all.allocator().alloc(usize, 1) catch @panic("out of memory");
+    result_shape[0] = array.data.len;
+    return .{ .array = .{
+        .data = result_data,
+        .ownership = if (result_dest == null) .Exclusive else .Shared,
+        .shape = result_shape,
+    } };
+}
+
 pub fn partition(ctx: *EvalContext, result_dest: ?[]f64, args: *[2]Value, fn_arg: Expr.FuncExpr) Value {
     const all = ctx.allocator;
     _ = result_dest;
@@ -215,4 +253,39 @@ fn isHofFunction(comptime member: anytype) bool {
     const child_info = @typeInfo(args_info.pointer.child);
     if (child_info != .array) return false;
     return child_info.array.child == Value;
+}
+
+test "Scan returns inclusive scalar prefixes" {
+    const builtins = @import("builtins.zig");
+
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+    var ctx = EvalContext.init(&all);
+    defer ctx.deinit();
+
+    const add_func = Expr.FuncExpr{
+        .arity = 2,
+        .type = .{ .builtin = .{
+            .arity = 2,
+            .pointer = &struct {
+                fn call(allocator: *ReservedBumpAllocator, result_dest: ?[]f64, args: []const Value) Value {
+                    std.debug.assert(args.len == 2);
+                    const typed_args: *const [2]Value = @ptrCast(args.ptr);
+                    return builtins.add(allocator, result_dest, @constCast(typed_args));
+                }
+            }.call,
+        } },
+    };
+
+    var shape = [_]usize{4};
+    var data = [_]f64{ 1, 2, 3, 4 };
+    var args = [_]Value{.{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } }};
+
+    const result = Scan(&ctx, null, &args, add_func).array;
+    try std.testing.expectEqualSlices(f64, &.{ 1, 3, 6, 10 }, result.data);
+    try std.testing.expectEqualSlices(usize, &shape, result.shape);
+}
+
+test "Scan is registered as a hof name" {
+    try std.testing.expect(isHofName("Scan"));
 }
