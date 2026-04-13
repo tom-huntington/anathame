@@ -49,7 +49,7 @@ pub fn main() !void {
 
     //std.debug.print("{f}", .{std.zig.fmtString(input)});
     const source =
-        \\  not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) prepend,50 Scan add
+        \\  not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul)
     ;
     std.debug.print("soure: {s}\n", .{source});
 
