@@ -285,6 +285,37 @@ pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) 
     return .{ .scalar = result };
 }
 
+pub fn prepend(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("prepend expects array as first argument"),
+    };
+    const value = switch (args[1]) {
+        .scalar => |scalar| scalar,
+        else => @panic("prepend expects scalar as second argument"),
+    };
+
+    if (array.shape.len != 1) @panic("prepend only supports rank-1 arrays");
+
+    const result_len = array.data.len + 1;
+    const result_shape = all.allocator().alloc(usize, 1) catch @panic("out of memory");
+    result_shape[0] = result_len;
+
+    const result_data = if (result_dest) |dest| blk: {
+        if (dest.len < result_len) @panic("prepend result destination too small");
+        break :blk dest[0..result_len];
+    } else all.allocator().alloc(f64, result_len) catch @panic("out of memory");
+
+    result_data[0] = value;
+    @memcpy(result_data[1..], array.data);
+
+    return .{ .array = .{
+        .data = result_data,
+        .ownership = if (result_dest == null) .Exclusive else .Shared,
+        .shape = result_shape,
+    } };
+}
+
 test "mul multiplies scalars and arrays" {
     var all = try ReservedBumpAllocator.init(1024 * 1024);
     defer all.deinit();
@@ -316,4 +347,21 @@ test "parse converts unicode value arrays to numbers" {
     const result = parse(&all, dest[0..], &args);
     try std.testing.expectEqual(@as(f64, -12.5), result.scalar);
     try std.testing.expectEqual(@as(f64, -12.5), dest[0]);
+}
+
+test "prepend adds a scalar to the front of a rank-1 array" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{3};
+    var data = [_]f64{ 2, 3, 4 };
+    var args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } },
+        .{ .scalar = 1 },
+    };
+
+    const result = prepend(&all, null, &args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 1, 2, 3, 4 }, result.data);
+    try std.testing.expectEqualSlices(usize, &.{4}, result.shape);
+    try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
 }
