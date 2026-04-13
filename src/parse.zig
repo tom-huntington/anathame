@@ -489,7 +489,7 @@ pub const Parser = struct {
             },
             .hof => {
                 const hof = self.hofs.get(tok.lexeme) orelse return error.UnexpectedToken;
-                const body = try self.parseExpr(index, end_index, 0, end_tag);
+                const body = try self.parsePrefix(index, end_index, end_tag);
                 if (body.* != .func) return error.ExpectedFunction;
                 //if (body.func.arity != 2) return error.ExpectedFunction;
                 return self.allocExpr(.{
@@ -971,7 +971,7 @@ fn tokenStartsExpr(tag: TokenTag) bool {
 
 fn parseCombinator(tok: Token) ?Combinator {
     const ident = tok.lexeme;
-    const name = if (ident.len > 0 and (ident[0] == '(' or ident[0] == ')')) ident[1..] else ident;
+    const name = if (ident.len > 0 and ident[0] == '|') ident[1..] else ident;
     return Combinator.fromName(name);
 }
 
@@ -1099,7 +1099,7 @@ test "combinator arguments do not implicitly compose adjacent functions" {
     defer runtime_alloc.deinit();
 
     const source =
-        \\not_eq,@\n )s partition (split_at,1 )phi parse Cases [@L_-1 @R_1] mul)
+        \\not_eq,@\n |s partition (split_at,1 |phi parse Cases [@L_-1 @R_1] mul)
     ;
     var lexed = try lex.lex(&ast_alloc, source);
     defer lexed.deinit(&ast_alloc);
@@ -1136,4 +1136,43 @@ test "combinator arguments do not implicitly compose adjacent functions" {
             try std.testing.expect(arg.type.combinator.op != Combinator.B);
         }
     }
+}
+
+test "parenthesized hof argument does not consume trailing combinator argument" {
+    const lex = @import("lex.zig");
+
+    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer ast_alloc.deinit();
+    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer runtime_alloc.deinit();
+
+    const source =
+        \\not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) prepend,50
+    ;
+    var lexed = try lex.lex(&ast_alloc, source);
+    defer lexed.deinit(&ast_alloc);
+
+    var parser = Parser.init(&ast_alloc, &runtime_alloc, source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+
+    const file_ast = try parser.parseFile();
+    const s = switch (file_ast.main.type) {
+        .combinator => |combinator| combinator,
+        else => return error.ExpectedFunction,
+    };
+
+    try std.testing.expectEqual(Combinator.S, s.op);
+    try std.testing.expectEqual(@as(usize, 3), s.args.len);
+
+    const partition = switch (s.args[1].type) {
+        .hof => |hof| hof,
+        else => return error.ExpectedFunction,
+    };
+    const scoped_phi = switch (partition.funcArg.type) {
+        .scope => |scope| scope,
+        else => return error.ExpectedFunction,
+    };
+    try std.testing.expectEqual(Combinator.Phi, scoped_phi.type.combinator.op);
+
+    try std.testing.expectEqual(@as(u32, 1), s.args[2].arity);
 }

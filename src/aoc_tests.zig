@@ -60,7 +60,7 @@ test "aoc 2025 day 1 part a" {
         \\L82
     ;
     const source =
-        \\not_eq,@\n )s partition first
+        \\not_eq,@\n |s partition first
     ;
     _ = input;
     _ = source;

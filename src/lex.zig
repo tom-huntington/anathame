@@ -86,21 +86,16 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                 i += 1;
             },
             ')' => {
-                // `)name` is a combinator token, not a closing-scope token followed by a combinator.
-                if (i + 1 < line.len and std.ascii.isAlphabetic(line[i + 1])) {
-                    var j = i + 1;
-                    while (j < line.len and std.ascii.isAlphanumeric(line[j])) : (j += 1) {}
-                    if (isCombinatorLexeme(line[i..j])) {
-                        try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
-                        i = j;
-                    } else {
-                        try tokens.append(alloc, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
-                        i += 1;
-                    }
-                } else {
-                    try tokens.append(alloc, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
-                    i += 1;
-                }
+                try tokens.append(alloc, .{ .tag = .rparen, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                i += 1;
+            },
+            '|' => {
+                if (i + 1 >= line.len or !std.ascii.isAlphabetic(line[i + 1])) return error.UnexpectedChar;
+                var j = i + 1;
+                while (j < line.len and std.ascii.isAlphanumeric(line[j])) : (j += 1) {}
+                if (!isCombinatorLexeme(line[i..j])) return error.UnexpectedChar;
+                try tokens.append(alloc, .{ .tag = .combinator, .start = start, .end = base + j, .lexeme = line[i..j] });
+                i = j;
             },
             '{' => {
                 try tokens.append(alloc, .{ .tag = .lbrace, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
@@ -217,6 +212,6 @@ fn scanCharLiteral(text: []const u8) !usize {
 }
 
 fn isCombinatorLexeme(lexeme: []const u8) bool {
-    const name = if (lexeme.len > 0 and (lexeme[0] == '(' or lexeme[0] == ')')) lexeme[1..] else lexeme;
+    const name = if (lexeme.len > 0 and lexeme[0] == '|') lexeme[1..] else lexeme;
     return types.Combinator.fromName(name) != null;
 }

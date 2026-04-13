@@ -295,11 +295,15 @@ pub fn prepend(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value
         else => @panic("prepend expects scalar as second argument"),
     };
 
-    if (array.shape.len != 1) @panic("prepend only supports rank-1 arrays");
+    if (array.shape.len == 0) @panic("prepend expects an array with rows");
+    var row_size: usize = 1;
+    for (array.shape[1..]) |dim| row_size *= dim;
+    if (row_size != 1) @panic("prepend scalar can only add a singleton row");
 
     const result_len = array.data.len + 1;
-    const result_shape = all.allocator().alloc(usize, 1) catch @panic("out of memory");
-    result_shape[0] = result_len;
+    const result_shape = all.allocator().alloc(usize, array.shape.len) catch @panic("out of memory");
+    result_shape[0] = array.shape[0] + 1;
+    @memcpy(result_shape[1..], array.shape[1..]);
 
     const result_data = if (result_dest) |dest| blk: {
         if (dest.len < result_len) @panic("prepend result destination too small");
@@ -363,5 +367,22 @@ test "prepend adds a scalar to the front of a rank-1 array" {
     const result = prepend(&all, null, &args).array;
     try std.testing.expectEqualSlices(f64, &.{ 1, 2, 3, 4 }, result.data);
     try std.testing.expectEqualSlices(usize, &.{4}, result.shape);
+    try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
+}
+
+test "prepend adds a scalar row to a singleton-column array" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{ 3, 1 };
+    var data = [_]f64{ 2, 3, 4 };
+    var args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } },
+        .{ .scalar = 1 },
+    };
+
+    const result = prepend(&all, null, &args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 1, 2, 3, 4 }, result.data);
+    try std.testing.expectEqualSlices(usize, &.{ 4, 1 }, result.shape);
     try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
 }
