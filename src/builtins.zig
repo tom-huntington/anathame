@@ -123,14 +123,18 @@ pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
 }
 
 pub fn parse(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
-    const array = switch (args[0]) {
-        .array => |array| array,
-        else => @panic("parse expects an array"),
+    var scalar_data: [1]f64 = undefined;
+    const values: []const f64 = switch (args[0]) {
+        .scalar => |scalar| blk: {
+            scalar_data[0] = scalar;
+            break :blk scalar_data[0..];
+        },
+        .array => |array| array.data,
     };
 
-    var bytes = all.allocator().alloc(u8, array.data.len * 4) catch @panic("out of memory");
+    var bytes = all.allocator().alloc(u8, values.len * 4) catch @panic("out of memory");
     var len: usize = 0;
-    for (array.data) |value| {
+    for (values) |value| {
         if (!std.math.isFinite(value) or value < 0 or @floor(value) != value) {
             @panic("parse expects integer unicode values");
         }
@@ -351,6 +355,18 @@ test "parse converts unicode value arrays to numbers" {
     const result = parse(&all, dest[0..], &args);
     try std.testing.expectEqual(@as(f64, -12.5), result.scalar);
     try std.testing.expectEqual(@as(f64, -12.5), dest[0]);
+}
+
+test "parse treats scalars as length-1 unicode value arrays" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var args = [_]Value{.{ .scalar = '7' }};
+
+    var dest = [_]f64{0};
+    const result = parse(&all, dest[0..], &args);
+    try std.testing.expectEqual(@as(f64, 7), result.scalar);
+    try std.testing.expectEqual(@as(f64, 7), dest[0]);
 }
 
 test "prepend adds a scalar to the front of a rank-1 array" {
