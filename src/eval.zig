@@ -37,15 +37,13 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                 .Phi => {
                     std.debug.assert(args.len == 1);
 
-                    const arg0, const arg1 = switch (com_args[0].type) {
-                        .pair_builtin => |pair_builtin| try evalBuiltinPair(ctx, pair_builtin, args),
-                        else => .{ args[0].shared(), args[0] },
-                    };
-                    const index_offset: usize = switch (com_args[0].type) {
-                        .pair_builtin => 1,
-                        else => 0,
-                    };
-                    std.debug.assert(com_args.len == 3 + index_offset);
+                    const has_pair_arg = isPairFunc(com_args[0]);
+                    const arg0, const arg1 = if (has_pair_arg)
+                        try evalPairFunc(ctx, com_args[0], args)
+                    else
+                        .{ args[0].shared(), args[0] };
+                    const index_offset: usize = if (has_pair_arg) 1 else 0;
+                    if (com_args.len != 3 + index_offset) return error.ArityMismatch;
                     const value2 = try evalFunc(ctx, null, com_args[index_offset], &.{arg0});
                     const value3 = try evalFunc(ctx, null, com_args[index_offset + 1], &.{arg1});
                     const res = try evalFunc(ctx, result_dest, com_args[index_offset + 2], &.{ value2, value3 });
@@ -80,14 +78,38 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
     }
 }
 
+fn isPairFunc(func: *const Expr.FuncExpr) bool {
+    return switch (func.type) {
+        .pair_builtin => true,
+        .partial_apply_permute => |partial| isPairFunc(partial.func),
+        else => false,
+    };
+}
+
+fn evalPairFunc(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []const Value) EvalError!types.PairBuiltinResult {
+    return switch (func.type) {
+        .pair_builtin => |pair_builtin| evalBuiltinPair(ctx, pair_builtin, args),
+        .partial_apply_permute => |partial| blk: {
+            const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");
+            for (partial.arguments, 0..) |*expr, i| {
+                right[i] = try evalValueExpr(ctx, null, expr);
+            }
+            break :blk try applyRightArgsToPair(ctx, partial.func, args, right, partial.permutation_index);
+        },
+        else => error.UnsupportedFunctionKind,
+    };
+}
+
 fn evalBuiltinPair(ctx: *EvalContext, pair_builtin: types.PairBuiltin, args: []const Value) EvalError!types.PairBuiltinResult {
     if (args.len != pair_builtin.arity) return error.ArityMismatch;
 
-    const checkpoint = ctx.allocator.checkpoint();
     const result = pair_builtin.pointer(ctx.allocator, args);
+    const checkpoint_after_pair = ctx.allocator.checkpoint();
+    const first = result[0].Return(ctx.allocator, checkpoint_after_pair);
+    const checkpoint_after_first = ctx.allocator.checkpoint();
     return .{
-        result[0].Return(ctx.allocator, checkpoint),
-        result[1].Return(ctx.allocator, checkpoint),
+        first,
+        result[1].Return(ctx.allocator, checkpoint_after_first),
     };
 }
 
@@ -244,6 +266,28 @@ fn applyRightArgs(
         permuted[i] = combined[source_index];
     }
     return evalFunc(ctx, result_dest, func, permuted);
+}
+
+fn applyRightArgsToPair(
+    ctx: *EvalContext,
+    func: *const Expr.FuncExpr,
+    args: []const Value,
+    right: []const Value,
+    permutation_index: u32,
+) EvalError!types.PairBuiltinResult {
+    const combined = ctx.allocator.allocator().alloc(Value, args.len + right.len) catch @panic("out of memory");
+    @memcpy(combined[0..args.len], args);
+    @memcpy(combined[args.len..], right);
+    if (permutation_index == 0 or combined.len <= 1) {
+        return evalPairFunc(ctx, func, combined);
+    }
+
+    const order = try nthPermutation(ctx.allocator, combined.len, permutation_index);
+    const permuted = ctx.allocator.allocator().alloc(Value, combined.len) catch @panic("out of memory");
+    for (order, 0..) |source_index, i| {
+        permuted[i] = combined[source_index];
+    }
+    return evalPairFunc(ctx, func, permuted);
 }
 
 fn nthPermutation(allocator: *ReservedBumpAllocator, len: usize, permutation_index: u32) EvalError![]usize {
