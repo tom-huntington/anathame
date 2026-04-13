@@ -122,6 +122,82 @@ pub fn mul(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Va
     @panic("not implemented");
 }
 
+pub fn mod(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const av = args[0];
+    const bv = args[1];
+    if (std.meta.activeTag(av) == std.meta.activeTag(bv)) {
+        switch (av) {
+            .scalar => |a| {
+                const res = @mod(a, bv.scalar);
+                if (result_dest) |dest|
+                    dest[0] = res;
+                return .{ .scalar = res };
+            },
+            .array => |a| {
+                const b = bv.array;
+                if (!std.mem.eql(usize, a.shape, b.shape)) {
+                    @panic("not implemented");
+                }
+                if (result_dest == null and a.ownership == .Exclusive) {
+                    for (a.data, b.data) |*inp, el| {
+                        inp.* = @mod(inp.*, el);
+                    }
+                    return .{ .array = a };
+                }
+
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, @import("array_helpers.zig").topmost_shape(a, b));
+                for (a.data, b.data, result.data) |lhs, rhs, *d| {
+                    d.* = @mod(lhs, rhs);
+                }
+                return .{ .array = result };
+            },
+        }
+    } else {
+        switch (av) {
+            .array => |arr| {
+                const val = bv.scalar;
+                switch (arr.ownership) {
+                    .Exclusive => if (result_dest == null) {
+                        for (arr.data) |*inp| {
+                            inp.* = @mod(inp.*, val);
+                        }
+                        return .{ .array = arr };
+                    } else {
+                        const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
+                        for (arr.data, result.data) |el, *d| {
+                            d.* = @mod(el, val);
+                        }
+                        return .{ .array = result };
+                    },
+                    .Shared => {
+                        const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
+                        for (arr.data, result.data) |el, *d| {
+                            d.* = @mod(el, val);
+                        }
+                        return .{ .array = result };
+                    },
+                }
+            },
+            .scalar => |val| {
+                const arr = bv.array;
+                if (result_dest == null and arr.ownership == .Exclusive) {
+                    for (arr.data) |*inp| {
+                        inp.* = @mod(val, inp.*);
+                    }
+                    return .{ .array = arr };
+                }
+
+                const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, arr);
+                for (arr.data, result.data) |el, *d| {
+                    d.* = @mod(val, el);
+                }
+                return .{ .array = result };
+            },
+        }
+    }
+    @panic("not implemented");
+}
+
 pub fn parse(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     var scalar_data: [1]f64 = undefined;
     const values: []const f64 = switch (args[0]) {
@@ -341,6 +417,44 @@ test "mul multiplies scalars and arrays" {
     const result = mul(&all, null, &array_args).array;
     try std.testing.expectEqualSlices(f64, &.{ 6, 8 }, result.data);
     try std.testing.expectEqualSlices(usize, &shape, result.shape);
+}
+
+test "mod computes mathematical modulus for scalars" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var args = [_]Value{ .{ .scalar = -1 }, .{ .scalar = 5 } };
+
+    var dest = [_]f64{0};
+    const result = mod(&all, dest[0..], &args);
+    try std.testing.expectEqual(@as(f64, 4), result.scalar);
+    try std.testing.expectEqual(@as(f64, 4), dest[0]);
+}
+
+test "mod applies to arrays and scalars in argument order" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{3};
+    var data = [_]f64{ -1, 5, 6 };
+    var array_scalar_args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } },
+        .{ .scalar = 5 },
+    };
+
+    const array_scalar_result = mod(&all, null, &array_scalar_args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 4, 0, 1 }, array_scalar_result.data);
+    try std.testing.expectEqualSlices(usize, &shape, array_scalar_result.shape);
+
+    var divisors = [_]f64{ 3, 4, 5 };
+    var scalar_array_args = [_]Value{
+        .{ .scalar = 7 },
+        .{ .array = .{ .data = &divisors, .ownership = .Shared, .shape = &shape } },
+    };
+
+    const scalar_array_result = mod(&all, null, &scalar_array_args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 1, 3, 2 }, scalar_array_result.data);
+    try std.testing.expectEqualSlices(usize, &shape, scalar_array_result.shape);
 }
 
 test "parse converts unicode value arrays to numbers" {
