@@ -15,7 +15,7 @@ pub fn isHofName(name: []const u8) bool {
     return false;
 }
 
-pub fn reduce(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
+pub fn Reduce(ctx: *EvalContext, result_dest: ?[]f64, args: *[1]Value, fn_arg: Expr.FuncExpr) Value {
     _ = result_dest;
     const array = switch (args[0]) {
         .array => |array| array,

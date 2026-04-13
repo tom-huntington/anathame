@@ -349,6 +349,38 @@ pub fn not_eq(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
     }
 }
 
+pub fn equals(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const rhs = switch (args[1]) {
+        .scalar => |scalar| scalar,
+        else => @panic("equals expects args[1] to be scalar"),
+    };
+
+    switch (args[0]) {
+        .scalar => |lhs| {
+            const res: f64 = if (lhs == rhs) 1.0 else 0.0;
+            if (result_dest) |dest|
+                dest[0] = res;
+            return .{ .scalar = res };
+        },
+        .array => |lhs| {
+            if (result_dest == null and lhs.ownership == .Exclusive) {
+                for (lhs.data) |*item| {
+                    item.* = if (item.* == rhs) 1.0 else 0.0;
+                }
+                return .{ .array = lhs };
+            }
+
+            const result = @import("array_helpers.zig").InitOutofplaceResult(all, result_dest, lhs);
+
+            for (lhs.data, result.data) |item, *dst| {
+                dst.* = if (item == rhs) 1.0 else 0.0;
+            }
+
+            return .{ .array = result };
+        },
+    }
+}
+
 pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     _ = all;
 
@@ -481,6 +513,45 @@ test "parse treats scalars as length-1 unicode value arrays" {
     const result = parse(&all, dest[0..], &args);
     try std.testing.expectEqual(@as(f64, 7), result.scalar);
     try std.testing.expectEqual(@as(f64, 7), dest[0]);
+}
+
+test "equals compares scalars and array items against a scalar" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var scalar_args = [_]Value{ .{ .scalar = 5 }, .{ .scalar = 5 } };
+    var scalar_dest = [_]f64{0};
+    const scalar_result = equals(&all, scalar_dest[0..], &scalar_args);
+    try std.testing.expectEqual(@as(f64, 1), scalar_result.scalar);
+    try std.testing.expectEqual(@as(f64, 1), scalar_dest[0]);
+
+    var shape = [_]usize{4};
+    var data = [_]f64{ 3, 5, 5, 8 };
+    var array_args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } },
+        .{ .scalar = 5 },
+    };
+
+    const array_result = equals(&all, null, &array_args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 0, 1, 1, 0 }, array_result.data);
+    try std.testing.expectEqualSlices(usize, &shape, array_result.shape);
+}
+
+test "equals mutates exclusive arrays when no result destination is supplied" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{3};
+    var data = [_]f64{ 2, 4, 2 };
+    var args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Exclusive, .shape = &shape } },
+        .{ .scalar = 2 },
+    };
+
+    const result = equals(&all, null, &args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 1, 0, 1 }, result.data);
+    try std.testing.expectEqualSlices(f64, &.{ 1, 0, 1 }, &data);
+    try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
 }
 
 test "prepend adds a scalar to the front of a rank-1 array" {
