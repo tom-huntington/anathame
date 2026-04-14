@@ -381,6 +381,70 @@ pub fn equals(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value)
     }
 }
 
+pub fn sum(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
+    const array = switch (args[0]) {
+        .array => |array| array,
+        else => @panic("sum expects array as first argument"),
+    };
+
+    if (array.shape.len == 0) @panic("sum expects an array with rows");
+
+    const row_count = array.shape[0];
+    var row_size: usize = 1;
+    for (array.shape[1..]) |dim| row_size *= dim;
+
+    if (array.shape.len == 1) {
+        var result: f64 = 0;
+        for (array.data[0..row_count]) |item| {
+            result += item;
+        }
+        if (result_dest) |dest| dest[0] = result;
+        return .{ .scalar = result };
+    }
+
+    const result_data = if (result_dest) |dest| dest[0..row_size] else all.allocator().alloc(f64, row_size) catch @panic("out of memory");
+    @memset(result_data, 0);
+
+    for (0..row_count) |row| {
+        const row_start = row * row_size;
+        for (array.data[row_start .. row_start + row_size], result_data) |item, *dst| {
+            dst.* += item;
+        }
+    }
+
+    return .{ .array = .{
+        .data = result_data,
+        .ownership = if (result_dest == null) .Exclusive else .Shared,
+        .shape = array.shape[1..],
+    } };
+}
+
+pub fn count(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[2]Value) Value {
+    const lhs = switch (args[0]) {
+        .array => args[0].shared(),
+        else => @panic("count expects array as first argument"),
+    };
+    const rhs = switch (args[1]) {
+        .scalar => args[1],
+        else => @panic("count expects scalar as second argument"),
+    };
+
+    var equals_args = [_]Value{ lhs, rhs };
+    var result = equals(all, null, &equals_args);
+    while (true) {
+        switch (result) {
+            .scalar => |scalar| {
+                if (result_dest) |dest| dest[0] = scalar;
+                return .{ .scalar = scalar };
+            },
+            .array => {
+                var sum_args = [_]Value{result};
+                result = sum(all, null, &sum_args);
+            },
+        }
+    }
+}
+
 pub fn first(all: *ReservedBumpAllocator, result_dest: ?[]f64, args: *[1]Value) Value {
     _ = all;
 
@@ -552,6 +616,52 @@ test "equals mutates exclusive arrays when no result destination is supplied" {
     try std.testing.expectEqualSlices(f64, &.{ 1, 0, 1 }, result.data);
     try std.testing.expectEqualSlices(f64, &.{ 1, 0, 1 }, &data);
     try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
+}
+
+test "sum reduces rank-1 arrays to a scalar" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{4};
+    var data = [_]f64{ 2, 3, 5, 7 };
+    var args = [_]Value{.{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } }};
+
+    var dest = [_]f64{0};
+    const result = sum(&all, dest[0..], &args);
+    try std.testing.expectEqual(@as(f64, 17), result.scalar);
+    try std.testing.expectEqual(@as(f64, 17), dest[0]);
+}
+
+test "sum reduces across rows for higher-rank arrays" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{ 3, 2 };
+    var data = [_]f64{ 1, 2, 3, 4, 5, 6 };
+    var args = [_]Value{.{ .array = .{ .data = &data, .ownership = .Shared, .shape = &shape } }};
+
+    const result = sum(&all, null, &args).array;
+    try std.testing.expectEqualSlices(f64, &.{ 9, 12 }, result.data);
+    try std.testing.expectEqualSlices(usize, &.{2}, result.shape);
+    try std.testing.expectEqual(types.Ownership.Exclusive, result.ownership);
+}
+
+test "count returns total occurrences without mutating exclusive input" {
+    var all = try ReservedBumpAllocator.init(1024 * 1024);
+    defer all.deinit();
+
+    var shape = [_]usize{ 2, 3 };
+    var data = [_]f64{ 4, 2, 4, 8, 4, 1 };
+    var args = [_]Value{
+        .{ .array = .{ .data = &data, .ownership = .Exclusive, .shape = &shape } },
+        .{ .scalar = 4 },
+    };
+
+    var dest = [_]f64{0};
+    const result = count(&all, dest[0..], &args);
+    try std.testing.expectEqual(@as(f64, 3), result.scalar);
+    try std.testing.expectEqual(@as(f64, 3), dest[0]);
+    try std.testing.expectEqualSlices(f64, &.{ 4, 2, 4, 8, 4, 1 }, &data);
 }
 
 test "prepend adds a scalar to the front of a rank-1 array" {
