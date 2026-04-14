@@ -10,6 +10,7 @@ pub const EvalError = error{
     TableMiss,
     UnsupportedFunctionKind,
     UnsupportedValueKind,
+    UnboundFunctionIdentifier,
     UnboundIdentifier,
 };
 
@@ -20,6 +21,10 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
             return builtin.pointer(ctx.allocator, result_dest, args);
         },
         .pair_builtin => return error.UnsupportedFunctionKind,
+        .param_ident => |ident| {
+            const bound = ctx.func_bindings.get(ident.name) orelse return error.UnboundFunctionIdentifier;
+            return evalFunc(ctx, result_dest, bound, args);
+        },
         .scope => |scoped| return evalFunc(ctx, result_dest, scoped, args),
         .userFn => |user_fn| return evalUserFunc(ctx, result_dest, user_fn, args),
         .combinator => |com| {
@@ -82,6 +87,7 @@ fn isPairFunc(func: *const Expr.FuncExpr) bool {
     return switch (func.type) {
         .pair_builtin => true,
         .partial_apply_permute => |partial| isPairFunc(partial.func),
+        .param_ident => |ident| ident.is_pair,
         else => false,
     };
 }
@@ -89,6 +95,10 @@ fn isPairFunc(func: *const Expr.FuncExpr) bool {
 fn evalPairFunc(ctx: *EvalContext, func: *const Expr.FuncExpr, args: []const Value) EvalError!types.PairBuiltinResult {
     return switch (func.type) {
         .pair_builtin => |pair_builtin| evalBuiltinPair(ctx, pair_builtin, args),
+        .param_ident => |ident| blk: {
+            const bound = ctx.func_bindings.get(ident.name) orelse return error.UnboundFunctionIdentifier;
+            break :blk try evalPairFunc(ctx, bound, args);
+        },
         .partial_apply_permute => |partial| blk: {
             const right = ctx.allocator.allocator().alloc(Value, partial.arguments.len) catch @panic("out of memory");
             for (partial.arguments, 0..) |*expr, i| {
@@ -153,15 +163,18 @@ fn evalTableScalar(table: anytype, key: f64) EvalError!f64 {
 pub const EvalContext = struct {
     allocator: *ReservedBumpAllocator,
     bindings: std.StringHashMap(Value),
+    func_bindings: std.StringHashMap(*const Expr.FuncExpr),
 
     pub fn init(allocator: *ReservedBumpAllocator) EvalContext {
         return .{
             .allocator = allocator,
             .bindings = std.StringHashMap(Value).init(allocator.allocator()),
+            .func_bindings = std.StringHashMap(*const Expr.FuncExpr).init(allocator.allocator()),
         };
     }
 
     pub fn deinit(self: *EvalContext) void {
+        self.func_bindings.deinit();
         self.bindings.deinit();
     }
 };

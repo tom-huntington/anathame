@@ -24,6 +24,7 @@ pub const TokenTag = enum {
     hof,
     equal,
     whitespace,
+    cartesian_strand,
 };
 
 pub const Token = struct {
@@ -147,6 +148,7 @@ pub const Expr = union(enum) {
             partial_apply_permute: struct { func: *FuncExpr, arguments: []ValueExpr, permutation_index: u32 },
             scope: *FuncExpr,
             userFn: struct { left: []const u8, right: ?[]const u8, body: *Expr },
+            param_ident: struct { name: []const u8, is_pair: bool },
             builtin: Builtin,
             pair_builtin: PairBuiltin,
         },

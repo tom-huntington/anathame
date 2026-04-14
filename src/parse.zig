@@ -14,13 +14,16 @@ const PairBuiltin = types.PairBuiltin;
 const Hof = types.Hof;
 const EvalContext = @import("eval.zig").EvalContext;
 
-pub const ConstDef = struct {
+pub const CartesianConstant = struct {
     name: []const u8,
-    expr: *Expr,
+    alternatives: union(enum) {
+        val: []Value,
+        fun: []*Expr.FuncExpr,
+    },
 };
 
 pub const FileAst = struct {
-    consts: []ConstDef,
+    cartesian_constants: []CartesianConstant,
     main: *Expr.FuncExpr,
 };
 
@@ -104,8 +107,8 @@ pub const Parser = struct {
         try self.populatePairBuiltins();
         try self.populateHofs();
 
-        var consts: std.ArrayList(ConstDef) = .empty;
-        errdefer consts.deinit(self.allocator.allocator());
+        var cartesian_constants: std.ArrayList(CartesianConstant) = .empty;
+        errdefer cartesian_constants.deinit(self.allocator.allocator());
 
         var statements = try self.collectStatements(self.allocator);
         defer statements.deinit(self.allocator.allocator());
@@ -117,8 +120,9 @@ pub const Parser = struct {
 
         for (statements.items[0 .. statements.items.len - 1]) |stmt| {
             if (stmt.kind != .const_def) return error.InvalidConst;
-            const const_def = try self.parseConst(stmt);
-            try consts.append(self.allocator.allocator(), const_def);
+            if (try self.parseConst(stmt)) |constant| {
+                try cartesian_constants.append(self.allocator.allocator(), constant);
+            }
         }
 
         var main_index = main_stmt.start;
@@ -128,7 +132,7 @@ pub const Parser = struct {
         if (main_expr.* != .func) return error.MainMustBeFunction;
 
         return .{
-            .consts = try consts.toOwnedSlice(self.allocator.allocator()),
+            .cartesian_constants = try cartesian_constants.toOwnedSlice(self.allocator.allocator()),
             .main = &main_expr.func,
         };
     }
@@ -244,7 +248,7 @@ pub const Parser = struct {
         return self.tokens[start..end];
     }
 
-    fn parseConst(self: *Parser, stmt: Statement) ParseError!ConstDef {
+    fn parseConst(self: *Parser, stmt: Statement) ParseError!?CartesianConstant {
         var index = stmt.start;
         const name_tok = self.nextNonWhitespaceToken(&index, stmt.end) orelse return error.InvalidConst;
         if (name_tok.tag != .ident) return error.InvalidConst;
@@ -252,12 +256,88 @@ pub const Parser = struct {
         const eq_tok = self.nextNonWhitespaceToken(&index, stmt.end) orelse return error.InvalidConst;
         if (eq_tok.tag != .equal) return error.InvalidConst;
 
-        const expr = try self.parseExpr(&index, stmt.end, 0, null);
-        self.skipWhitespace(&index, stmt.end);
-        if (index != stmt.end) return error.UnexpectedToken;
+        var alternatives: std.ArrayList(*Expr) = .empty;
+        defer alternatives.deinit(self.allocator.allocator());
 
-        try self.symbols.put(name_tok.lexeme, .{ .expr = expr });
-        return .{ .name = name_tok.lexeme, .expr = expr };
+        var segment_start = index;
+        var scan = index;
+        var depth: usize = 0;
+        while (scan < stmt.end) : (scan += 1) {
+            switch (self.tokens[scan].tag) {
+                .lparen, .lbrace, .lbracket => depth += 1,
+                .rparen, .rbrace, .rbracket => {
+                    if (depth == 0) return error.UnexpectedToken;
+                    depth -= 1;
+                },
+                .cartesian_strand => if (depth == 0) {
+                    try alternatives.append(self.allocator.allocator(), try self.parseConstAlternative(segment_start, scan));
+                    segment_start = scan + 1;
+                },
+                else => {},
+            }
+        }
+        if (depth != 0) return error.UnexpectedEof;
+        try alternatives.append(self.allocator.allocator(), try self.parseConstAlternative(segment_start, stmt.end));
+
+        if (alternatives.items.len == 1) {
+            try self.symbols.put(name_tok.lexeme, .{ .expr = alternatives.items[0] });
+            return null;
+        }
+
+        return try self.registerCartesianConst(name_tok.lexeme, alternatives.items);
+    }
+
+    fn parseConstAlternative(self: *Parser, start: usize, end: usize) ParseError!*Expr {
+        var index = start;
+        const expr = try self.parseExpr(&index, end, 0, null);
+        self.skipWhitespace(&index, end);
+        if (index != end) return error.UnexpectedToken;
+        return expr;
+    }
+
+    fn registerCartesianConst(self: *Parser, name: []const u8, alternatives: []const *Expr) ParseError!CartesianConstant {
+        switch (alternatives[0].*) {
+            .value => {
+                const values = try self.allocator.allocator().alloc(Value, alternatives.len);
+                for (alternatives, 0..) |expr, i| {
+                    values[i] = switch (expr.*) {
+                        .value => |value_expr| switch (value_expr) {
+                            .literal => |literal| literal,
+                            else => return error.ExpectedValue,
+                        },
+                        .func => return error.ExpectedValue,
+                    };
+                }
+
+                const placeholder = try self.allocExpr(.{ .value = .{ .param_ident = name } });
+                try self.symbols.put(name, .{ .expr = placeholder });
+                return .{ .name = name, .alternatives = .{ .val = values } };
+            },
+            .func => {
+                const funcs = try self.allocator.allocator().alloc(*Expr.FuncExpr, alternatives.len);
+                const arity = alternatives[0].func.arity;
+                const is_pair = isPairFuncExpr(&alternatives[0].func);
+                for (alternatives, 0..) |expr, i| {
+                    funcs[i] = switch (expr.*) {
+                        .func => |*func| blk: {
+                            if (func.arity != arity) return error.ExpectedFunction;
+                            if (isPairFuncExpr(func) != is_pair) return error.ExpectedFunction;
+                            break :blk func;
+                        },
+                        .value => return error.ExpectedFunction,
+                    };
+                }
+
+                const placeholder = try self.allocExpr(.{
+                    .func = .{
+                        .arity = arity,
+                        .type = .{ .param_ident = .{ .name = name, .is_pair = is_pair } },
+                    },
+                });
+                try self.symbols.put(name, .{ .expr = placeholder });
+                return .{ .name = name, .alternatives = .{ .fun = funcs } };
+            },
+        }
     }
 
     fn parseExpr(self: *Parser, index: *usize, end_index: usize, min_bp: u8, end_tag: ?TokenTag) ParseError!*Expr {
@@ -974,6 +1054,15 @@ fn parseCombinator(tok: Token) ?Combinator {
     return Combinator.fromName(name);
 }
 
+fn isPairFuncExpr(func: *const Expr.FuncExpr) bool {
+    return switch (func.type) {
+        .pair_builtin => true,
+        .partial_apply_permute => |partial| isPairFuncExpr(partial.func),
+        .param_ident => |ident| ident.is_pair,
+        else => false,
+    };
+}
+
 fn firstNonWhitespaceIndex(line: []const Token) ?usize {
     for (line, 0..) |tok, i| {
         if (tok.tag != .whitespace) return i;
@@ -1174,4 +1263,83 @@ test "parenthesized hof argument does not consume trailing combinator argument" 
     try std.testing.expectEqual(Combinator.Phi, scoped_phi.type.combinator.op);
 
     try std.testing.expectEqual(@as(u32, 1), s.args[2].arity);
+}
+
+test "cartesian value constants bind each product value at runtime" {
+    const lex = @import("lex.zig");
+    const eval = @import("eval.zig");
+
+    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer ast_alloc.deinit();
+    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer runtime_alloc.deinit();
+
+    const source =
+        \\c = 1 * 2
+        \\d = 10 * 20
+        \\x -> c d add
+    ;
+    var lexed = try lex.lex(&ast_alloc, source);
+    defer lexed.deinit(&ast_alloc);
+
+    var parser = Parser.init(&ast_alloc, &runtime_alloc, source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+
+    const file_ast = try parser.parseFile();
+    try std.testing.expectEqual(@as(usize, 2), file_ast.cartesian_constants.len);
+
+    var ctx = eval.EvalContext.init(&runtime_alloc);
+    defer ctx.deinit();
+
+    const c_values = file_ast.cartesian_constants[0].alternatives.val;
+    const d_values = file_ast.cartesian_constants[1].alternatives.val;
+    var actual: [4]f64 = undefined;
+    var actual_index: usize = 0;
+    for (c_values) |c| {
+        try ctx.bindings.put("c", c);
+        for (d_values) |d| {
+            try ctx.bindings.put("d", d);
+            const result = try eval.evalFunc(&ctx, null, file_ast.main, &.{.{ .scalar = 0 }});
+            actual[actual_index] = result.scalar;
+            actual_index += 1;
+        }
+    }
+
+    try std.testing.expectEqualSlices(f64, &.{ 11, 21, 12, 22 }, &actual);
+}
+
+test "cartesian function constants dispatch through function bindings" {
+    const lex = @import("lex.zig");
+    const eval = @import("eval.zig");
+
+    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer ast_alloc.deinit();
+    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
+    defer runtime_alloc.deinit();
+
+    const source =
+        \\f = add * mul
+        \\x -> x,2 f
+    ;
+    var lexed = try lex.lex(&ast_alloc, source);
+    defer lexed.deinit(&ast_alloc);
+
+    var parser = Parser.init(&ast_alloc, &runtime_alloc, source, lexed.tokens.items, lexed.line_offsets.items);
+    defer parser.deinit();
+
+    const file_ast = try parser.parseFile();
+    try std.testing.expectEqual(@as(usize, 1), file_ast.cartesian_constants.len);
+
+    var ctx = eval.EvalContext.init(&runtime_alloc);
+    defer ctx.deinit();
+
+    const funcs = file_ast.cartesian_constants[0].alternatives.fun;
+    var actual: [2]f64 = undefined;
+    for (funcs, 0..) |func, i| {
+        try ctx.func_bindings.put("f", func);
+        const result = try eval.evalFunc(&ctx, null, file_ast.main, &.{.{ .scalar = 3 }});
+        actual[i] = result.scalar;
+    }
+
+    try std.testing.expectEqualSlices(f64, &.{ 5, 6 }, &actual);
 }

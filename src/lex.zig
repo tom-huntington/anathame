@@ -77,6 +77,10 @@ fn lexLine(allocator: *ReservedBumpAllocator, tokens: *std.ArrayList(Token), lin
                 try tokens.append(alloc, .{ .tag = .caret, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                 i += 1;
             },
+            '*' => {
+                try tokens.append(alloc, .{ .tag = .cartesian_strand, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
+                i += 1;
+            },
             '_' => {
                 try tokens.append(alloc, .{ .tag = .underscore, .start = start, .end = start + 1, .lexeme = line[i .. i + 1] });
                 i += 1;

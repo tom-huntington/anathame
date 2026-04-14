@@ -18,6 +18,61 @@ fn bytesToArray(allocator: *ReservedBumpAllocator, bytes: []const u8) !types.Arr
     return meta;
 }
 
+fn evalCurrentProduct(ctx: *eval.EvalContext, file_ast: parse.FileAst, text_input: types.Value) !void {
+    const result = switch (file_ast.main.arity) {
+        1 => try eval.evalFunc(ctx, null, file_ast.main, &.{text_input}),
+        else => return error.ArityMismatch,
+    };
+    std.debug.print("{}\n", .{result});
+}
+
+fn runCartesianProduct(
+    ctx: *eval.EvalContext,
+    file_ast: parse.FileAst,
+    text_input: types.Value,
+    index: usize,
+) !void {
+    if (index == file_ast.cartesian_constants.len) {
+        return evalCurrentProduct(ctx, file_ast, text_input);
+    }
+
+    const constant = file_ast.cartesian_constants[index];
+    switch (constant.alternatives) {
+        .val => |values| {
+            const old = ctx.bindings.get(constant.name);
+            defer restoreValueBinding(ctx, constant.name, old);
+            for (values) |value| {
+                try ctx.bindings.put(constant.name, value);
+                try runCartesianProduct(ctx, file_ast, text_input, index + 1);
+            }
+        },
+        .fun => |funcs| {
+            const old = ctx.func_bindings.get(constant.name);
+            defer restoreFuncBinding(ctx, constant.name, old);
+            for (funcs) |func| {
+                try ctx.func_bindings.put(constant.name, func);
+                try runCartesianProduct(ctx, file_ast, text_input, index + 1);
+            }
+        },
+    }
+}
+
+fn restoreValueBinding(ctx: *eval.EvalContext, name: []const u8, old: ?types.Value) void {
+    if (old) |value| {
+        ctx.bindings.put(name, value) catch @panic("out of memory");
+    } else {
+        _ = ctx.bindings.remove(name);
+    }
+}
+
+fn restoreFuncBinding(ctx: *eval.EvalContext, name: []const u8, old: ?*const types.Expr.FuncExpr) void {
+    if (old) |func| {
+        ctx.func_bindings.put(name, func) catch @panic("out of memory");
+    } else {
+        _ = ctx.func_bindings.remove(name);
+    }
+}
+
 pub const std_options: std.Options = .{
     .fmt_max_depth = 64, // Default is usually 16
 };
@@ -52,7 +107,8 @@ pub fn main() !void {
 
     //std.debug.print("{f}", .{std.zig.fmtString(input)});
     const source =
-        \\  not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add mod,100 count,0
+        \\a = 0 * 1
+        \\not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add mod,100 count,a
     ;
     std.debug.print("soure: {s}\n", .{source});
 
@@ -87,10 +143,5 @@ pub fn main() !void {
     const textInput: types.Value = .{ .array = input_array };
     var ctx = eval.EvalContext.init(&runtime_alloc);
     defer ctx.deinit();
-    const result = switch (file_ast.main.arity) {
-        //2 => try eval.evalFunc(&ctx, null, file_ast.main, args[0..2]),
-        1 => try eval.evalFunc(&ctx, null, file_ast.main, &.{textInput}),
-        else => return error.ArityMismatch,
-    };
-    std.debug.print("{}\n", .{result});
+    try runCartesianProduct(&ctx, file_ast, textInput, 0);
 }
