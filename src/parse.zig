@@ -365,7 +365,6 @@ pub const Parser = struct {
             left = try self.buildInfix(tok, left, right);
         }
 
-        left = try self.maybeParseImplicitCompose(index, end_index, end_tag, left);
         left = try self.maybeParseImplicitApply(index, end_index, end_tag, left);
         return left;
     }
@@ -473,33 +472,6 @@ pub const Parser = struct {
         return self.allocExpr(.{
             .value = .{ .apply = .{ .func = func_expr, .arg = args } },
         });
-    }
-
-    fn maybeParseImplicitCompose(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag, left: *Expr) ParseError!*Expr {
-        if (left.* != .func) return left;
-
-        var compose_index = index.*;
-        self.skipWhitespace(&compose_index, end_index);
-        if (compose_index >= end_index) return left;
-        if (end_tag) |tag| {
-            if (self.tokens[compose_index].tag == tag) return left;
-        }
-        if (!tokenStartsExpr(self.tokens[compose_index].tag)) return left;
-
-        const right = self.parseExpr(&compose_index, end_index, 0, end_tag) catch |err| switch (err) {
-            error.UnexpectedEof,
-            error.UnexpectedToken,
-            error.ExpectedFunction,
-            => return left,
-            else => return err,
-        };
-        if (right.* != .func) return left;
-
-        const args = try self.allocator.allocator().alloc(*Expr.FuncExpr, 2);
-        args[0] = &left.func;
-        args[1] = &right.func;
-        index.* = compose_index;
-        return self.allocCombinatorExpr(.B, args);
     }
 
     fn parsePrefix(self: *Parser, index: *usize, end_index: usize, end_tag: ?TokenTag) ParseError!*Expr {
@@ -1150,33 +1122,6 @@ test "escaped unicode character literals become scalar array values" {
     try std.testing.expectEqualSlices(usize, &.{ 1, 2 }, lookup.shape);
     try std.testing.expectEqual(@as(f64, 0x1F600), lookup.data[0]);
     try std.testing.expectEqual(@as(f64, 1), lookup.data[1]);
-}
-
-test "adjacent function expressions compose" {
-    const lex = @import("lex.zig");
-
-    var ast_alloc = try ReservedBumpAllocator.init(1024 * 1024);
-    defer ast_alloc.deinit();
-    var runtime_alloc = try ReservedBumpAllocator.init(1024 * 1024);
-    defer runtime_alloc.deinit();
-
-    const source =
-        \\first Cases [@L_-1 @R_1]
-    ;
-    var lexed = try lex.lex(&ast_alloc, source);
-    defer lexed.deinit(&ast_alloc);
-
-    var parser = Parser.init(&ast_alloc, &runtime_alloc, source, lexed.tokens.items, lexed.line_offsets.items);
-    defer parser.deinit();
-
-    const file_ast = try parser.parseFile();
-    const composed = switch (file_ast.main.type) {
-        .combinator => |combinator| combinator,
-        else => return error.ExpectedFunction,
-    };
-
-    try std.testing.expectEqual(Combinator.B, composed.op);
-    try std.testing.expectEqual(@as(usize, 2), composed.args.len);
 }
 
 test "combinator arguments do not implicitly compose adjacent functions" {
