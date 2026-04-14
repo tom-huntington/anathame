@@ -365,6 +365,7 @@ pub const Parser = struct {
             left = try self.buildInfix(tok, left, right);
         }
 
+        left = try self.maybeParseImplicitCompose(index, end_index, end_tag, left);
         left = try self.maybeParseImplicitApply(index, end_index, end_tag, left);
         return left;
     }
@@ -1102,7 +1103,7 @@ test "array literal strands mix characters and signed numbers" {
     defer runtime_alloc.deinit();
 
     const source =
-        \\cases [@L_-1 @R_1]
+        \\Cases [@L_-1 @R_1]
     ;
     var lexed = try lex.lex(&ast_alloc, source);
     defer lexed.deinit(&ast_alloc);
@@ -1132,7 +1133,7 @@ test "escaped unicode character literals become scalar array values" {
     defer runtime_alloc.deinit();
 
     const source =
-        \\cases [@\u{1F600}_1]
+        \\Cases [@\u{1F600}_1]
     ;
     var lexed = try lex.lex(&ast_alloc, source);
     defer lexed.deinit(&ast_alloc);
@@ -1160,7 +1161,7 @@ test "adjacent function expressions compose" {
     defer runtime_alloc.deinit();
 
     const source =
-        \\first cases [@L_-1 @R_1]
+        \\first Cases [@L_-1 @R_1]
     ;
     var lexed = try lex.lex(&ast_alloc, source);
     defer lexed.deinit(&ast_alloc);
@@ -1319,7 +1320,7 @@ test "cartesian function constants dispatch through function bindings" {
 
     const source =
         \\f = add * mul
-        \\x -> x,2 f
+        \\x -> x 2 f
     ;
     var lexed = try lex.lex(&ast_alloc, source);
     defer lexed.deinit(&ast_alloc);

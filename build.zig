@@ -130,47 +130,19 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    // Creates an executable that will run `test` blocks from the provided module.
-    // Here `mod` needs to define a target, which is why earlier we made sure to
-    // set the releative field.
-    const mod_tests = b.addTest(.{
-        .root_module = mod,
-    });
-
-    // A run step that will run the test executable.
-    const run_mod_tests = b.addRunArtifact(mod_tests);
-
-    // Creates an executable that will run `test` blocks from the executable's
-    // root module. Note that test executables only test one module at a time,
-    // hence why we have to create two separate ones.
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
-
-    // A run step that will run the second test executable.
-    const run_exe_tests = b.addRunArtifact(exe_tests);
-
-    const aoc_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/aoc_tests.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "build_options", .module = build_options_module },
-                .{ .name = "ReservedBumpAllocator", .module = reserved_buffer_allocator.module("ReservedBumpAllocator") },
-            },
-        }),
-    });
-
-    const run_aoc_tests = b.addRunArtifact(aoc_tests);
-
     // A top level step for running all tests. dependOn can be called multiple
     // times and since the two run steps do not depend on one another, this will
     // make the two of them run in parallel.
     const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
-    test_step.dependOn(&run_exe_tests.step);
-    test_step.dependOn(&run_aoc_tests.step);
+    addSourceFileTests(
+        b,
+        test_step,
+        target,
+        optimize,
+        mod,
+        build_options_module,
+        reserved_buffer_allocator.module("ReservedBumpAllocator"),
+    );
 
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
@@ -183,4 +155,38 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+}
+
+fn addSourceFileTests(
+    b: *std.Build,
+    test_step: *std.Build.Step,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    anathame_module: *std.Build.Module,
+    build_options_module: *std.Build.Module,
+    reserved_buffer_allocator_module: *std.Build.Module,
+) void {
+    var src_dir = std.fs.cwd().openDir("src", .{ .iterate = true }) catch @panic("failed to open src directory");
+    defer src_dir.close();
+
+    var it = src_dir.iterate();
+    while (it.next() catch @panic("failed to iterate src directory")) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".zig")) continue;
+
+        const src_path = b.fmt("src/{s}", .{entry.name});
+        const source_file_tests = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(src_path),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "anathame", .module = anathame_module },
+                    .{ .name = "build_options", .module = build_options_module },
+                    .{ .name = "ReservedBumpAllocator", .module = reserved_buffer_allocator_module },
+                },
+            }),
+        });
+        const run_source_file_tests = b.addRunArtifact(source_file_tests);
+        test_step.dependOn(&run_source_file_tests.step);
+    }
 }
