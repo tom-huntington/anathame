@@ -22,6 +22,9 @@ pub const std_options: std.Options = .{
     .fmt_max_depth = 64, // Default is usually 16
 };
 
+// TODO remove tests
+// TODO add carteasian product of constants
+
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
         _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
@@ -49,7 +52,7 @@ pub fn main() !void {
 
     //std.debug.print("{f}", .{std.zig.fmtString(input)});
     const source =
-        \\  not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) prepend,50 Scan add mod,100 equals,0 Reduce add
+        \\  not_eq,@\n |s partition (split_at,1 |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add mod,100 equals,0 Reduce add
     ;
     std.debug.print("soure: {s}\n", .{source});
 

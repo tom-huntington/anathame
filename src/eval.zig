@@ -46,12 +46,7 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                     if (com_args.len < 3 + index_offset) return error.ArityMismatch;
                     const value2 = try evalFunc(ctx, null, com_args[index_offset], &.{arg0});
                     const value3 = try evalFunc(ctx, null, com_args[index_offset + 1], &.{arg1});
-                    var res = try evalFunc(ctx, if (com_args.len == 3 + index_offset) result_dest else null, com_args[index_offset + 2], &.{ value2, value3 });
-                    for (com_args[index_offset + 3 ..], 0..) |arg, i| {
-                        if (arg.arity != 1) return error.ArityMismatch;
-                        const child_dest = if (i + 1 == com_args[index_offset + 3 ..].len) result_dest else null;
-                        res = try evalFunc(ctx, child_dest, arg, &.{res});
-                    }
+                    const res = try evalFunc(ctx, result_dest, com_args[index_offset + 2], &.{ value2, value3 });
                     return res;
                 },
                 .S => {
@@ -60,12 +55,7 @@ pub fn evalFunc(ctx: *EvalContext, result_dest: ?[]f64, func: *const Expr.FuncEx
                     if (com_args.len < 2) return error.ArityMismatch;
                     const value = try evalFunc(ctx, null, com_args[0], &.{args[0].shared()});
                     const args2 = [_]Value{ args[0], value };
-                    var value2 = try evalFunc(ctx, if (com_args.len == 2) result_dest else null, com_args[1], &args2);
-                    for (com_args[2..], 0..) |arg, i| {
-                        if (arg.arity != 1) return error.ArityMismatch;
-                        const child_dest = if (i + 1 == com_args[2..].len) result_dest else null;
-                        value2 = try evalFunc(ctx, child_dest, arg, &.{value2});
-                    }
+                    const value2 = try evalFunc(ctx, result_dest, com_args[1], &args2);
                     return value2;
                 },
                 else => {

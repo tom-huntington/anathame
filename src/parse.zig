@@ -286,7 +286,6 @@ pub const Parser = struct {
         }
 
         left = try self.maybeParseImplicitApply(index, end_index, end_tag, left);
-        left = try self.maybeParseImplicitCompose(index, end_index, end_tag, left);
         return left;
     }
 
