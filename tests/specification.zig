@@ -94,3 +94,7 @@ test "tuple literal" {
 test "builtins from uiua" {
     try expected_output21("\\\\ take", "[8 3 9 2 0]", "3", "[8 3 9]");
 }
+
+test "builtins" {
+    try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
+}
