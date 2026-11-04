@@ -1,6 +1,22 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Parse a scalar character or character vector as a number.
+pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
+    const bytes = try a.alloc(u8, try std.math.mul(usize, x.data.len, 4));
+    defer a.free(bytes);
+    var len: usize = 0;
+    for (x.data) |value| {
+        if (!std.math.isFinite(value) or value < 0 or value > 0x10ffff or
+            @trunc(value) != value) return error.InvalidInput;
+        const codepoint: u21 = @intFromFloat(value);
+        len += std.unicode.utf8Encode(codepoint, bytes[len..]) catch return error.InvalidInput;
+    }
+    const number = std.fmt.parseFloat(f64, bytes[0..len]) catch return error.InvalidInput;
+    return .{ .data = try a.dupe(f64, &.{number}) };
+}
+
 pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return @import("uiua_builtins.zig").mul(a, x, x);
 }
