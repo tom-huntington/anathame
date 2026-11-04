@@ -20,6 +20,10 @@ test "strings" {
     try expect_output("\\ id",
         \\"ab"
     , "[97,98]");
+
+    try expect_output("\\ not_eq,@a",
+        \\"abac"
+    , "[0,1,0,1]");
 }
 
 test "Partial application" {

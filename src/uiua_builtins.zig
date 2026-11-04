@@ -8,7 +8,11 @@ pub fn sub(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .subtract);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { multiply, subtract }) !Value {
+pub fn not_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .not_equal);
+}
+
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { multiply, subtract, not_equal }) !Value {
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
     const big = if (x.shape.len >= y.shape.len) x else y;
@@ -19,6 +23,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { mult
         d.* = switch (op) {
             .multiply => x.data[xi] * y.data[yi],
             .subtract => x.data[xi] - y.data[yi],
+            .not_equal => @floatFromInt(@intFromBool(x.data[xi] != y.data[yi])),
         };
     }
     return .{ .data = data, .shape = try a.dupe(usize, big.shape) };
