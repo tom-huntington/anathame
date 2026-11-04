@@ -29,7 +29,9 @@ pub fn main(init: std.process.Init) !void {
             }
             const normalized = try std.mem.replaceOwned(u8, allocator, oracle.stdout, "¯", "-");
             const expected = try language.parser.parse(allocator, normalized);
-            const actual = try language.runtime.evaluate(allocator, code, input);
+            var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
+            defer memory.deinit();
+            const actual = try language.runtime.evaluate(&memory, code, input);
             var passed = expected.len == actual.len;
             for (expected, 0..) |instruction, index| {
                 const value = switch (instruction) {

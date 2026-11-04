@@ -11,7 +11,9 @@ pub fn main(init: std.process.Init) !void {
     }
     const input_end = if (is_test) args.len - 1 else args.len;
     const input = try std.mem.join(a, "; ", args[3..input_end]);
-    const values = runtime.evaluate(a, args[2], input) catch |err| {
+    var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
+    defer memory.deinit();
+    const values = runtime.evaluate(&memory, args[2], input) catch |err| {
         std.debug.print("{s}\n", .{@errorName(err)});
         std.process.exit(1);
     };

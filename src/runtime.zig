@@ -1,7 +1,10 @@
 const std = @import("std");
+const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
 pub const Value = struct { data: []const f64, shape: []const usize };
 pub fn run_test(a: std.mem.Allocator, code: []const u8, input: []const u8, expected: []const u8) !void {
-    const actual = try evaluate(a, code, input);
+    var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
+    defer memory.deinit();
+    const actual = try evaluate(&memory, code, input);
     try expectOutput(a, actual, expected);
 }
 
@@ -20,7 +23,9 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []con
 }
 
 /// Trains retain x: (f g)(x,y) = g(f(x,y),x), or (f g)(x) = g(f(x),x).
-pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]const Value {
+/// Parsing allocations and returned values live until memory is reset or deinitialized.
+pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: []const u8) ![]const Value {
+    const a = memory.allocator();
     const instructions = try @import("parser.zig").parse(a, code);
     if (instructions.len == 0) return error.EmptyProgram;
     const first_name = switch (instructions[0]) {
@@ -39,8 +44,7 @@ pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]co
         .literal => |value| value,
         else => return error.InvalidInput,
     };
-    var memory = try @import("reserved_bump_allocator.zig").ReservedBumpAllocator.init(64 * 1024 * 1024);
-    defer memory.deinit();
+    // Keep parsed instructions and arguments before the evaluation frame.
     const checkpoint = memory.checkpoint();
     for (instructions, 0..) |instruction, i| {
         const name = switch (instruction) {
@@ -52,9 +56,9 @@ pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]co
         const temporary = if (instruction == .partial)
             try function(memory.allocator(), result, instruction.partial.argument)
         else if (i == 0) try function(memory.allocator(), x, result) else try function(memory.allocator(), result, x);
-        result = try @import("memory.zig").ReturnImpl(&memory, checkpoint, temporary);
+        result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
     }
-    return a.dupe(Value, &.{.{ .data = try a.dupe(f64, result.data), .shape = try a.dupe(usize, result.shape) }});
+    return a.dupe(Value, &.{result});
 }
 pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
     if (value.shape.len == 0) return w.print("{d}", .{value.data[0]});
