@@ -139,15 +139,18 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
-    const helpers = b.addSystemCommand(&.{ "python", "tests/test_helpers.py" });
-    test_step.dependOn(&helpers.step);
-    const conformance = b.addSystemCommand(&.{ "python", "tests/conformance.py" });
-    conformance.step.dependOn(b.getInstallStep());
-    test_step.dependOn(&conformance.step);
-    const differential = b.addSystemCommand(&.{ "python", "tests/uiua_functions.py" });
-    differential.step.dependOn(b.getInstallStep());
-    b.step("test-uiua", "Compare generated primitive cases with Uiua").dependOn(&differential.step);
-
+    const differential = b.addExecutable(.{
+        .name = "uiua-functions",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/uiua_functions.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "anathame", .module = mod }},
+        }),
+    });
+    const run_differential = b.addRunArtifact(differential);
+    run_differential.addPassthruArgs();
+    b.step("test-uiua", "Compare generated primitive cases with Uiua").dependOn(&run_differential.step);
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

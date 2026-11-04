@@ -3,10 +3,10 @@ pub const Value = struct { data: []const f64, shape: []const usize };
 /// Adjacent functions form a left-associated N train: (f g)(x,y) = g(f(x,y),x).
 pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]const Value {
     const instructions = try @import("parser.zig").parse(a, code);
-    var arguments = std.mem.splitScalar(u8, input, ';');
-    const left = arguments.next().?;
-    const right = arguments.next() orelse return error.StackUnderflow;
-    if (arguments.next() != null) return error.InvalidInput;
+    var arguments = std.mem.tokenizeAny(u8, input, " ;\t\r\n");
+    const left = arguments.next() orelse return error.WrongNumberOfArguments;
+    const right = arguments.next() orelse return error.WrongNumberOfArguments;
+    if (arguments.next() != null) return error.WrongNumberOfArguments;
     const xv = try scalarArgument(left);
     const yv = try scalarArgument(right);
     if (instructions.len == 0) return error.EmptyProgram;
