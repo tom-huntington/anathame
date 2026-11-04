@@ -3,6 +3,7 @@ const Lexer = @import("lexer.zig").Lexer;
 const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
     literal: Value,
+    cases: Value,
     primitive: []const u8,
     partition: *const Instruction,
     partial: struct { name: []const u8, argument: Value },
@@ -73,6 +74,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
             const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
             previous.* = .{ .partial = .{ .name = name, .argument = value } };
+            continue;
+        }
+        if (std.mem.eql(u8, token, "Cases")) {
+            const open = (try lexer.next()) orelse return error.ExpectedLiteral;
+            if (!std.mem.eql(u8, open, "[")) return error.ExpectedArray;
+            const table = try array(a, lexer);
+            if (table.shape.len != 2 or table.shape[1] != 2) return error.ShapeMismatch;
+            try result.append(a, .{ .cases = table });
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;

@@ -70,6 +70,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             .scope => |scope| scope.arity,
             .partition => 2,
             .partial => 1,
+            .cases => 1,
             else => return error.ExpectedFunction,
         };
         if (!first_function and !retain_x and arity == 2) {
@@ -78,6 +79,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
                 first_argument = tuple[0];
                 second_argument = tuple[1];
             }
+        }
+        if (instruction == .cases) {
+            const temporary = try cases(memory.allocator(), first_argument, instruction.cases);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
         }
         if (instruction == .partition) {
             const temporary = try partition(memory, first_argument, second_argument, instruction.partition);
@@ -112,6 +120,20 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     }
     return result;
 }
+fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
+    if (input.tuple != null) return error.ExpectedArray;
+    const data = try a.alloc(f64, input.data.len);
+    for (input.data, data) |key, *output| {
+        for (0..table.shape[0]) |row| {
+            if (table.data[row * 2] == key) {
+                output.* = table.data[row * 2 + 1];
+                break;
+            }
+        } else return error.TableMiss;
+    }
+    return .{ .data = data, .shape = try a.dupe(usize, input.shape) };
+}
+
 pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
     if (value.tuple) |tuple| {
         try w.writeAll("tup( ");

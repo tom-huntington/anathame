@@ -105,3 +105,8 @@ test "2-tuple composition" {
     // implicit |b
     try expect_output("\\\\ split_at,2 mul", .{ "[1 2 3 4]", "2" }, .{"[3 8]"});
 }
+
+test "Keywords" {
+    // cases binds to 2D array literal on right
+    try expect_output("\\ Cases [1_11 2_22 3_33]", .{"[1 2 3]"}, .{"[11 22 33]"});
+}
