@@ -155,7 +155,10 @@ fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
                 output.* = table.data[row * 2 + 1];
                 break;
             }
-        } else return error.TableMiss;
+        } else {
+            std.debug.print("TableMiss: no match for {d}\n", .{key});
+            return error.TableMiss;
+        }
     }
     return .{ .data = data, .shape = try a.dupe(usize, input.shape) };
 }
