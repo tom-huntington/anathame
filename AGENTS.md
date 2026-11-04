@@ -1,2 +1,3 @@
 If you want to write tests I did not ask for, remove them before commiting.
-the uiua code base is a ..\uiua
+..\uiua is the uiua lang repository where we copy primitatives from
+..\oldanathame is this projects previous iteration
