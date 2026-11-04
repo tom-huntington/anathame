@@ -110,12 +110,13 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
 }
 
 fn literal(a: std.mem.Allocator, token: []const u8) !?Value {
-    if (token[0] == '@' or token[0] == '"') {
+    if (token[0] == '@' or token[0] == '"' or token[0] == '$') {
         const character = token[0] == '@';
+        const multiline = token[0] == '$';
         const raw_character = character and token[1] != '\\';
         const quoted = if (character) try std.mem.concat(a, u8, &.{ "\"", token[1..], "\"" }) else token;
         defer if (character) a.free(quoted);
-        const decoded = if (raw_character) try a.dupe(u8, token[1..]) else try std.zig.string_literal.parseAlloc(a, quoted);
+        const decoded = if (multiline) try multilineString(a, token) else if (raw_character) try a.dupe(u8, token[1..]) else try std.zig.string_literal.parseAlloc(a, quoted);
         defer a.free(decoded);
         const view = try std.unicode.Utf8View.init(decoded);
         var iterator = view.iterator();
@@ -129,4 +130,18 @@ fn literal(a: std.mem.Allocator, token: []const u8) !?Value {
     const n = std.fmt.parseFloat(f64, token) catch return null;
     if (!std.math.isFinite(n)) return error.InvalidInput;
     return .{ .data = try a.dupe(f64, &.{n}), .shape = &.{} };
+}
+
+fn multilineString(a: std.mem.Allocator, token: []const u8) ![]const u8 {
+    var decoded: std.ArrayList(u8) = .empty;
+    errdefer decoded.deinit(a);
+    var lines = std.mem.splitScalar(u8, token, '\n');
+    var first = true;
+    while (lines.next()) |line| {
+        const content = if (first) line else std.mem.trimStart(u8, line, " \t");
+        if (!first) try decoded.append(a, '\n');
+        try decoded.appendSlice(a, std.mem.trimEnd(u8, content[1..], "\r"));
+        first = false;
+    }
+    return decoded.toOwnedSlice(a);
 }

@@ -8,6 +8,19 @@ pub const Lexer = struct {
         const start = self.offset;
         const c = self.source[self.offset];
         self.offset += 1;
+        if (c == '$') {
+            while (true) {
+                while (self.offset < self.source.len and self.source[self.offset] != '\n' and self.source[self.offset] != '\r') self.offset += 1;
+                const end = self.offset;
+                var next_line = end;
+                if (next_line < self.source.len and self.source[next_line] == '\r') next_line += 1;
+                if (next_line == self.source.len or self.source[next_line] != '\n') return self.source[start..end];
+                next_line += 1;
+                while (next_line < self.source.len and (self.source[next_line] == ' ' or self.source[next_line] == '\t')) next_line += 1;
+                if (next_line == self.source.len or self.source[next_line] != '$') return self.source[start..end];
+                self.offset = next_line + 1;
+            }
+        }
         if (c == '|' and self.offset < self.source.len) {
             self.offset += 1;
             return self.source[start..self.offset];
@@ -42,7 +55,7 @@ pub const Lexer = struct {
         if (std.mem.indexOfScalar(u8, "[],(){}", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
-            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}\\\"@", b) != null or
+            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}\\\"@$", b) != null or
                 b == '|') break;
         }
         return self.source[start..self.offset];

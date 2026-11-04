@@ -27,6 +27,20 @@ test "strings" {
     try expect_output("\\ not_eq,@a",
         \\"abac"
     , "[0,1,0,1]");
+
+    // multi line strings
+    try expect_output(
+        \\ \ id
+    ,
+        \\$a
+        \\$b
+        \\$c
+    , "[97,10,98,10,99]");
+    try expect_output(
+        \\\ id
+    ,
+        \\$"a"
+    , "[34,97,34]");
 }
 
 test "Partial application" {
