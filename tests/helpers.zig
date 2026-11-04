@@ -1,7 +1,7 @@
 const std = @import("std");
 const language = @import("anathame");
 
-pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8) !void {
+pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8, source: std.builtin.SourceLocation) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -16,7 +16,11 @@ pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8
             if (i > 0) try output.writer.writeAll("\n; ");
             try language.runtime.writeValue(&output.writer, value);
         }
-        std.debug.print("{s}\n", .{output.written()});
+        const test_name = if (std.mem.indexOf(u8, source.fn_name, "test.")) |index|
+            source.fn_name[index + "test.".len ..]
+        else
+            source.fn_name;
+        std.debug.print("file {s}, test {s}\noutput:\n{s}\n", .{ std.fs.path.basename(source.file), test_name, output.written() });
     }
 }
 

@@ -14,5 +14,5 @@ test "day 1" {
         \\$L82
     ,
         \\ \ not_eq,@\n |s partition
-    , null);
+    , null, @src());
 }
