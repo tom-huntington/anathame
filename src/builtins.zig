@@ -26,3 +26,7 @@ pub fn couple(a: std.mem.Allocator, x: Value, y: Value) !Value {
     @memcpy(data[x.data.len..], y.data);
     return .{ .data = data, .shape = shape };
 }
+
+pub fn id(_: std.mem.Allocator, x: Value, _: Value) !Value {
+    return x;
+}

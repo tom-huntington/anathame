@@ -7,3 +7,13 @@ test "N combinator" {
 test "S combinator" {
     try run_test("sq couple", "2", "[4, 2]");
 }
+
+test "character" {
+    try run_test("id", "@a", "97");
+}
+
+test "strings" {
+    try run_test("id",
+        \\"ab"
+    , "[97,98]");
+}

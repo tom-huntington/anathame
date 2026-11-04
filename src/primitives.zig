@@ -2,7 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
-    return if (std.mem.eql(u8, name, "sq")) 1 else 2;
+    return if (std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) 1 else 2;
 }
 // ASCII names snapshotted from uiua/site/primitives.json.
 pub const names = [_][]const u8{
@@ -259,6 +259,7 @@ pub fn lookup(name: []const u8) ?Function {
     inline for (comptime std.meta.declarations(builtins)) |decl| {
         if (std.mem.eql(u8, name, decl)) return &@field(builtins, decl);
     }
+    if (std.mem.eql(u8, name, "identity")) return &builtins.id;
     if (std.mem.eql(u8, name, "multiply")) return &builtins.mul;
     return null;
 }

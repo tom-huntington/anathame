@@ -7,7 +7,7 @@ Requires Zig 0.17 and (for differential tests) Uiua on PATH.
 - `zig build test-uiua -- 42 100`: reproduce or expand coverage with a seed and case count.
 - `zig build run -- "mul" 2 3`: evaluate a binary function.
 
-Conformance tests live in `tests/combinators.zig`. Each test calls
+Conformance tests live in `tests/specification.zig`. Each test calls
 `try run_test(code, input, expected)`; the helper owns and frees its arena
 and compares parsed output shapes and numbers. Expected arrays accept commas.
 
@@ -17,10 +17,13 @@ Thus `mul couple` with input `2 3` produces `[6 2]` (N combinator).
 A unary first function forms `(f g)(x) = g(f(x),x)` (S combinator):
 `sq couple` with input `2` produces `[4 2]`. `sq` squares each element,
 equivalent to Uiua's self-multiply (`˙×`).
-Inputs contain one scalar for `sq` or two for binary functions, written
-`2 3` in the runtime and as separate CLI arguments.
-Array arguments are rejected for now. Array values are rectangular;
-`couple` returns an array. Code contains function
+Inputs contain one value for `sq`, `id`, or `identity`, and two for binary
+functions. Values can be numbers, rectangular arrays, characters (`@a`), or
+quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
+are vectors of code points. Literals support escapes such as `\n`, `\t`,
+`\\`, `\"`, and `\u{1F600}`. `id` returns its argument unchanged.
+Separate input values with whitespace or semicolons outside literals.
+Code contains function
 names. Individual primitives follow Uiua argument order and array semantics;
 Anathame composition intentionally differs from Uiua stack execution.
 

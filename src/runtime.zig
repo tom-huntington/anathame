@@ -9,17 +9,19 @@ pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]co
         else => return error.ExpectedFunction,
     };
     const arity = @import("primitives.zig").arity(first_name);
-    var arguments = std.mem.tokenizeAny(u8, input, " ;\t\r\n");
-    const left = arguments.next() orelse return error.WrongNumberOfArguments;
-    const right = if (arity == 2) arguments.next() orelse return error.WrongNumberOfArguments else left;
-    if (arguments.next() != null) return error.WrongNumberOfArguments;
-    const xv = try scalarArgument(left);
-    const yv = try scalarArgument(right);
+    const arguments = try @import("parser.zig").parse(a, input);
+    if (arguments.len != arity) return error.WrongNumberOfArguments;
+    const x = switch (arguments[0]) {
+        .literal => |value| value,
+        else => return error.InvalidInput,
+    };
+    var result = if (arity == 1) x else switch (arguments[1]) {
+        .literal => |value| value,
+        else => return error.InvalidInput,
+    };
     var memory = try @import("reserved_bump_allocator.zig").ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const checkpoint = memory.checkpoint();
-    const x: Value = .{ .data = &.{xv}, .shape = &.{} };
-    var result: Value = .{ .data = &.{yv}, .shape = &.{} };
     for (instructions, 0..) |instruction, i| {
         const name = switch (instruction) {
             .primitive => |name| name,
@@ -40,12 +42,4 @@ pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
         try writeValue(w, .{ .data = value.data[i * stride ..][0..stride], .shape = value.shape[1..] });
     }
     try w.writeAll("]");
-}
-
-fn scalarArgument(source: []const u8) !f64 {
-    const text = std.mem.trim(u8, source, " \t\r\n");
-    if (std.mem.indexOfAny(u8, text, "[]") != null) return error.ArrayArgumentsNotSupported;
-    const value = std.fmt.parseFloat(f64, text) catch return error.InvalidInput;
-    if (!std.math.isFinite(value)) return error.InvalidInput;
-    return value;
 }

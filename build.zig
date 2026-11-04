@@ -141,7 +141,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_tests.step);
     const combinator_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tests/combinators.zig"),
+            .root_source_file = b.path("tests/specification.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{.{ .name = "anathame", .module = mod }},
