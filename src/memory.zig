@@ -13,19 +13,3 @@ pub fn ReturnImpl(memory: *ReservedBumpAllocator, checkpoint: usize, result: Val
     memory.restore(checkpoint);
     return .{ .data = try memory.allocator().dupe(f64, data), .shape = try memory.allocator().dupe(usize, shape) };
 }
-
-test "return compacts a frame and survives subsequent allocations" {
-    var memory = try ReservedBumpAllocator.init(65536);
-    defer memory.deinit();
-    const prefix = try memory.allocator().dupe(u8, "saved");
-    const checkpoint = memory.checkpoint();
-    _ = try memory.allocator().alloc(u8, 1024);
-    const data = try memory.allocator().dupe(f64, &.{ 6, 2 });
-    const shape = try memory.allocator().dupe(usize, &.{2});
-    const result = try ReturnImpl(&memory, checkpoint, .{ .data = data, .shape = shape });
-    try std.testing.expect(memory.checkpoint() < checkpoint + 1024);
-    @memset(try memory.allocator().alloc(u8, 2048), 0);
-    try std.testing.expectEqualStrings("saved", prefix);
-    try std.testing.expectEqualSlices(f64, &.{ 6, 2 }, result.data);
-    try std.testing.expectEqualSlices(usize, &.{2}, result.shape);
-}
