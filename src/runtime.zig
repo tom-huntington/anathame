@@ -1,7 +1,7 @@
 const std = @import("std");
 const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
-pub const Value = struct { data: []const f64, shape: []const usize };
-pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, expected: []const u8) !void {
+pub const Value = struct { data: []const f64 = &.{}, shape: []const usize = &.{}, tuple: ?[]const Value = null };
+pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, expected: anytype) !void {
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     var arguments: [input.len][]const u8 = undefined;
@@ -12,14 +12,20 @@ pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, exp
     try expectOutput(a, actual, expected);
 }
 
-pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []const u8) !void {
-    const instructions = try @import("parser.zig").parse(a, expected);
+pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anytype) !void {
+    const source = if (comptime @typeInfo(@TypeOf(expected)) == .@"struct") blk: {
+        var parts: [expected.len][]const u8 = undefined;
+        inline for (expected, 0..) |part, i| parts[i] = part;
+        break :blk try std.mem.join(a, "\n; ", &parts);
+    } else @as([]const u8, expected);
+    const instructions = try @import("parser.zig").parse(a, source);
     if (instructions.len != actual.len) return error.OutputMismatch;
     for (instructions, actual) |instruction, value| {
         const want = switch (instruction) {
             .literal => |literal| literal,
             else => return error.ExpectedLiteral,
         };
+        if (want.tuple != null or value.tuple != null) return error.ExpectedArray;
         if (!std.mem.eql(usize, want.shape, value.shape) or !std.mem.eql(f64, want.data, value.data))
             return error.OutputMismatch;
     }
@@ -44,7 +50,7 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]cons
     const x = arguments[0];
     const y = if (arity == 1) x else arguments[1];
     const result = try evaluateScope(memory, program.scope.instructions, x, y);
-    return a.dupe(Value, &.{result});
+    return if (result.tuple) |tuple| tuple else a.dupe(Value, &.{result});
 }
 
 fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("parser.zig").Instruction, x: Value, y: Value) anyerror!Value {
@@ -86,6 +92,14 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     return result;
 }
 pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
+    if (value.tuple) |tuple| {
+        try w.writeAll("( ");
+        for (tuple, 0..) |item, i| {
+            if (i > 0) try w.writeAll(", ");
+            try writeValue(w, item);
+        }
+        return w.writeAll(" )");
+    }
     if (value.shape.len == 0) return w.print("{d}", .{value.data[0]});
     try w.writeAll("[");
     const stride = if (value.shape[0] == 0) 0 else value.data.len / value.shape[0];

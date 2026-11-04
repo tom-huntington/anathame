@@ -57,6 +57,15 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const end = if (is_implicit) close else if (monadic) ")" else "}";
             const body = try sequence(a, lexer, end, is_implicit);
             if (body.len == 0) return error.InvalidSyntax;
+            if (monadic and !is_implicit and body[0] == .literal) {
+                const items = try a.alloc(Value, body.len);
+                for (body, items) |instruction, *item| item.* = switch (instruction) {
+                    .literal => |value| value,
+                    else => return error.ExpectedLiteral,
+                };
+                try result.append(a, .{ .literal = .{ .tuple = items } });
+                continue;
+            }
             for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
@@ -64,6 +73,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
+            if (previous.* == .literal and close != null and std.mem.eql(u8, close.?, ")")) continue;
             const name = switch (previous.*) {
                 .primitive => |name| name,
                 else => return error.ExpectedFunction,

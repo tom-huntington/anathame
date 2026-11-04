@@ -1,3 +1,4 @@
+const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
 
@@ -20,22 +21,20 @@ test "character" {
 }
 
 test "strings" {
-    try expect_output("\\ id", .{
+    try literal_eval(
         \\"ab"
-    }, "[97 98]");
+    , "[97 98]");
 
     try expect_output("\\ not_eq,@a", .{
         \\"abac"
     }, "[0 1 0 1]");
 
     // multi line strings
-    try expect_output(
-        \\ \ id
-    , .{
+    try literal_eval(
         \\$a
         \\$b
         \\$c
-    }, "[97 10 98 10 99]");
+    , "[97 10 98 10 99]");
     try expect_output(
         \\\ id
     , .{
@@ -65,8 +64,28 @@ test "partition" {
     , .{
         \\[1 2 3 4 5 6 7 8]
         ,
-        \\[0 0 2 2 1 1 3 3] 
-    },
+        \\[0 0 2 2 1 1 3 3]
+    }, .{
         \\ [3_4 5_6 7_8]
-    );
+    });
+
+    // uiua has boxed arrays
+    // we return a tuple representing a jagged array
+    try expect_output(
+        \\ \\ partition
+    , .{
+        \\[1 2 3 4 5 6 7]
+        ,
+        \\[0 3 3 3 2 2 1]
+    }, .{
+        \\ [2 3 4 5 6 7]
+        ,
+        \\ [0 3 5 6]
+    });
+}
+
+test "tuple literal" {
+    try literal_eval(
+        \\ ( 1, [2 3] )
+    , .{ "1", "[2 3]" });
 }

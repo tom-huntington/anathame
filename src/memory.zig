@@ -8,8 +8,16 @@ const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBum
 pub fn ReturnImpl(memory: *ReservedBumpAllocator, checkpoint: usize, result: Value) !Value {
     var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer scratch.deinit();
-    const data = try scratch.allocator().dupe(f64, result.data);
-    const shape = try scratch.allocator().dupe(usize, result.shape);
+    const snapshot = try clone(scratch.allocator(), result);
     memory.restore(checkpoint);
-    return .{ .data = try memory.allocator().dupe(f64, data), .shape = try memory.allocator().dupe(usize, shape) };
+    return clone(memory.allocator(), snapshot);
+}
+
+fn clone(a: std.mem.Allocator, value: Value) anyerror!Value {
+    if (value.tuple) |tuple| {
+        const items = try a.alloc(Value, tuple.len);
+        for (tuple, items) |item, *copy| copy.* = try clone(a, item);
+        return .{ .tuple = items };
+    }
+    return .{ .data = try a.dupe(f64, value.data), .shape = try a.dupe(usize, value.shape) };
 }
