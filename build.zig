@@ -148,6 +148,15 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(combinator_tests).step);
+    const aoc_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/aoc.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "anathame", .module = mod }},
+        }),
+    });
+    test_step.dependOn(&b.addRunArtifact(aoc_tests).step);
     const differential = b.addExecutable(.{
         .name = "uiua-functions",
         .root_module = b.createModule(.{
