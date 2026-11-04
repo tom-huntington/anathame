@@ -31,10 +31,10 @@ pub const Lexer = struct {
             }
             return error.UnclosedLiteral;
         }
-        if (c == '[' or c == ']') return self.source[start..self.offset];
+        if (c == '[' or c == ']' or c == ',') return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
-            if (std.ascii.isWhitespace(b) or b == ';' or b == '[' or b == ']' or b == '"' or b == '@') break;
+            if (std.ascii.isWhitespace(b) or b == ';' or b == '[' or b == ']' or b == ',' or b == '"' or b == '@') break;
         }
         return self.source[start..self.offset];
     }

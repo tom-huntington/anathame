@@ -6,9 +6,10 @@ pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]co
     if (instructions.len == 0) return error.EmptyProgram;
     const first_name = switch (instructions[0]) {
         .primitive => |name| name,
+        .partial => |partial| partial.name,
         else => return error.ExpectedFunction,
     };
-    const arity = @import("primitives.zig").arity(first_name);
+    const arity = if (instructions[0] == .partial) 1 else @import("primitives.zig").arity(first_name);
     const arguments = try @import("parser.zig").parse(a, input);
     if (arguments.len != arity) return error.WrongNumberOfArguments;
     const x = switch (arguments[0]) {
@@ -25,10 +26,13 @@ pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]co
     for (instructions, 0..) |instruction, i| {
         const name = switch (instruction) {
             .primitive => |name| name,
+            .partial => |partial| partial.name,
             else => return error.ExpectedFunction,
         };
         const function = @import("primitives.zig").lookup(name) orelse return error.UnimplementedPrimitive;
-        const temporary = if (i == 0) try function(memory.allocator(), x, result) else try function(memory.allocator(), result, x);
+        const temporary = if (instruction == .partial)
+            try function(memory.allocator(), result, instruction.partial.argument)
+        else if (i == 0) try function(memory.allocator(), x, result) else try function(memory.allocator(), result, x);
         result = try @import("memory.zig").ReturnImpl(&memory, checkpoint, temporary);
     }
     return a.dupe(Value, &.{.{ .data = try a.dupe(f64, result.data), .shape = try a.dupe(usize, result.shape) }});

@@ -17,3 +17,7 @@ test "strings" {
         \\"ab"
     , "[97,98]");
 }
+
+test "Partial application" {
+    try run_test("mul,2", "3", "6");
+}
