@@ -70,14 +70,12 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             };
             if (@import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
-            const value = if (std.mem.eql(u8, argument, "[")) try array(a, lexer) else (try literal(a, argument)) orelse return error.ExpectedLiteral;
+            const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
             previous.* = .{ .partial = .{ .name = name, .argument = value } };
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
-        if (std.mem.eql(u8, token, "[")) {
-            try result.append(a, .{ .literal = try array(a, lexer) });
-        } else if (try literal(a, token)) |value| {
+        if (try strand(a, lexer, token)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
             if (!@import("primitives.zig").known(token)) return error.UnknownPrimitive;
@@ -99,7 +97,7 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
             if (child_shape) |s| @memcpy(shape[1..], s);
             return .{ .data = try data.toOwnedSlice(a), .shape = shape };
         }
-        const child: Value = if (std.mem.eql(u8, token, "[")) try array(a, lexer) else (try literal(a, token)) orelse return error.InvalidNumber;
+        const child = (try strand(a, lexer, token)) orelse return error.InvalidNumber;
         if (child_shape) |s| {
             if (!std.mem.eql(usize, s, child.shape)) return error.RaggedArray;
         } else child_shape = child.shape;
@@ -107,6 +105,32 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
         count += 1;
     }
     return error.UnclosedArray;
+}
+
+// Strands stack equally shaped literals along a new leading axis.
+fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Value {
+    const first = if (std.mem.eql(u8, token, "[")) try array(a, lexer) else (try literal(a, token)) orelse return null;
+    var data: std.ArrayList(f64) = .empty;
+    var count: usize = 1;
+    while (true) {
+        const offset = lexer.offset;
+        const separator = try lexer.next();
+        if (separator == null or !std.mem.eql(u8, separator.?, "_")) {
+            lexer.offset = offset;
+            break;
+        }
+        if (count == 1) try data.appendSlice(a, first.data);
+        const next = (try lexer.next()) orelse return error.ExpectedLiteral;
+        const child = if (std.mem.eql(u8, next, "[")) try array(a, lexer) else (try literal(a, next)) orelse return error.ExpectedLiteral;
+        if (!std.mem.eql(usize, first.shape, child.shape)) return error.RaggedArray;
+        try data.appendSlice(a, child.data);
+        count += 1;
+    }
+    if (count == 1) return first;
+    const shape = try a.alloc(usize, first.shape.len + 1);
+    shape[0] = count;
+    @memcpy(shape[1..], first.shape);
+    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 
 fn literal(a: std.mem.Allocator, token: []const u8) !?Value {

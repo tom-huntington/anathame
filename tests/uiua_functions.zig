@@ -10,14 +10,25 @@ pub fn main(init: std.process.Init) !void {
     const random = prng.random();
     var failures: usize = 0;
     for (0..cases) |i| {
-        for ([_][]const u8{ "mul", "couple" }) |code| {
+        for ([_][]const u8{ "mul", "couple", "partition" }) |code| {
             var arena = std.heap.ArenaAllocator.init(a);
             defer arena.deinit();
             const allocator = arena.allocator();
             const x = @as(f64, @floatFromInt(random.intRangeAtMost(i32, -48, 48))) / 4;
             const y = @as(f64, @floatFromInt(random.intRangeAtMost(i32, -48, 48))) / 4;
-            const input = try std.fmt.allocPrint(allocator, "{d} {d}", .{ x, y });
-            const source = try std.fmt.allocPrint(allocator, "&p {s} {s}", .{ code, input });
+            const is_partition = std.mem.eql(u8, code, "partition");
+            const input = if (is_partition) switch (i % 6) {
+                0 => "[1 2 3 4 5 6 7 8] [0 0 2 2 1 1 3 3]",
+                1 => "[1 2 3 4 5 6] [1 1 -1 0 1 1]",
+                2 => "[1 2 3] [0 -2 0]",
+                3 => "[] []",
+                4 => "[1_2 3_4 5_6 7_8] [2 2 1 1]",
+                else => try std.fmt.allocPrint(allocator, "[{d}_{d} {d}_{d}] [1 2]", .{ x, y, y, x }),
+            } else try std.fmt.allocPrint(allocator, "{d} {d}", .{ x, y });
+            const source = if (is_partition) blk: {
+                const split = std.mem.lastIndexOf(u8, input, " [").?;
+                break :blk try std.fmt.allocPrint(allocator, "&p partition identity {s} {s}", .{ input[split + 1 ..], input[0..split] });
+            } else try std.fmt.allocPrint(allocator, "&p {s} {s}", .{ code, input });
             const uiua_source = try std.mem.replaceOwned(u8, allocator, source, "-", "¯");
             const oracle = try std.process.run(allocator, init.io, .{ .argv = &.{ "uiua", "eval", uiua_source } });
             switch (oracle.term) {
