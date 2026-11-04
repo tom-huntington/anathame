@@ -25,3 +25,15 @@ pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
     values[1] = .{ .data = x.data[split * row_size ..], .shape = right_shape };
     return .{ .tuple = values };
 }
+
+/// Take rows from the front, or from the back for a negative count.
+pub fn take(a: std.mem.Allocator, x: Value, count: Value) !Value {
+    const parts = try split_at(a, x, count);
+    return parts.tuple.?[if (count.data[0] < 0) @as(usize, 1) else 0];
+}
+
+/// Drop rows from the front, or from the back for a negative count.
+pub fn drop(a: std.mem.Allocator, x: Value, count: Value) !Value {
+    const parts = try split_at(a, x, count);
+    return parts.tuple.?[if (count.data[0] < 0) @as(usize, 0) else 1];
+}

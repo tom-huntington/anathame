@@ -22,7 +22,11 @@ pub const Lexer = struct {
             }
         }
         if (c == '|' and self.offset < self.source.len) {
-            self.offset += 1;
+            if (self.source[self.offset] == '>') {
+                self.offset += 1;
+            } else {
+                while (self.offset < self.source.len and std.ascii.isAlphabetic(self.source[self.offset])) self.offset += 1;
+            }
             return self.source[start..self.offset];
         }
         if (c == '"' or c == '@') {

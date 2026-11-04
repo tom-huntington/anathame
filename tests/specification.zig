@@ -99,11 +99,12 @@ test "builtins" {
     try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
 }
 
-test "2-tuple composition" {
-    // |b will compose function returning 2-tuple with dyadic function
-    try expect_output("\\\\ split_at,2 |b mul", .{ "[1 2 3 4]", "2" }, .{"[3 8]"});
-    // implicit |b
-    try expect_output("\\\\ split_at,2 mul", .{ "[1 2 3 4]", "2" }, .{"[3 8]"});
+test "Phi combinator" {
+    // phi combinator 112.1 (f,g,h) = x -> h(f(x),g(x))
+    try expect_output("\\ take,2 |phi drop,2 mul", .{"[1 2 3 4]"}, .{"[3 8]"});
+    // if instead first argument returns 2-tuple (denoted 1²) we have
+    // phi combinator 1²2.1 (f,g) = x -> g(*f(x))
+    try expect_output("\\ split_at,2 |phi mul", .{"[1 2 3 4]"}, .{"[3 8]"});
 }
 
 test "Keywords" {

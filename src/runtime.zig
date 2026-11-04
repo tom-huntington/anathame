@@ -58,28 +58,36 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     const checkpoint = memory.checkpoint();
     var retain_x = false;
     var first_function = true;
-    for (instructions) |instruction| {
+    var skip: usize = 0;
+    for (instructions, 0..) |instruction, index| {
+        if (skip > 0) {
+            skip -= 1;
+            continue;
+        }
+        if (instruction == .combinator and instruction.combinator == .phi) {
+            const remaining = instructions[index + 1 ..];
+            const temporary = if (result.tuple) |tuple| blk: {
+                if (tuple.len != 2) return error.WrongNumberOfArguments;
+                if (remaining.len < 1) return error.ExpectedFunction;
+                skip = 1;
+                break :blk try evaluateScope(memory, remaining[0..1], tuple[0], tuple[1]);
+            } else blk: {
+                if (remaining.len < 2) return error.ExpectedFunction;
+                const branch = try evaluateScope(memory, remaining[0..1], x, x);
+                skip = 2;
+                break :blk try evaluateScope(memory, remaining[1..2], result, branch);
+            };
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .combinator) {
             retain_x = instruction.combinator != .b;
             continue;
         }
-        var first_argument = if (first_function) x else result;
-        var second_argument = if (first_function) y else if (retain_x) x else result;
-        const arity = switch (instruction) {
-            .primitive => |name| @import("primitives.zig").arity(name),
-            .scope => |scope| scope.arity,
-            .partition => 2,
-            .partial => 1,
-            .cases => 1,
-            else => return error.ExpectedFunction,
-        };
-        if (!first_function and !retain_x and arity == 2) {
-            if (result.tuple) |tuple| {
-                if (tuple.len != 2) return error.WrongNumberOfArguments;
-                first_argument = tuple[0];
-                second_argument = tuple[1];
-            }
-        }
+        const first_argument = if (first_function) x else result;
+        const second_argument = if (first_function) y else if (retain_x) x else result;
         if (instruction == .cases) {
             const temporary = try cases(memory.allocator(), first_argument, instruction.cases);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
