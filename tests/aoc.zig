@@ -13,6 +13,6 @@ test "day 1" {
         \\$R14
         \\$L82
     ,
-        \\ \ not_eq,@\n |s partition
+        \\ \ not_eq,@\n |s partition take,1
     , null, @src());
 }

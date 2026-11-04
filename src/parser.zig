@@ -4,6 +4,7 @@ const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
     literal: Value,
     primitive: []const u8,
+    partition: *const Instruction,
     partial: struct { name: []const u8, argument: Value },
     combinator: enum { n, s, b },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
@@ -48,7 +49,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
             if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
             if (implicit) lexer.offset -= token.len;
-            return result.toOwnedSlice(a);
+            return bindFunctions(a, result.items);
         }
         const monadic = std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "\\");
         const dyadic = std.mem.eql(u8, token, "{") or std.mem.eql(u8, token, "\\\\");
@@ -84,8 +85,27 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
     }
     if (close != null and !implicit) return error.InvalidSyntax;
     if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
+    return bindFunctions(a, result.items);
+}
+// Fold from the right after partial applications have been parsed.
+fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]const Instruction {
+    var result: std.ArrayList(Instruction) = .empty;
+    var i = instructions.len;
+    while (i > 0) {
+        i -= 1;
+        const instruction = instructions[i];
+        if (instruction == .primitive and std.mem.eql(u8, instruction.primitive, "partition")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            try result.append(a, .{ .partition = function });
+        } else try result.append(a, instruction);
+    }
+    std.mem.reverse(Instruction, result.items);
     return result.toOwnedSlice(a);
 }
+
 fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 0;

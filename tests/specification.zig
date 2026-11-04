@@ -1,3 +1,4 @@
+const expected_output21 = @import("helpers.zig").expected_output21;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
@@ -60,7 +61,7 @@ test "reverse function application" {
 
 test "partition" {
     try expect_output(
-        \\ \\ partition
+        \\ \\ partition id
     , .{
         \\[1 2 3 4 5 6 7 8]
         ,
@@ -72,7 +73,7 @@ test "partition" {
     // uiua has boxed arrays
     // we return a tuple representing a jagged array
     try expect_output(
-        \\ \\ partition
+        \\ \\ partition id
     , .{
         \\[1 2 3 4 5 6 7]
         ,
@@ -88,4 +89,8 @@ test "tuple literal" {
     try literal_eval(
         \\ tup( 1, [2 3] )
     , .{ "1", "[2 3]" });
+}
+
+test "builtins from uiua" {
+    try expected_output21("\\\\ take", "[8 3 9 2 0]", "3", "[8 3 9]");
 }

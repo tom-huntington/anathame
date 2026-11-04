@@ -50,3 +50,7 @@ pub fn literal_eval(code: []const u8, expected: anytype) !void {
     const value = instructions[0].literal;
     try language.runtime.expectOutput(a, value.tuple orelse &.{value}, expected);
 }
+
+pub fn expected_output21(code: []const u8, first: []const u8, second: []const u8, expected: []const u8) !void {
+    try expect_output(code, .{ first, second }, expected);
+}

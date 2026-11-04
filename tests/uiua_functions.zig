@@ -42,7 +42,7 @@ pub fn main(init: std.process.Init) !void {
             const expected = try language.parser.parse(allocator, normalized);
             var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
             defer memory.deinit();
-            const program = try std.fmt.allocPrint(allocator, "{{ {s} }}", .{code});
+            const program = try std.fmt.allocPrint(allocator, "{{ {s} }}", .{if (is_partition) "partition id" else code});
             const actual = try language.runtime.evaluate(&memory, program, input);
             var passed = expected.len == actual.len;
             for (expected, 0..) |instruction, index| {

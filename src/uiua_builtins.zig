@@ -45,46 +45,37 @@ pub fn id(_: std.mem.Allocator, x: Value, _: Value) !Value {
     return x;
 }
 
-/// Stack positive marker runs; unequal runs return (rows, cumulative row offsets).
-pub fn partition(a: std.mem.Allocator, x: Value, markers: Value) !Value {
-    if (x.tuple != null or markers.tuple != null) return error.InvalidInput;
-    if (markers.shape.len != 1) return error.InvalidInput;
-    if (x.shape.len == 0 or x.shape[0] != markers.data.len) return error.ShapeMismatch;
-    for (markers.data) |marker| {
-        if (!std.math.isFinite(marker) or @trunc(marker) != marker or marker < -9223372036854775808.0 or marker >= 9223372036854775808.0) return error.InvalidInput;
+/// Uiua take: signed counts select leading/trailing rows on each indexed axis.
+/// Without a fill context, taking beyond an axis is an error.
+pub fn take(a: std.mem.Allocator, x: Value, counts: Value) !Value {
+    if (x.tuple != null or counts.tuple != null or counts.shape.len > 1) return error.InvalidInput;
+    const source_shape: []const usize = if (x.shape.len == 0) &.{1} else x.shape;
+    if (counts.data.len > source_shape.len) return error.ShapeMismatch;
+    const shape = try a.dupe(usize, source_shape);
+    const starts = try a.alloc(usize, shape.len);
+    @memset(starts, 0);
+    for (counts.data, 0..) |count, axis| {
+        if (!std.math.isFinite(count) or @trunc(count) != count) return error.InvalidInput;
+        if (@abs(count) > @as(f64, @floatFromInt(source_shape[axis]))) return error.ShapeMismatch;
+        const amount: usize = @intFromFloat(@abs(count));
+        shape[axis] = amount;
+        if (count < 0) starts[axis] = source_shape[axis] - amount;
     }
-    var data: std.ArrayList(f64) = .empty;
-    var offsets: std.ArrayList(f64) = .empty;
-    try offsets.append(a, 0);
-    var jagged = false;
-    var groups: usize = 0;
-    var group_len: usize = 0;
-    const row_len = if (x.shape[0] == 0) 0 else x.data.len / x.shape[0];
-    var i: usize = 0;
-    while (i < markers.data.len) {
-        const start = i;
-        const marker = markers.data[i];
-        i += 1;
-        while (i < markers.data.len and markers.data[i] == marker) : (i += 1) {}
-        if (marker <= 0) continue;
-        if (groups == 0) group_len = i - start else if (group_len != i - start) jagged = true;
-        groups += 1;
-        try data.appendSlice(a, x.data[start * row_len .. i * row_len]);
-        try offsets.append(a, offsets.items[offsets.items.len - 1] + @as(f64, @floatFromInt(i - start)));
+    var size: usize = 1;
+    for (shape) |dim| size = try std.math.mul(usize, size, dim);
+    const data = try a.alloc(f64, size);
+    for (data, 0..) |*item, index| {
+        var remaining = index;
+        var source_index: usize = 0;
+        var stride: usize = 1;
+        var axis = shape.len;
+        while (axis > 0) {
+            axis -= 1;
+            source_index += (remaining % shape[axis] + starts[axis]) * stride;
+            remaining /= shape[axis];
+            stride *= source_shape[axis];
+        }
+        item.* = x.data[source_index];
     }
-    // Uiua returns an empty list when there are no positive groups.
-    if (groups == 0) return .{ .data = &.{}, .shape = try a.dupe(usize, &.{0}) };
-    if (jagged) {
-        const shape = try a.dupe(usize, x.shape);
-        shape[0] = @intFromFloat(offsets.items[offsets.items.len - 1]);
-        const items = try a.alloc(Value, 2);
-        items[0] = .{ .data = try data.toOwnedSlice(a), .shape = shape };
-        items[1] = .{ .data = try offsets.toOwnedSlice(a), .shape = try a.dupe(usize, &.{groups + 1}) };
-        return .{ .tuple = items };
-    }
-    const shape = try a.alloc(usize, x.shape.len + 1);
-    shape[0] = groups;
-    shape[1] = group_len;
-    @memcpy(shape[2..], x.shape[1..]);
-    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+    return .{ .data = data, .shape = shape };
 }

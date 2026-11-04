@@ -65,6 +65,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         }
         const first_argument = if (first_function) x else result;
         const second_argument = if (first_function) y else if (retain_x) x else result;
+        if (instruction == .partition) {
+            const temporary = try partition(memory, first_argument, second_argument, instruction.partition);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .scope) {
             const defaults = instruction.scope.default_arguments;
             const first = if (defaults) |args| args[0] else first_argument;
@@ -82,7 +89,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         };
         const function = @import("primitives.zig").lookup(name) orelse return error.UnimplementedPrimitive;
         const temporary = if (instruction == .partial)
-            try function(memory.allocator(), result, instruction.partial.argument)
+            try function(memory.allocator(), first_argument, instruction.partial.argument)
         else
             try function(memory.allocator(), first_argument, second_argument);
         result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -108,4 +115,66 @@ pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
         try writeValue(w, .{ .data = value.data[i * stride ..][0..stride], .shape = value.shape[1..] });
     }
     try w.writeAll("]");
+}
+
+/// Stack positive marker runs; unequal runs return (rows, cumulative row offsets).
+fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+    const a = memory.allocator();
+    if (x.tuple != null or markers.tuple != null) return error.InvalidInput;
+    if (markers.shape.len != 1) return error.InvalidInput;
+    if (x.shape.len == 0 or x.shape[0] != markers.data.len) return error.ShapeMismatch;
+    for (markers.data) |marker| {
+        if (!std.math.isFinite(marker) or @trunc(marker) != marker or marker < -9223372036854775808.0 or marker >= 9223372036854775808.0) return error.InvalidInput;
+    }
+    var data: std.ArrayList(f64) = .empty;
+    var offsets: std.ArrayList(f64) = .empty;
+    try offsets.append(a, 0);
+    var jagged = false;
+    var groups: usize = 0;
+    var group_len: usize = 0;
+    const row_len = if (x.shape[0] == 0) 0 else x.data.len / x.shape[0];
+    var output_shape: ?[]const usize = null;
+    var scalar_output = false;
+    var i: usize = 0;
+    while (i < markers.data.len) {
+        const start = i;
+        const marker = markers.data[i];
+        i += 1;
+        while (i < markers.data.len and markers.data[i] == marker) : (i += 1) {}
+        if (marker <= 0) continue;
+        const run_shape = try a.dupe(usize, x.shape);
+        run_shape[0] = i - start;
+        const run: Value = .{ .data = x.data[start * row_len .. i * row_len], .shape = run_shape };
+        const mapped = try evaluateScope(memory, &.{function.*}, run, run);
+        if (mapped.tuple != null) return error.ExpectedArray;
+        const mapped_shape: []const usize = if (mapped.shape.len == 0) &.{1} else mapped.shape;
+        if (output_shape) |previous| {
+            if (scalar_output != (mapped.shape.len == 0)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, previous[1..], mapped_shape[1..])) return error.ShapeMismatch;
+            if (group_len != mapped_shape[0]) jagged = true;
+        } else {
+            output_shape = mapped_shape;
+            scalar_output = mapped.shape.len == 0;
+            group_len = mapped_shape[0];
+        }
+        groups += 1;
+        try data.appendSlice(a, mapped.data);
+        try offsets.append(a, offsets.items[offsets.items.len - 1] + @as(f64, @floatFromInt(mapped_shape[0])));
+    }
+    // Uiua returns an empty list when there are no positive groups.
+    if (groups == 0) return .{ .data = &.{}, .shape = try a.dupe(usize, &.{0}) };
+    if (jagged) {
+        const shape = try a.dupe(usize, output_shape.?);
+        shape[0] = @intFromFloat(offsets.items[offsets.items.len - 1]);
+        const items = try a.alloc(Value, 2);
+        items[0] = .{ .data = try data.toOwnedSlice(a), .shape = shape };
+        items[1] = .{ .data = try offsets.toOwnedSlice(a), .shape = try a.dupe(usize, &.{groups + 1}) };
+        return .{ .tuple = items };
+    }
+    if (scalar_output) return .{ .data = try data.toOwnedSlice(a), .shape = try a.dupe(usize, &.{groups}) };
+    const shape = try a.alloc(usize, output_shape.?.len + 1);
+    shape[0] = groups;
+    shape[1] = group_len;
+    @memcpy(shape[2..], output_shape.?[1..]);
+    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
