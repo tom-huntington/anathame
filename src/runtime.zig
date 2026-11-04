@@ -93,7 +93,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
 }
 pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
     if (value.tuple) |tuple| {
-        try w.writeAll("( ");
+        try w.writeAll("tup( ");
         for (tuple, 0..) |item, i| {
             if (i > 0) try w.writeAll(", ");
             try writeValue(w, item);

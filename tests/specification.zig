@@ -86,6 +86,6 @@ test "partition" {
 
 test "tuple literal" {
     try literal_eval(
-        \\ ( 1, [2 3] )
+        \\ tup( 1, [2 3] )
     , .{ "1", "[2 3]" });
 }

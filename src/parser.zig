@@ -57,15 +57,6 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const end = if (is_implicit) close else if (monadic) ")" else "}";
             const body = try sequence(a, lexer, end, is_implicit);
             if (body.len == 0) return error.InvalidSyntax;
-            if (monadic and !is_implicit and body[0] == .literal) {
-                const items = try a.alloc(Value, body.len);
-                for (body, items) |instruction, *item| item.* = switch (instruction) {
-                    .literal => |value| value,
-                    else => return error.ExpectedLiteral,
-                };
-                try result.append(a, .{ .literal = .{ .tuple = items } });
-                continue;
-            }
             for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
@@ -73,7 +64,6 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
-            if (previous.* == .literal and close != null and std.mem.eql(u8, close.?, ")")) continue;
             const name = switch (previous.*) {
                 .primitive => |name| name,
                 else => return error.ExpectedFunction,
@@ -108,6 +98,7 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
             return .{ .data = try data.toOwnedSlice(a), .shape = shape };
         }
         const child = (try strand(a, lexer, token)) orelse return error.InvalidNumber;
+        if (child.tuple != null) return error.ExpectedArray;
         if (child_shape) |s| {
             if (!std.mem.eql(usize, s, child.shape)) return error.RaggedArray;
         } else child_shape = child.shape;
@@ -117,9 +108,26 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
     return error.UnclosedArray;
 }
 
+// Tuple literals use a prefix to distinguish them from monadic scopes.
+fn tuple(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
+    const open = (try lexer.next()) orelse return error.InvalidSyntax;
+    if (!std.mem.eql(u8, open, "(")) return error.InvalidSyntax;
+    var items: std.ArrayList(Value) = .empty;
+    var token = (try lexer.next()) orelse return error.InvalidSyntax;
+    if (std.mem.eql(u8, token, ")")) return .{ .tuple = try items.toOwnedSlice(a) };
+    while (true) {
+        const item = (try strand(a, lexer, token)) orelse return error.ExpectedLiteral;
+        try items.append(a, item);
+        const separator = (try lexer.next()) orelse return error.InvalidSyntax;
+        if (std.mem.eql(u8, separator, ")")) return .{ .tuple = try items.toOwnedSlice(a) };
+        if (!std.mem.eql(u8, separator, ",")) return error.InvalidSyntax;
+        token = (try lexer.next()) orelse return error.ExpectedLiteral;
+    }
+}
+
 // Strands stack equally shaped literals along a new leading axis.
 fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Value {
-    const first = if (std.mem.eql(u8, token, "[")) try array(a, lexer) else (try literal(a, token)) orelse return null;
+    const first = if (std.mem.eql(u8, token, "tup")) try tuple(a, lexer) else if (std.mem.eql(u8, token, "[")) try array(a, lexer) else (try literal(a, token)) orelse return null;
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 1;
     while (true) {
@@ -129,6 +137,7 @@ fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Valu
             lexer.offset = offset;
             break;
         }
+        if (first.tuple != null) return error.ExpectedArray;
         if (count == 1) try data.appendSlice(a, first.data);
         const next = (try lexer.next()) orelse return error.ExpectedLiteral;
         const child = if (std.mem.eql(u8, next, "[")) try array(a, lexer) else (try literal(a, next)) orelse return error.ExpectedLiteral;
