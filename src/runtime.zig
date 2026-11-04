@@ -1,7 +1,7 @@
 const std = @import("std");
 const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
 pub const Value = struct { data: []const f64, shape: []const usize };
-pub fn run_test(a: std.mem.Allocator, code: []const u8, input: []const u8, expected: []const u8) !void {
+pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: []const u8, expected: []const u8) !void {
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const actual = try evaluate(&memory, code, input);
@@ -26,27 +26,33 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []con
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
 pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: []const u8) ![]const Value {
     const a = memory.allocator();
-    const instructions = try @import("parser.zig").parse(a, code);
-    if (instructions.len == 0) return error.EmptyProgram;
-    const first_name = switch (instructions[0]) {
-        .primitive => |name| name,
-        .partial => |partial| partial.name,
-        else => return error.ExpectedFunction,
-    };
-    const arity = if (instructions[0] == .partial) 1 else @import("primitives.zig").arity(first_name);
+    const program = try @import("parser.zig").parseProgram(a, code);
+    const arity = program.scope.arity;
     const arguments = try @import("parser.zig").parse(a, input);
     if (arguments.len != arity) return error.WrongNumberOfArguments;
     const x = switch (arguments[0]) {
         .literal => |value| value,
         else => return error.InvalidInput,
     };
-    var result = if (arity == 1) x else switch (arguments[1]) {
+    const y = if (arity == 1) x else switch (arguments[1]) {
         .literal => |value| value,
         else => return error.InvalidInput,
     };
-    // Keep parsed instructions and arguments before the evaluation frame.
+    const result = try evaluateScope(memory, program.scope.instructions, x, y);
+    return a.dupe(Value, &.{result});
+}
+
+fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("parser.zig").Instruction, x: Value, y: Value) anyerror!Value {
+    var result = y;
     const checkpoint = memory.checkpoint();
     for (instructions, 0..) |instruction, i| {
+        if (instruction == .scope) {
+            const first = if (i == 0) x else result;
+            const second = if (instruction.scope.arity == 1) first else if (i == 0) y else x;
+            const temporary = try evaluateScope(memory, instruction.scope.instructions, first, second);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            continue;
+        }
         const name = switch (instruction) {
             .primitive => |name| name,
             .partial => |partial| partial.name,
@@ -58,7 +64,7 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: []const
         else if (i == 0) try function(memory.allocator(), x, result) else try function(memory.allocator(), result, x);
         result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
     }
-    return a.dupe(Value, &.{result});
+    return result;
 }
 pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
     if (value.shape.len == 0) return w.print("{d}", .{value.data[0]});

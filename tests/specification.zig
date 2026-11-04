@@ -1,24 +1,28 @@
-const run_test = @import("helpers.zig").run_test;
+const expect_output = @import("helpers.zig").expect_output;
+const invalid_syntax = @import("helpers.zig").invalid_syntax;
 
 test "N combinator" {
-    try run_test("mul couple", "2 3", "[6, 2]");
+    try invalid_syntax("mul couple"); // scope arity must be declared
+    try expect_output("\\\\ mul couple", "2 3", "[6, 2]"); // double backslash \\ starts new dyadic scope that closes only when the current scope ends
+    try expect_output("{ mul couple }", "2 3", "[6, 2]"); // curley braces denote dyadic scope
 }
 
 test "S combinator" {
-    try run_test("sq couple", "2", "[4, 2]");
+    try expect_output("\\ sq couple", "2", "[4, 2]"); // backslash \ starts new monadic scope
+    try expect_output("( sq couple )", "2", "[4, 2]"); // parentheses denote monadic scope
 }
 
 test "character" {
-    try run_test("id", "@a", "97");
+    try expect_output("\\ id", "@a", "97");
 }
 
 test "strings" {
-    try run_test("id",
+    try expect_output("\\ id",
         \\"ab"
     , "[97,98]");
 }
 
 test "Partial application" {
-    try run_test("mul,2", "3", "6");
-    try run_test("sub,2", "3", "1"); // partial application binds second argument
+    try expect_output("\\ mul,2", "3", "6");
+    try expect_output("\\ sub,2", "3", "1"); // partial application binds second argument
 }

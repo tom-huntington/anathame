@@ -5,11 +5,38 @@ pub const Instruction = union(enum) {
     literal: Value,
     primitive: []const u8,
     partial: struct { name: []const u8, argument: Value },
+    scope: struct { arity: usize, instructions: []const Instruction },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
+    return sequence(a, &lexer, null, false);
+}
+
+pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
+    const instructions = try parse(a, source);
+    if (instructions.len != 1 or instructions[0] != .scope) return error.InvalidSyntax;
+    return instructions[0];
+}
+
+fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
+        if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
+            if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
+            if (implicit) lexer.offset -= token.len;
+            return result.toOwnedSlice(a);
+        }
+        const monadic = std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "\\");
+        const dyadic = std.mem.eql(u8, token, "{") or std.mem.eql(u8, token, "\\\\");
+        if (monadic or dyadic) {
+            const is_implicit = token[0] == '\\';
+            const end = if (is_implicit) close else if (monadic) ")" else "}";
+            const body = try sequence(a, lexer, end, is_implicit);
+            if (body.len == 0) return error.InvalidSyntax;
+            for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
+            try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
+            continue;
+        }
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
@@ -19,13 +46,13 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             };
             if (@import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
-            const value = if (std.mem.eql(u8, argument, "[")) try array(a, &lexer) else (try literal(a, argument)) orelse return error.ExpectedLiteral;
+            const value = if (std.mem.eql(u8, argument, "[")) try array(a, lexer) else (try literal(a, argument)) orelse return error.ExpectedLiteral;
             previous.* = .{ .partial = .{ .name = name, .argument = value } };
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
         if (std.mem.eql(u8, token, "[")) {
-            try result.append(a, .{ .literal = try array(a, &lexer) });
+            try result.append(a, .{ .literal = try array(a, lexer) });
         } else if (try literal(a, token)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
@@ -33,6 +60,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             try result.append(a, .{ .primitive = token });
         }
     }
+    if (close != null and !implicit) return error.InvalidSyntax;
     return result.toOwnedSlice(a);
 }
 fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
