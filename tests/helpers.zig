@@ -1,7 +1,7 @@
 const std = @import("std");
 const language = @import("anathame");
 
-pub fn expect_output(code: []const u8, input: ?[]const u8, expected: []const u8) !void {
+pub fn expect_output(code: []const u8, input: anytype, expected: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
