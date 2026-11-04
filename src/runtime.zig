@@ -57,6 +57,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     var result = y;
     const checkpoint = memory.checkpoint();
     var retain_x = false;
+    var reverse_arguments = false;
     var first_function = true;
     var skip: usize = 0;
     for (instructions, 0..) |instruction, index| {
@@ -92,10 +93,12 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         }
         if (instruction == .combinator) {
             retain_x = instruction.combinator != .b;
+            reverse_arguments = instruction.combinator == .S;
             continue;
         }
-        const first_argument = if (first_function) x else result;
-        const second_argument = if (first_function) y else if (retain_x) x else result;
+        const first_argument = if (first_function or reverse_arguments) x else result;
+        const second_argument = if (first_function) y else if (reverse_arguments) result else if (retain_x) x else result;
+        reverse_arguments = false;
         if (instruction == .cases) {
             const temporary = try cases(memory.allocator(), first_argument, instruction.cases);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
