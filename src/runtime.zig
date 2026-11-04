@@ -69,6 +69,14 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             const temporary = if (result.tuple) |tuple| blk: {
                 if (tuple.len != 2) return error.WrongNumberOfArguments;
                 if (remaining.len < 1) return error.ExpectedFunction;
+                if (functionArity(remaining[0]) == 1) {
+                    if (remaining.len < 3) return error.ExpectedFunction;
+                    if (functionArity(remaining[1]) != 1 or functionArity(remaining[2]) != 2) return error.WrongNumberOfArguments;
+                    const left = try evaluateScope(memory, remaining[0..1], tuple[0], tuple[0]);
+                    const right = try evaluateScope(memory, remaining[1..2], tuple[1], tuple[1]);
+                    skip = 3;
+                    break :blk try evaluateScope(memory, remaining[2..3], left, right);
+                }
                 skip = 1;
                 break :blk try evaluateScope(memory, remaining[0..1], tuple[0], tuple[1]);
             } else blk: {
@@ -127,6 +135,16 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         retain_x = false;
     }
     return result;
+}
+
+fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
+    return switch (instruction) {
+        .primitive => |name| @import("primitives.zig").arity(name),
+        .partial, .cases => 1,
+        .scope => |scope| scope.arity,
+        .partition => 2,
+        else => null,
+    };
 }
 fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
     if (input.tuple != null) return error.ExpectedArray;

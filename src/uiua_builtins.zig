@@ -1,5 +1,9 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
+pub fn add(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .add);
+}
+
 pub fn mul(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .multiply);
 }
@@ -12,7 +16,7 @@ pub fn not_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .not_equal);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { multiply, subtract, not_equal }) !Value {
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, not_equal }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
@@ -22,6 +26,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { mult
         const xi = if (x.shape.len == big.shape.len) i else i / (big.data.len / x.data.len);
         const yi = if (y.shape.len == big.shape.len) i else i / (big.data.len / y.data.len);
         d.* = switch (op) {
+            .add => x.data[xi] + y.data[yi],
             .multiply => x.data[xi] * y.data[yi],
             .subtract => x.data[xi] - y.data[yi],
             .not_equal => @floatFromInt(@intFromBool(x.data[xi] != y.data[yi])),

@@ -109,6 +109,8 @@ test "Phi combinator" {
     // if instead first argument returns 2-tuple (denoted 1²) we have
     // phi combinator 1²2.1 (f,g) = x -> g(*f(x))
     try expect_output("\\ split_at,2 |phi mul", .{"[1 2 3 4]"}, .{"[3 8]"});
+    // phi combinator 1²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
+    try expect_output("\\ split_at,2 |phi add,1 sq couple", .{"[1 2 3 4]"}, .{"[2_3 9_16]"});
 }
 
 test "Keywords" {
