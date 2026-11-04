@@ -1,6 +1,25 @@
 const std = @import("std");
 const language = @import("anathame");
 
+pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
+    defer memory.deinit();
+    const actual = try language.runtime.evaluate(&memory, code, input);
+    if (expected) |output| {
+        try language.runtime.expectOutput(a, actual, output);
+    } else {
+        var output = std.Io.Writer.Allocating.init(a);
+        for (actual, 0..) |value, i| {
+            if (i > 0) try output.writer.writeAll("\n; ");
+            try language.runtime.writeValue(&output.writer, value);
+        }
+        std.debug.print("{s}\n", .{output.written()});
+    }
+}
+
 pub fn expect_output(code: []const u8, input: anytype, expected: anytype) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
