@@ -5,6 +5,14 @@ pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
 }
 
 pub fn mul(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .multiply);
+}
+
+pub fn sub(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .subtract);
+}
+
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { multiply, subtract }) !Value {
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
     const big = if (x.shape.len >= y.shape.len) x else y;
@@ -12,7 +20,10 @@ pub fn mul(a: std.mem.Allocator, x: Value, y: Value) !Value {
     for (data, 0..) |*d, i| {
         const xi = if (x.shape.len == big.shape.len) i else i / (big.data.len / x.data.len);
         const yi = if (y.shape.len == big.shape.len) i else i / (big.data.len / y.data.len);
-        d.* = x.data[xi] * y.data[yi];
+        d.* = switch (op) {
+            .multiply => x.data[xi] * y.data[yi],
+            .subtract => x.data[xi] - y.data[yi],
+        };
     }
     return .{ .data = data, .shape = try a.dupe(usize, big.shape) };
 }

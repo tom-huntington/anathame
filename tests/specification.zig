@@ -20,4 +20,5 @@ test "strings" {
 
 test "Partial application" {
     try run_test("mul,2", "3", "6");
+    try run_test("sub,2", "3", "1"); // partial application binds second argument
 }
