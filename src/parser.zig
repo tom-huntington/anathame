@@ -5,7 +5,7 @@ pub const Instruction = union(enum) {
     literal: Value,
     primitive: []const u8,
     partial: struct { name: []const u8, argument: Value },
-    scope: struct { arity: usize, instructions: []const Instruction },
+    scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
@@ -21,6 +21,22 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
+        if (std.mem.eql(u8, token, "|>")) {
+            if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
+            const arguments = try a.alloc(Value, result.items.len);
+            for (result.items, arguments) |instruction, *argument| {
+                argument.* = switch (instruction) {
+                    .literal => |value| value,
+                    else => return error.ExpectedLiteral,
+                };
+            }
+            const body = try sequence(a, lexer, close, implicit);
+            if (body.len != 1 or body[0] != .scope) return error.ExpectedFunction;
+            var application = body[0];
+            application.scope.arity = arguments.len;
+            application.scope.default_arguments = arguments;
+            return a.dupe(Instruction, &.{application});
+        }
         if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
             if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
             if (implicit) lexer.offset -= token.len;

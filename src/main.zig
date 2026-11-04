@@ -5,12 +5,12 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(a);
     const is_test = args.len >= 2 and std.mem.eql(u8, args[1], "test");
     const is_eval = args.len >= 2 and std.mem.eql(u8, args[1], "eval");
-    if ((!is_eval and !is_test) or args.len < (if (is_test) @as(usize, 5) else 4)) {
-        std.debug.print("Usage: anathame eval <code> <first-value> [second-value]\n       anathame test <code> <first-value> [second-value] <expected>\n", .{});
+    if ((!is_eval and !is_test) or args.len < (if (is_test) @as(usize, 4) else 3)) {
+        std.debug.print("Usage: anathame eval <code> [first-value] [second-value]\n       anathame test <code> [first-value] [second-value] <expected>\n", .{});
         return error.InvalidArguments;
     }
     const input_end = if (is_test) args.len - 1 else args.len;
-    const input = try std.mem.join(a, "; ", args[3..input_end]);
+    const input = if (input_end == 3) null else try std.mem.join(a, "; ", args[3..input_end]);
     var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const values = runtime.evaluate(&memory, args[2], input) catch |err| {

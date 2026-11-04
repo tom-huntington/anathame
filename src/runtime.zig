@@ -1,7 +1,7 @@
 const std = @import("std");
 const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
 pub const Value = struct { data: []const f64, shape: []const usize };
-pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: []const u8, expected: []const u8) !void {
+pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: ?[]const u8, expected: []const u8) !void {
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const actual = try evaluate(&memory, code, input);
@@ -24,20 +24,22 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []con
 
 /// Trains retain x: (f g)(x,y) = g(f(x,y),x), or (f g)(x) = g(f(x),x).
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
-pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: []const u8) ![]const Value {
+pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]const u8) ![]const Value {
     const a = memory.allocator();
     const program = try @import("parser.zig").parseProgram(a, code);
     const arity = program.scope.arity;
-    const arguments = try @import("parser.zig").parse(a, input);
+    const arguments = if (input) |source| blk: {
+        const parsed = try @import("parser.zig").parse(a, source);
+        const values = try a.alloc(Value, parsed.len);
+        for (parsed, values) |instruction, *value| value.* = switch (instruction) {
+            .literal => |literal| literal,
+            else => return error.InvalidInput,
+        };
+        break :blk values;
+    } else program.scope.default_arguments orelse return error.WrongNumberOfArguments;
     if (arguments.len != arity) return error.WrongNumberOfArguments;
-    const x = switch (arguments[0]) {
-        .literal => |value| value,
-        else => return error.InvalidInput,
-    };
-    const y = if (arity == 1) x else switch (arguments[1]) {
-        .literal => |value| value,
-        else => return error.InvalidInput,
-    };
+    const x = arguments[0];
+    const y = if (arity == 1) x else arguments[1];
     const result = try evaluateScope(memory, program.scope.instructions, x, y);
     return a.dupe(Value, &.{result});
 }
@@ -47,8 +49,9 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     const checkpoint = memory.checkpoint();
     for (instructions, 0..) |instruction, i| {
         if (instruction == .scope) {
-            const first = if (i == 0) x else result;
-            const second = if (instruction.scope.arity == 1) first else if (i == 0) y else x;
+            const defaults = instruction.scope.default_arguments;
+            const first = if (defaults) |args| args[0] else if (i == 0) x else result;
+            const second = if (instruction.scope.arity == 1) first else if (defaults) |args| args[1] else if (i == 0) y else x;
             const temporary = try evaluateScope(memory, instruction.scope.instructions, first, second);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             continue;

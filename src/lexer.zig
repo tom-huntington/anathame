@@ -8,6 +8,10 @@ pub const Lexer = struct {
         const start = self.offset;
         const c = self.source[self.offset];
         self.offset += 1;
+        if (c == '|' and self.offset < self.source.len and self.source[self.offset] == '>') {
+            self.offset += 1;
+            return self.source[start..self.offset];
+        }
         if (c == '"' or c == '@') {
             while (self.offset < self.source.len) {
                 const b = self.source[self.offset];
@@ -38,7 +42,8 @@ pub const Lexer = struct {
         if (std.mem.indexOfScalar(u8, "[],(){}", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
-            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}\\\"@", b) != null) break;
+            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}\\\"@", b) != null or
+                (b == '|' and self.offset + 1 < self.source.len and self.source[self.offset + 1] == '>')) break;
         }
         return self.source[start..self.offset];
     }

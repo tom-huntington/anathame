@@ -30,3 +30,14 @@ test "Partial application" {
     try expect_output("\\ mul,2", "3", "6");
     try expect_output("\\ sub,2", "3", "1"); // partial application binds second argument
 }
+
+test "reverse function application" {
+    try expect_output(
+        \\ 2 3 |> \ mul couple
+    , null, "[6,2]");
+
+    // when we have |> at top level it specifies default arguments
+    try expect_output(
+        \\ 2 3 |> \ mul couple
+    , "5 7", "[35,5]");
+}
