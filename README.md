@@ -5,7 +5,8 @@ Requires Zig 0.17 and (for differential tests) Uiua on PATH.
 - `zig build test`: Zig unit tests and combinator conformance tests.
 - `zig build test-uiua`: generated Zig differential tests against Uiua (seed 1729, 30 cases per primitive).
 - `zig build test-uiua -- 42 100`: reproduce or expand coverage with a seed and case count.
-- `zig build run -- "mul" 2 3`: evaluate a binary function.
+- `zig build run -- eval "mul" 2 3`: evaluate a binary function.
+- `zig build run -- test "mul couple" 2 3 "[6, 2]"`: compare the result with the final expected-output argument. Success is silent; a mismatch reports `OutputMismatch`, prints the actual output, and exits with status 1.
 
 Conformance tests live in `tests/specification.zig`. Each test calls
 `try run_test(code, input, expected)`; the helper owns and frees its arena

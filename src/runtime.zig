@@ -1,5 +1,24 @@
 const std = @import("std");
 pub const Value = struct { data: []const f64, shape: []const usize };
+pub fn run_test(a: std.mem.Allocator, code: []const u8, input: []const u8, expected: []const u8) !void {
+    const actual = try evaluate(a, code, input);
+    try expectOutput(a, actual, expected);
+}
+
+pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []const u8) !void {
+    const normalized = try std.mem.replaceOwned(u8, a, expected, ",", " ");
+    const instructions = try @import("parser.zig").parse(a, normalized);
+    if (instructions.len != actual.len) return error.OutputMismatch;
+    for (instructions, actual) |instruction, value| {
+        const want = switch (instruction) {
+            .literal => |literal| literal,
+            else => return error.ExpectedLiteral,
+        };
+        if (!std.mem.eql(usize, want.shape, value.shape) or !std.mem.eql(f64, want.data, value.data))
+            return error.OutputMismatch;
+    }
+}
+
 /// Trains retain x: (f g)(x,y) = g(f(x,y),x), or (f g)(x) = g(f(x),x).
 pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]const Value {
     const instructions = try @import("parser.zig").parse(a, code);
