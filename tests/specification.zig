@@ -98,3 +98,10 @@ test "builtins from uiua" {
 test "builtins" {
     try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
 }
+
+test "2-tuple composition" {
+    // |b will compose function returning 2-tuple with dyadic function
+    try expect_output("\\\\ split_at,2 |b mul", .{ "[1 2 3 4]", "2" }, .{"[3 8]"});
+    // implicit |b
+    try expect_output("\\\\ split_at,2 mul", .{ "[1 2 3 4]", "2" }, .{"[3 8]"});
+}

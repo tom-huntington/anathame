@@ -63,8 +63,22 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = instruction.combinator != .b;
             continue;
         }
-        const first_argument = if (first_function) x else result;
-        const second_argument = if (first_function) y else if (retain_x) x else result;
+        var first_argument = if (first_function) x else result;
+        var second_argument = if (first_function) y else if (retain_x) x else result;
+        const arity = switch (instruction) {
+            .primitive => |name| @import("primitives.zig").arity(name),
+            .scope => |scope| scope.arity,
+            .partition => 2,
+            .partial => 1,
+            else => return error.ExpectedFunction,
+        };
+        if (!first_function and !retain_x and arity == 2) {
+            if (result.tuple) |tuple| {
+                if (tuple.len != 2) return error.WrongNumberOfArguments;
+                first_argument = tuple[0];
+                second_argument = tuple[1];
+            }
+        }
         if (instruction == .partition) {
             const temporary = try partition(memory, first_argument, second_argument, instruction.partition);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
