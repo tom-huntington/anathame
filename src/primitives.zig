@@ -1,6 +1,9 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
+pub fn arity(name: []const u8) usize {
+    return if (std.mem.eql(u8, name, "sq")) 1 else 2;
+}
 // ASCII names snapshotted from uiua/site/primitives.json.
 pub const names = [_][]const u8{
     "&ap",

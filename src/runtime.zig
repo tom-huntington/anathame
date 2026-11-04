@@ -1,15 +1,20 @@
 const std = @import("std");
 pub const Value = struct { data: []const f64, shape: []const usize };
-/// Adjacent functions form a left-associated N train: (f g)(x,y) = g(f(x,y),x).
+/// Trains retain x: (f g)(x,y) = g(f(x,y),x), or (f g)(x) = g(f(x),x).
 pub fn evaluate(a: std.mem.Allocator, code: []const u8, input: []const u8) ![]const Value {
     const instructions = try @import("parser.zig").parse(a, code);
+    if (instructions.len == 0) return error.EmptyProgram;
+    const first_name = switch (instructions[0]) {
+        .primitive => |name| name,
+        else => return error.ExpectedFunction,
+    };
+    const arity = @import("primitives.zig").arity(first_name);
     var arguments = std.mem.tokenizeAny(u8, input, " ;\t\r\n");
     const left = arguments.next() orelse return error.WrongNumberOfArguments;
-    const right = arguments.next() orelse return error.WrongNumberOfArguments;
+    const right = if (arity == 2) arguments.next() orelse return error.WrongNumberOfArguments else left;
     if (arguments.next() != null) return error.WrongNumberOfArguments;
     const xv = try scalarArgument(left);
     const yv = try scalarArgument(right);
-    if (instructions.len == 0) return error.EmptyProgram;
     var memory = try @import("reserved_bump_allocator.zig").ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const checkpoint = memory.checkpoint();

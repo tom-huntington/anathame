@@ -4,7 +4,7 @@ pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
     if (args.len < 2) {
-        std.debug.print("Usage: anathame <code> <first-scalar> <second-scalar>\n", .{});
+        std.debug.print("Usage: anathame <code> <first-scalar> [second-scalar]\n", .{});
         return error.InvalidArguments;
     }
     const values = runtime.evaluate(a, args[1], try std.mem.join(a, "; ", args[2..])) catch |err| {

@@ -1,5 +1,9 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
+pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return mul(a, x, x);
+}
+
 pub fn mul(a: std.mem.Allocator, x: Value, y: Value) !Value {
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
