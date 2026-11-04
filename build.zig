@@ -157,6 +157,12 @@ pub fn build(b: *std.Build) void {
         }),
     });
     test_step.dependOn(&b.addRunArtifact(aoc_tests).step);
+    // Run without the build runner's test protocol so printed results go directly
+    // to the terminal, and execute every time the aoc step is requested.
+    const run_aoc = std.Build.Step.Run.create(b, "run aoc");
+    run_aoc.addArtifactArg(aoc_tests);
+    run_aoc.stdio = .inherit;
+    b.step("aoc", "Run AoC tests and print exploratory results").dependOn(&run_aoc.step);
     const differential = b.addExecutable(.{
         .name = "uiua-functions",
         .root_module = b.createModule(.{
