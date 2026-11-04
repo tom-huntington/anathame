@@ -22,7 +22,7 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: []con
     }
 }
 
-/// Trains retain x: (f g)(x,y) = g(f(x,y),x), or (f g)(x) = g(f(x),x).
+/// Composition defaults to B; explicit N and S retain the scope's x.
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
 pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]const u8) ![]const Value {
     const a = memory.allocator();
@@ -47,13 +47,23 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]cons
 fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("parser.zig").Instruction, x: Value, y: Value) anyerror!Value {
     var result = y;
     const checkpoint = memory.checkpoint();
-    for (instructions, 0..) |instruction, i| {
+    var retain_x = false;
+    var first_function = true;
+    for (instructions) |instruction| {
+        if (instruction == .combinator) {
+            retain_x = instruction.combinator != .b;
+            continue;
+        }
+        const first_argument = if (first_function) x else result;
+        const second_argument = if (first_function) y else if (retain_x) x else result;
         if (instruction == .scope) {
             const defaults = instruction.scope.default_arguments;
-            const first = if (defaults) |args| args[0] else if (i == 0) x else result;
-            const second = if (instruction.scope.arity == 1) first else if (defaults) |args| args[1] else if (i == 0) y else x;
+            const first = if (defaults) |args| args[0] else first_argument;
+            const second = if (instruction.scope.arity == 1) first else if (defaults) |args| args[1] else second_argument;
             const temporary = try evaluateScope(memory, instruction.scope.instructions, first, second);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
             continue;
         }
         const name = switch (instruction) {
@@ -64,8 +74,11 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         const function = @import("primitives.zig").lookup(name) orelse return error.UnimplementedPrimitive;
         const temporary = if (instruction == .partial)
             try function(memory.allocator(), result, instruction.partial.argument)
-        else if (i == 0) try function(memory.allocator(), x, result) else try function(memory.allocator(), result, x);
+        else
+            try function(memory.allocator(), first_argument, second_argument);
         result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+        first_function = false;
+        retain_x = false;
     }
     return result;
 }

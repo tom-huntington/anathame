@@ -5,6 +5,7 @@ pub const Instruction = union(enum) {
     literal: Value,
     primitive: []const u8,
     partial: struct { name: []const u8, argument: Value },
+    combinator: enum { n, s, b },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
@@ -21,6 +22,13 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
+        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|b")) {
+            if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
+            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (token[1] == 's') .s else .b });
+            continue;
+        }
+        if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
+            (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "|>"))) return error.ExpectedFunction;
         if (std.mem.eql(u8, token, "|>")) {
             if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
             const arguments = try a.alloc(Value, result.items.len);
@@ -77,6 +85,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
     }
     if (close != null and !implicit) return error.InvalidSyntax;
+    if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
     return result.toOwnedSlice(a);
 }
 fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
