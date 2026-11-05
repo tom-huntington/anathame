@@ -11,6 +11,15 @@ pub fn length(a: std.mem.Allocator, x: Value, _: Value) !Value {
 
 /// Integers from start up to, but excluding, sentinel. Reversed bounds are empty.
 pub fn range(a: std.mem.Allocator, start: Value, sentinel: Value) !Value {
+    return integerRange(a, start, sentinel, false);
+}
+
+/// Integers from start through end, including both bounds. Reversed bounds are empty.
+pub fn range_inclusive(a: std.mem.Allocator, start: Value, end: Value) !Value {
+    return integerRange(a, start, end, true);
+}
+
+fn integerRange(a: std.mem.Allocator, start: Value, sentinel: Value, inclusive: bool) !Value {
     if (start.tuple != null or sentinel.tuple != null or
         start.shape.len != 0 or sentinel.shape.len != 0 or
         start.data.len != 1 or sentinel.data.len != 1) return error.InvalidInput;
@@ -18,7 +27,7 @@ pub fn range(a: std.mem.Allocator, start: Value, sentinel: Value) !Value {
     const end = sentinel.data[0];
     if (!std.math.isFinite(first) or !std.math.isFinite(end) or
         @trunc(first) != first or @trunc(end) != end) return error.InvalidInput;
-    const range_length = @max(end - first, 0);
+    const range_length = if (end < first) 0 else end - first + @as(f64, if (inclusive) 1 else 0);
     if (range_length >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
     const size: usize = @intFromFloat(range_length);
     const data = try a.alloc(f64, size);

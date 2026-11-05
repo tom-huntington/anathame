@@ -115,6 +115,9 @@ test "builtins" {
     try expect_output("\\ parse", .{
         \\"11"
     }, .{"11"});
+
+    // inclusive range
+    try expect_output("\\\\ range_inclusive", .{ "1", "3" }, "[1 2 3]");
 }
 
 test "Phi combinator" {
