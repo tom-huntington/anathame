@@ -377,7 +377,7 @@ fn multilineString(a: std.mem.Allocator, token: []const u8) ![]const u8 {
     while (lines.next()) |line| {
         const content = if (first) line else std.mem.trimStart(u8, line, " \t");
         if (!first) try decoded.append(a, '\n');
-        try decoded.appendSlice(a, std.mem.trimEnd(u8, content[1..], "\r"));
+        try decoded.appendSlice(a, std.mem.trimEnd(u8, content[2..], "\r"));
         first = false;
     }
     return decoded.toOwnedSlice(a);

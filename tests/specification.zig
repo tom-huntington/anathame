@@ -44,14 +44,14 @@ test "strings" {
 
     // multi line strings
     try literal_eval(
-        \\$a
-        \\$b
-        \\$c
+        \\$ a
+        \\$ b
+        \\$ c
     , "[97 10 98 10 99]");
     try expect_output(
         \\\ id
     , .{
-        \\$"a"
+        \\$ "a"
     }, "[34 97 34]");
 }
 

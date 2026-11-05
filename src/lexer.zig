@@ -9,6 +9,8 @@ pub const Lexer = struct {
         const c = self.source[self.offset];
         self.offset += 1;
         if (c == '$') {
+            if (self.offset == self.source.len or self.source[self.offset] != ' ') return error.InvalidInput;
+            self.offset += 1;
             while (true) {
                 while (self.offset < self.source.len and self.source[self.offset] != '\n' and self.source[self.offset] != '\r') self.offset += 1;
                 const end = self.offset;
@@ -17,8 +19,8 @@ pub const Lexer = struct {
                 if (next_line == self.source.len or self.source[next_line] != '\n') return self.source[start..end];
                 next_line += 1;
                 while (next_line < self.source.len and (self.source[next_line] == ' ' or self.source[next_line] == '\t')) next_line += 1;
-                if (next_line == self.source.len or self.source[next_line] != '$') return self.source[start..end];
-                self.offset = next_line + 1;
+                if (!std.mem.startsWith(u8, self.source[next_line..], "$ ")) return self.source[start..end];
+                self.offset = next_line + 2;
             }
         }
         if (c == '|' and self.offset < self.source.len) {
