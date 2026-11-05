@@ -95,3 +95,19 @@ rows without requiring a size. `Pairwise` expands to `Stencil,2`, so
 recursively, including HOF operands and literal contents. It checks structural
 equivalence rather than equality on sample inputs. `test_hof_alias` does the
 same with several primitive, scoped, and nested-HOF operands appended.
+
+Named functions are defined before the main scope with `name = body`:
+
+```text
+part1 = mod,100 count,0
+part2 = sub,1 |s {(div,100 floor Pairwise sub abs sum) |psi add} |b div,2
+\ prepend,50 Scan add part1 ** part2
+```
+
+Definitions end at a newline outside parentheses, braces, and arrays. Names
+start with a letter and may contain letters, digits, and underscores. They
+can reference earlier definitions and be used in nested scopes, alternatives,
+and as higher-order operands. Primitive names cannot be redefined; duplicate
+names are rejected. Recursion and forward references are not supported.
+A single-function definition preserves its arity; a composition defaults to
+monadic. Use braces for a dyadic composition, such as `combine = { add sq }`.

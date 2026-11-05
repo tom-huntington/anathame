@@ -19,7 +19,43 @@ pub const Instruction = union(enum) {
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
-    return sequence(a, &lexer, null, false, true);
+    var names: std.StringHashMapUnmanaged(Instruction) = .empty;
+    defer names.deinit(a);
+    while (true) {
+        const start = lexer.offset;
+        const name = (try lexer.next()) orelse break;
+        const equals = try lexer.next();
+        if (equals == null or !std.mem.eql(u8, equals.?, "=")) {
+            lexer.offset = start;
+            break;
+        }
+        if (!validName(name) or @import("primitives.zig").known(name) or
+            std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "Pairwise") or
+            std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
+        if (names.contains(name)) return error.DuplicateFunctionName;
+        const body_start = lexer.offset;
+        var depth: usize = 0;
+        while (true) {
+            const before = lexer.offset;
+            const token = (try lexer.next()) orelse break;
+            if (depth == 0 and std.mem.indexOfScalar(u8, source[before .. lexer.offset - token.len], '\n') != null) {
+                lexer.offset = before;
+                break;
+            }
+            if (std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "{") or std.mem.eql(u8, token, "[")) depth += 1;
+            if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "]")) {
+                if (depth == 0) return error.UnexpectedClose;
+                depth -= 1;
+            }
+        }
+        var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset] };
+        const body = try sequence(a, &body_lexer, null, false, true, &names);
+        if (body.len == 0) return error.ExpectedFunction;
+        for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
+        const function: Instruction = if (body.len == 1) body[0] else .{ .scope = .{ .arity = 1, .instructions = body } };
+        try names.put(a, name, function);
+    }
+    return sequence(a, &lexer, null, false, true, &names);
 }
 
 pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
@@ -28,7 +64,13 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
     return instructions[0];
 }
 
-fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool) anyerror![]const Instruction {
+fn validName(name: []const u8) bool {
+    if (name.len == 0 or !std.ascii.isAlphabetic(name[0])) return false;
+    for (name[1..]) |c| if (!std.ascii.isAlphanumeric(c) and c != '_') return false;
+    return true;
+}
+
+fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
         if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
@@ -47,7 +89,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     else => return error.ExpectedLiteral,
                 };
             }
-            const body = try sequence(a, lexer, close, implicit, root);
+            const body = try sequence(a, lexer, close, implicit, root, names);
             if (body.len != 1 or body[0] != .scope) return error.ExpectedFunction;
             var application = body[0];
             application.scope.arity = arguments.len;
@@ -64,7 +106,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (monadic or dyadic) {
             const is_implicit = token[0] == '\\';
             const end = if (is_implicit) close else if (monadic) ")" else "}";
-            const body = try sequence(a, lexer, end, is_implicit, false);
+            const body = try sequence(a, lexer, end, is_implicit, false, names);
             if (body.len == 0) return error.InvalidSyntax;
             for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
@@ -109,6 +151,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
+        if (names.get(token)) |function| {
+            try result.append(a, function);
+            continue;
+        }
         if (std.mem.eql(u8, token, "sum")) {
             try result.appendSlice(a, try parse(a, "Reduce add"));
             continue;
