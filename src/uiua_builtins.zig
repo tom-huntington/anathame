@@ -1,6 +1,60 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Uiua keep on the trailing axis. Counts cycle when short and truncate when long.
+/// Real scalar counts resample the axis; negative scalars also reverse it.
+pub fn keep(a: std.mem.Allocator, x: Value, counts: Value) !Value {
+    if (x.tuple != null or counts.tuple != null) return error.InvalidInput;
+    const scalar = counts.shape.len == 0;
+    const source_shape: []const usize = if (x.shape.len == 0) &.{1} else x.shape;
+    const width = source_shape[source_shape.len - 1];
+    if (!scalar and width > 0 and counts.data.len == 0) return error.ShapeMismatch;
+    for (counts.data) |n| {
+        if (!std.math.isFinite(n) or (!scalar and @trunc(n) != n)) return error.InvalidInput;
+    }
+    var new_width: usize = 0;
+    if (scalar) {
+        new_width = try keepSize(@round(@abs(counts.data[0]) * @as(f64, @floatFromInt(width))));
+    } else {
+        for (0..width) |i| {
+            new_width = try std.math.add(usize, new_width, try keepSize(@max(0, counts.data[i % counts.data.len])));
+        }
+    }
+    var outer: usize = 1;
+    for (source_shape[0 .. source_shape.len - 1]) |dim| outer = try std.math.mul(usize, outer, dim);
+    const shape = try a.dupe(usize, source_shape);
+    shape[shape.len - 1] = new_width;
+    const data = try a.alloc(f64, try std.math.mul(usize, outer, new_width));
+    for (0..outer) |row| {
+        if (scalar) {
+            const delta = @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(new_width));
+            for (0..new_width) |j| {
+                const k = if (counts.data[0] < 0) new_width - 1 - j else j;
+                const t = @as(f64, @floatFromInt(k)) * delta;
+                const fraction = t - @floor(t);
+                const index: usize = if (counts.data[0] >= 1 and @trunc(counts.data[0]) == counts.data[0])
+                    j / try keepSize(counts.data[0])
+                else
+                    @intFromFloat(if (fraction <= std.math.floatEps(f64) or fraction >= 1 - std.math.floatEps(f64)) @round(t) else @floor(t));
+                data[row * new_width + j] = x.data[row * width + @min(index, width - 1)];
+            }
+        } else {
+            var dest = row * new_width;
+            for (0..width) |i| {
+                const count = try keepSize(@max(0, counts.data[i % counts.data.len]));
+                @memset(data[dest..][0..count], x.data[row * width + i]);
+                dest += count;
+            }
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+fn keepSize(n: f64) !usize {
+    if (!std.math.isFinite(n) or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    return @intFromFloat(n);
+}
+
 pub fn base10(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return base(a, x, .{ .data = &.{10} });
 }
