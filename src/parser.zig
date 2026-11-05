@@ -7,6 +7,8 @@ pub const Instruction = union(enum) {
     primitive: []const u8,
     partition: *const Instruction,
     scan: *const Instruction,
+    reduce: *const Instruction,
+    stencil: struct { function: *const Instruction, size: ?Value = null },
     partial: struct { name: []const u8, argument: Value },
     choices: []const Instruction,
     product: struct { branches: []const []const Instruction, shape: []const usize },
@@ -101,6 +103,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
+        if (std.mem.eql(u8, token, "sum")) {
+            try result.appendSlice(a, try parse(a, "Reduce add"));
+            continue;
+        }
+        if (std.mem.eql(u8, token, "Pairwise")) {
+            try result.append(a, .{ .partial = .{ .name = "Stencil", .argument = .{ .data = &.{2} } } });
+            continue;
+        }
         if (try strand(a, lexer, token)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
@@ -144,12 +154,17 @@ fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]con
     while (i > 0) {
         i -= 1;
         const instruction = instructions[i];
-        if (instruction == .primitive and (std.mem.eql(u8, instruction.primitive, "Partition") or std.mem.eql(u8, instruction.primitive, "Scan"))) {
+        const name = switch (instruction) {
+            .primitive => |name| name,
+            .partial => |partial| partial.name,
+            else => "",
+        };
+        if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Stencil")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
             function.* = operand;
-            try result.append(a, if (std.mem.eql(u8, instruction.primitive, "Partition")) .{ .partition = function } else .{ .scan = function });
+            try result.append(a, if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan")) .{ .scan = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else .{ .stencil = .{ .function = function, .size = if (instruction == .partial) instruction.partial.argument else null } });
         } else try result.append(a, instruction);
     }
     std.mem.reverse(Instruction, result.items);

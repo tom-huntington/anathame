@@ -1,3 +1,5 @@
+const test_alias = @import("helpers.zig").test_alias;
+const test_hof_alias = @import("helpers.zig").test_hof_alias;
 const expected_output21 = @import("helpers.zig").expected_output21;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
@@ -132,4 +134,9 @@ test "Literal alternatives macro" {
     // * separates alternative literals for inlining.
     // Run every composition on the same input
     try expect_output("\\ mul,2*3 mul,5*7", .{"1"}, .{"[10_15 14_21]"});
+}
+
+test "Aliases" {
+    try test_alias("sum", "Reduce add");
+    try test_hof_alias("Pairwise", "Stencil,2");
 }

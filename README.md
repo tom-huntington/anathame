@@ -66,3 +66,21 @@ axes, followed by the result's own dimensions. For example,
 compositions multiply by (2,5), (3,5), (2,7), and (3,7).
 Each alternative may be a scalar, strand, or array literal. Branch results
 must be arrays with matching shapes.
+
+`Reduce add` (alias `sum`) folds leading-axis rows from left to right;
+`[[1 2] [3 4]]` becomes `[4 6]`. Its operand must be dyadic. Empty arrays
+use the operand's identity for `add`, `sub`, `mul`, `div`, `min`, and `max`;
+other operands report `NoReductionIdentity`.
+
+`Stencil,3 sum` applies `sum` to overlapping windows of three leading-axis
+rows. With a unary operand, `Stencil` without a bound size is dyadic and
+takes the array first and window size second. Sizes currently must be positive
+integer scalars; multidimensional sizes, strides, padding, and fill are not
+implemented. With a dyadic operand, `Stencil sub` applies `sub` to adjacent
+rows without requiring a size. `Pairwise` expands to `Stencil,2`, so
+`Pairwise sub` and `Pairwise sum` both operate on adjacent pairs.
+
+`try test_alias("sum", "Reduce add")` compares parsed instruction trees
+recursively, including HOF operands and literal contents. It checks structural
+equivalence rather than equality on sample inputs. `test_hof_alias` does the
+same with several primitive, scoped, and nested-HOF operands appended.

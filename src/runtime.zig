@@ -123,6 +123,16 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .reduce or instruction == .stencil) {
+            const temporary = if (instruction == .reduce)
+                try reduce(memory, first_argument, instruction.reduce)
+            else
+                try stencil(memory, first_argument, second_argument, instruction.stencil);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .scan) {
             const temporary = try scan(memory, first_argument, instruction.scan);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -163,7 +173,8 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .partial, .cases => 1,
         .scope => |scope| scope.arity,
         .partition => 2,
-        .scan => 1,
+        .scan, .reduce => 1,
+        .stencil => |st| if (st.size != null or functionArity(st.function.*) == 2) 1 else 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
         else => null,
     };
@@ -305,4 +316,85 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pars
         }
     }
     return .{ .data = data, .shape = shape };
+}
+
+/// Left fold over leading-axis rows, as in Uiua's reduce.
+fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+    if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+    if (x.tuple != null) return error.ExpectedArray;
+    if (x.shape.len == 0) return x;
+    const a = memory.allocator();
+    const shape = x.shape[1..];
+    var width: usize = 1;
+    for (shape) |dimension| width = try std.math.mul(usize, width, dimension);
+    if (x.shape[0] == 0) {
+        const identity: f64 = if (function.* == .primitive) blk: {
+            const name = function.primitive;
+            if (std.mem.eql(u8, name, "add") or std.mem.eql(u8, name, "sub")) break :blk 0;
+            if (std.mem.eql(u8, name, "mul") or std.mem.eql(u8, name, "div")) break :blk 1;
+            if (std.mem.eql(u8, name, "min")) break :blk std.math.inf(f64);
+            if (std.mem.eql(u8, name, "max")) break :blk -std.math.inf(f64);
+            return error.NoReductionIdentity;
+        } else return error.NoReductionIdentity;
+        const data = try a.alloc(f64, width);
+        @memset(data, identity);
+        return .{ .data = data, .shape = shape };
+    }
+    var acc: Value = .{ .data = x.data[0..width], .shape = shape };
+    const checkpoint = memory.checkpoint();
+    for (1..x.shape[0]) |i| {
+        const row: Value = .{ .data = x.data[i * width ..][0..width], .shape = shape };
+        const result = try evaluateScope(memory, &.{function.*}, acc, row);
+        acc = try @import("memory.zig").ReturnImpl(memory, checkpoint, result);
+    }
+    return acc;
+}
+
+/// Scalar window sizes traverse the leading axis. Dyadic operands receive adjacent rows.
+fn stencil(memory: *ReservedBumpAllocator, x: Value, y: Value, st: @FieldType(@import("parser.zig").Instruction, "stencil")) anyerror!Value {
+    if (x.tuple != null or x.shape.len == 0) return error.ExpectedArray;
+    const arity = functionArity(st.function.*) orelse return error.WrongNumberOfArguments;
+    if (arity != 1 and arity != 2) return error.WrongNumberOfArguments;
+    const size = st.size orelse if (arity == 2) Value{ .data = &.{2} } else y;
+    if (size.tuple != null or size.shape.len != 0 or size.data.len != 1) return error.InvalidWindowSize;
+    const n = size.data[0];
+    if (!std.math.isFinite(n) or n < 1 or @trunc(n) != n or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidWindowSize;
+    const width: usize = @intFromFloat(n);
+    if (arity == 2 and width != 2) return error.WrongNumberOfArguments;
+    const a = memory.allocator();
+    const count = if (width > x.shape[0]) 0 else x.shape[0] - width + 1;
+    var row_len: usize = 1;
+    for (x.shape[1..]) |dimension| row_len = try std.math.mul(usize, row_len, dimension);
+    const window_len = try std.math.mul(usize, width, row_len);
+    const window_shape = try a.dupe(usize, x.shape);
+    window_shape[0] = width;
+    var data: std.ArrayList(f64) = .empty;
+    var output_shape: ?[]const usize = null;
+    for (0..count) |i| {
+        const first: Value = if (arity == 2)
+            .{ .data = x.data[i * row_len ..][0..row_len], .shape = x.shape[1..] }
+        else
+            .{ .data = x.data[i * row_len ..][0..window_len], .shape = window_shape };
+        const second: Value = if (arity == 2)
+            .{ .data = x.data[(i + 1) * row_len ..][0..row_len], .shape = x.shape[1..] }
+        else
+            first;
+        const result = try evaluateScope(memory, &.{st.function.*}, first, second);
+        if (result.tuple != null) return error.ExpectedArray;
+        if (output_shape) |shape| {
+            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+        }
+        if (output_shape == null) output_shape = try a.dupe(usize, result.shape);
+        try data.appendSlice(a, result.data);
+    }
+    // Infer the result shape on a prototype window for empty output.
+    if (output_shape == null) {
+        const prototype_data = try a.alloc(f64, window_len);
+        @memset(prototype_data, 0);
+        const first: Value = .{ .data = if (arity == 2) prototype_data[0..row_len] else prototype_data, .shape = if (arity == 2) x.shape[1..] else window_shape };
+        const result = try evaluateScope(memory, &.{st.function.*}, first, first);
+        if (result.tuple != null) return error.ExpectedArray;
+        output_shape = result.shape;
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
 }
