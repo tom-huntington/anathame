@@ -55,11 +55,14 @@ test "strings" {
         \\$ b
         \\$ c
     , "[97 10 98 10 99]");
-    try expect_output(
-        \\\ id
-    , .{
+    try literal_eval(
         \\$ "a"
-    }, "[34 97 34]");
+    , "[34 97 34]");
+
+    // ints finds all connected digit codepoints and evals them into integer
+    try expect_output(
+        \\\ ints
+    , .{"[49 50 32 32 51 52 10 53 54]"}, "[12 34 56]");
 }
 
 test "Partial application" {

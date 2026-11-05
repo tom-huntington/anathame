@@ -27,6 +27,6 @@ test "day 2" {
     ,
         \\part1 =\ to_string re.Matches "^(\d+)\1$"
         \\part2 =\ to_string re.Matches "^(\d+)\1+$"
-        \\ \ re.Findall "(\d+)-(\d+)" |b Rows (Unc range_inclusive Filter part1**part2 sum) sum
+        \\ \ not_eq,@, |sig Partition ints |b Rows (Unc range_inclusive Filter part1**part2 sum) sum
     , "[1227775554 4174379265]", @src());
 }

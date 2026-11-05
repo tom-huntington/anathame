@@ -78,6 +78,32 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try a.dupe(f64, &.{number}) };
 }
 
+/// Extract contiguous runs of ASCII digits as a vector of numbers.
+pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
+    var numbers: std.ArrayList(f64) = .empty;
+    defer numbers.deinit(a);
+    var number: f64 = 0;
+    var in_digits = false;
+    for (x.data) |character| {
+        if (!std.math.isFinite(character) or character < 0 or character > 0x10ffff or
+            @trunc(character) != character or (character >= 0xd800 and character <= 0xdfff))
+            return error.InvalidInput;
+        if (character >= '0' and character <= '9') {
+            number = number * 10 + character - '0';
+            in_digits = true;
+        } else if (in_digits) {
+            try numbers.append(a, number);
+            number = 0;
+            in_digits = false;
+        }
+    }
+    if (in_digits) try numbers.append(a, number);
+    const shape = try a.dupe(usize, &.{numbers.items.len});
+    errdefer a.free(shape);
+    return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
+}
+
 /// Format each scalar as characters, appending a character axis to the shape.
 pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
