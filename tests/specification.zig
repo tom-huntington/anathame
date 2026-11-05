@@ -62,9 +62,9 @@ test "reverse function application" {
     , .{ "5", "7" }, "[35 5]");
 }
 
-test "partition" {
+test "Partition" {
     try expect_output(
-        \\ \\ partition id
+        \\ \\ Partition id
     , .{
         \\[1 2 3 4 5 6 7 8]
         ,
@@ -76,7 +76,7 @@ test "partition" {
     // uiua has boxed arrays
     // we return a tuple representing a jagged array
     try expect_output(
-        \\ \\ partition id
+        \\ \\ Partition id
     , .{
         \\[1 2 3 4 5 6 7]
         ,
@@ -100,6 +100,8 @@ test "builtins from uiua" {
 
 test "builtins" {
     try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
+    try expect_output("\\ pop", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
+
     try expect_output("\\ parse", .{"[49 49]"}, .{"11"});
     try expect_output("\\ parse", .{
         \\"11"

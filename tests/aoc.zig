@@ -13,6 +13,6 @@ test "day 1" {
         \\$R14
         \\$L82
     ,
-        \\ \ not_eq,@\n |s partition take,1
+        \\ \ not_eq,@\n |S Partition (pop |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add
     , null, @src());
 }

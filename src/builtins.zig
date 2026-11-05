@@ -61,3 +61,15 @@ pub fn drop(a: std.mem.Allocator, x: Value, count: Value) !Value {
     const parts = try split_at(a, x, count);
     return parts.tuple.?[if (count.data[0] < 0) @as(usize, 0) else 1];
 }
+
+/// Prepend a row y to the leading axis of array x.
+pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    if (x.tuple != null or y.tuple != null) return error.ExpectedArray;
+    if (x.shape.len == 0 or !std.mem.eql(usize, x.shape[1..], y.shape)) return error.ShapeMismatch;
+    const shape = try a.dupe(usize, x.shape);
+    shape[0] = try std.math.add(usize, shape[0], 1);
+    const data = try a.alloc(f64, try std.math.add(usize, x.data.len, y.data.len));
+    @memcpy(data[0..y.data.len], y.data);
+    @memcpy(data[y.data.len..], x.data);
+    return .{ .data = data, .shape = shape };
+}

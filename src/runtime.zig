@@ -113,6 +113,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .scan) {
+            const temporary = try scan(memory, first_argument, instruction.scan);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .scope) {
             const defaults = instruction.scope.default_arguments;
             const first = if (defaults) |args| args[0] else first_argument;
@@ -146,6 +153,7 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .partial, .cases => 1,
         .scope => |scope| scope.arity,
         .partition => 2,
+        .scan => 1,
         else => null,
     };
 }
@@ -245,4 +253,28 @@ fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function:
     shape[1] = group_len;
     @memcpy(shape[2..], output_shape.?[1..]);
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
+/// Inclusive left scan, independently along each innermost vector.
+fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+    if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+    if (x.tuple != null) return error.ExpectedArray;
+    const a = memory.allocator();
+    const data = try a.dupe(f64, x.data);
+    const shape = try a.dupe(usize, x.shape);
+    const width = if (shape.len == 0) 1 else shape[shape.len - 1];
+    if (width == 0) return .{ .data = data, .shape = shape };
+    for (0..data.len / width) |row| {
+        const start = row * width;
+        for (1..width) |column| {
+            const checkpoint = memory.checkpoint();
+            const acc: Value = .{ .data = data[start + column - 1 ..][0..1] };
+            const next: Value = .{ .data = x.data[start + column ..][0..1] };
+            const result = try evaluateScope(memory, &.{function.*}, acc, next);
+            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ShapeMismatch;
+            data[start + column] = result.data[0];
+            memory.restore(checkpoint);
+        }
+    }
+    return .{ .data = data, .shape = shape };
 }

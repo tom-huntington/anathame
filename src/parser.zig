@@ -6,6 +6,7 @@ pub const Instruction = union(enum) {
     cases: Value,
     primitive: []const u8,
     partition: *const Instruction,
+    scan: *const Instruction,
     partial: struct { name: []const u8, argument: Value },
     combinator: enum { n, s, S, b, phi },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
@@ -103,12 +104,12 @@ fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]con
     while (i > 0) {
         i -= 1;
         const instruction = instructions[i];
-        if (instruction == .primitive and std.mem.eql(u8, instruction.primitive, "partition")) {
+        if (instruction == .primitive and (std.mem.eql(u8, instruction.primitive, "Partition") or std.mem.eql(u8, instruction.primitive, "Scan"))) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
             function.* = operand;
-            try result.append(a, .{ .partition = function });
+            try result.append(a, if (std.mem.eql(u8, instruction.primitive, "Partition")) .{ .partition = function } else .{ .scan = function });
         } else try result.append(a, instruction);
     }
     std.mem.reverse(Instruction, result.items);

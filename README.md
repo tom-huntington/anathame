@@ -46,3 +46,14 @@ Each evaluation reserves 64 MiB of address space and commits pages as needed.
 `src/memory.zig` implements `ReturnImpl`: snapshot the result, rewind the frame,
 and copy back only the result. This prioritizes simple lifetime rules over
 copy avoidance. No input mutation or ownership flags are used.
+
+Higher-order functions start with capitals: `Partition id` groups positive
+marker runs and applies `id` to each group. `Scan add` computes inclusive
+prefix sums along the innermost dimension independently: `[[1 2 3] [4 5 6]]`
+becomes `[[1 3 6] [4 9 15]]`. Scan passes the accumulator first and the next
+scalar second to its binary function, which must return a scalar. Scalars
+and empty arrays keep their shape.
+
+`prepend` takes an array first and a row second, adding that row at the front.
+For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
+the row's shape must match the array's trailing dimensions.
