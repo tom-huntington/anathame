@@ -69,6 +69,17 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try a.dupe(f64, &.{number}) };
 }
 
+/// Format a value as a character vector using its displayed representation.
+pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    var text: std.Io.Writer.Allocating = .init(a);
+    defer text.deinit();
+    try @import("runtime.zig").writeValue(&text.writer, x);
+    const bytes = text.written();
+    const data = try a.alloc(f64, bytes.len);
+    for (bytes, data) |byte, *character| character.* = @floatFromInt(byte);
+    return .{ .data = data, .shape = try a.dupe(usize, &.{bytes.len}) };
+}
+
 pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return @import("uiua_builtins.zig").mul(a, x, x);
 }
