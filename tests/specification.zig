@@ -17,13 +17,13 @@ test "Must declare arity explicitly" {
     try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
 }
 test "N and Nu combinator" {
-    // nu combinator 22.2 (f,g) = x, y -> g(x, f(x,y))
-    // n combinator 22.2 (f,g) = x, y -> g(f(x,y), x)
-    try expect_output("\\\\ mul |n couple", .{ "2", "3" }, "[6 2]"); // double backslash \\ starts new dyadic scope that closes only when the current scope ends
-    try expect_output("{ mul |n couple }", .{ "2", "3" }, "[6 2]"); // curley braces denote dyadic scope
+    // n combinator 22.2 (f,g) = x, y -> g(x, f(x,y))
+    // nu combinator 22.2 (f,g) = x, y -> g(f(x,y), y)
+    try expect_output("\\\\ mul |n couple", .{ "2", "3" }, "[2 6]"); // double backslash \\ starts new dyadic scope that closes only when the current scope ends
+    try expect_output("{ mul |n couple }", .{ "2", "3" }, "[2 6]"); // curley braces denote dyadic scope
 
-    try expect_output("\\\\ mul |n couple |b sq", .{ "2", "3" }, "[36 4]"); // combinators are infix. |x is placed after first argument
-    try expect_output("\\\\ mul |n couple sq", .{ "2", "3" }, "[36 4]"); // |b combinator can be implicit
+    try expect_output("\\\\ mul |n couple |b sq", .{ "2", "3" }, "[4 36]"); // combinators are infix. |x is placed after first argument
+    try expect_output("\\\\ mul |n couple sq", .{ "2", "3" }, "[4 36]"); // |b combinator can be implicit
 }
 
 test "S and Sig combinators" {
@@ -81,12 +81,12 @@ test "Partial application" {
 test "reverse function application" {
     try expect_output(
         \\ 2 3 |> \ mul |n couple
-    , .{}, "[6 2]");
+    , .{}, "[2 6]");
 
     // when we have |> at top level it specifies default arguments
     try expect_output(
         \\ 2 3 |> \ mul |n couple
-    , .{ "5", "7" }, "[35 5]");
+    , .{ "5", "7" }, "[5 35]");
 }
 
 test "Partition" {
@@ -123,8 +123,8 @@ test "tuple literal" {
 
 test "builtins" {
     try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
-    try test_alias("split", "{ not_eq |nu Partition id}");
-    try expect_output("\\\\ split", .{ "[1 2 3 4 5 2 6 7]", "2" }, .{ "[1 3 4 5 6 7]", "[0 1 4 6]" });
+    try test_alias("split", "{ not_eq |n Partition id}");
+    try expect_output("\\\\ split", .{ "[1 2 3 4 5 3 6 7]", "3" }, "[1_2 4_5 6_7]");
     try expect_output("\\ uncons", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
 
     try expect_output("\\ parse", .{"[49 49]"}, .{"11"});

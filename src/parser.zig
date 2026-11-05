@@ -163,7 +163,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "split")) {
-            try result.appendSlice(a, try parse(a, "{ not_eq |nu Partition id }"));
+            try result.appendSlice(a, try parse(a, "{ not_eq |n Partition id }"));
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {
