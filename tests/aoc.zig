@@ -25,8 +25,8 @@ test "day 2" {
         \\$ 1698522-1698528,446443-446449,38593856-38593862,565653-565659,
         \\$ 824824821-824824827,2121212118-2121212124
     ,
-        \\part1 =\ to_string re.Matches "^(\d+)\1$"
-        \\part2 =\ to_string re.Matches "^(\d+)\1+$"
+        \\part1 =\ Rows (to_string re.Matches "^(\d+)\1$")
+        \\part2 =\ Rows (to_string re.Matches "^(\d+)\1+$")
         \\ \ not_eq,@, |sig Partition ints |b Rows (Unc range_inclusive Filter part1**part2 sum) sum
     , "[1227775554 4174379265]", @src());
 }

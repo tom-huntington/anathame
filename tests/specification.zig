@@ -197,7 +197,7 @@ test "High order functions (hofs)" {
     try expect_output("\\ Unc range", .{"[1 4]"}, "[1 2 3]");
     // Rows calls a function on each row
     try expect_output("\\ Rows (Unc range length)", .{"[[1 2] [3 4]]"}, "[1 1]");
-    try expect_output("\\ Filter mod,2", .{"[1 2 3 4 5]"}, "[1 3 5]");
+    try test_alias("Filter mod,2", "(mod,2 |sig keep)"); // mod,2 is place holder for any predicate
     // Uiua is leading access conventions. We mostly prefer trailing axis conventions
     try expect_output("\\ Reduce mul", "[2_3_5_7 3_5_7_11]", "[210 1155]");
 }

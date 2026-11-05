@@ -181,11 +181,9 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
-        if (instruction == .scan or instruction == .rows or instruction == .filter) {
+        if (instruction == .scan or instruction == .rows) {
             const temporary = if (instruction == .rows)
                 try rows(memory, first_argument, second_argument, instruction.rows)
-            else if (instruction == .filter)
-                try filter(memory, first_argument, instruction.filter)
             else
                 try scan(memory, first_argument, instruction.scan);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -237,7 +235,7 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .partition => 2,
-        .scan, .reduce, .unc, .filter => 1,
+        .scan, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
@@ -385,32 +383,6 @@ fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @im
         if (count != 0) try data.appendSlice(a, result.data);
     }
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
-}
-
-/// Keep leading-axis rows whose predicate returns a nonzero scalar.
-fn filter(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
-    if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
-    if (x.tuple != null) return error.ExpectedArray;
-    const a = memory.allocator();
-    const count = if (x.shape.len == 0) 1 else x.shape[0];
-    const shape = if (x.shape.len == 0) try a.dupe(usize, &.{1}) else try a.dupe(usize, x.shape);
-    const data = try a.alloc(f64, x.data.len);
-    var kept: usize = 0;
-    var used: usize = 0;
-    for (0..count) |i| {
-        const checkpoint = memory.checkpoint();
-        const row = try rowArgument(a, x, i);
-        const predicate = try evaluateScope(memory, &.{function.*}, row, row);
-        if (predicate.tuple != null or predicate.shape.len != 0 or predicate.data.len != 1) return error.ShapeMismatch;
-        if (predicate.data[0] != 0) {
-            @memcpy(data[used..][0..row.data.len], row.data);
-            used += row.data.len;
-            kept += 1;
-        }
-        memory.restore(checkpoint);
-    }
-    shape[0] = kept;
-    return .{ .data = data[0..used], .shape = shape };
 }
 
 fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
