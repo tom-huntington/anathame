@@ -210,6 +210,7 @@ pub const names = [_][]const u8{
     "round",
     "rows",
     "Rows",
+    "Filter",
     "Unc",
     "Scan",
     "Reduce",

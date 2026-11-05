@@ -190,4 +190,5 @@ test "High order functions (hofs)" {
     try expect_output("\\ Unc range", .{"[1 4]"}, "[1 2 3]");
     // Rows calls a function on each row
     try expect_output("\\ Rows (Unc range length)", .{"[[1 2] [3 4]]"}, "[1 1]");
+    try expect_output("\\ Filter mod,2", .{"[1 2 3 4 5]"}, "[1 3 5]");
 }
