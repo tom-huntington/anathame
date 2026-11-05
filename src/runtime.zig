@@ -193,6 +193,16 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .applied or instruction == .tuples) {
+            const temporary = if (instruction == .applied)
+                try evaluateScope(memory, &.{instruction.applied.function.*}, first_argument, instruction.applied.argument)
+            else
+                try tuples(memory, first_argument, second_argument, instruction.tuples);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .scope) {
             const defaults = instruction.scope.default_arguments;
             const first = if (defaults) |args| args[0] else first_argument;
@@ -223,12 +233,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
 fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .primitive => |name| @import("primitives.zig").arity(name),
-        .partial, .cases => 1,
+        .partial, .applied, .cases => 1,
+        .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .partition => 2,
         .scan, .reduce, .unc, .filter => 1,
         .rows => |function| functionArity(function.*),
-        .stencil => |st| if (st.size != null or functionArity(st.function.*) == 2) 1 else 2,
+        .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
         else => null,
     };
@@ -477,7 +488,7 @@ fn stencil(memory: *ReservedBumpAllocator, x: Value, y: Value, st: @FieldType(@i
     if (x.tuple != null or x.shape.len == 0) return error.ExpectedArray;
     const arity = functionArity(st.function.*) orelse return error.WrongNumberOfArguments;
     if (arity != 1 and arity != 2) return error.WrongNumberOfArguments;
-    const size = st.size orelse if (arity == 2) Value{ .data = &.{2} } else y;
+    const size = y;
     if (size.tuple != null or size.shape.len != 0 or size.data.len != 1) return error.InvalidWindowSize;
     const n = size.data[0];
     if (!std.math.isFinite(n) or n < 1 or @trunc(n) != n or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidWindowSize;
@@ -519,4 +530,99 @@ fn stencil(memory: *ReservedBumpAllocator, x: Value, y: Value, st: @FieldType(@i
         output_shape = result.shape;
     }
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
+}
+
+fn natural(n: f64) !usize {
+    if (!std.math.isFinite(n) or n < 0 or @trunc(n) != n or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    return @intFromFloat(n);
+}
+
+/// Uiua tuples: subsets for monadic operands, index-predicate selections for dyadic operands.
+fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import("parser.zig").Instruction) anyerror!Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const a = memory.allocator();
+    const arity = functionArity(f.*) orelse return error.WrongNumberOfArguments;
+    if (arity == 1) {
+        if (x.shape.len == 0) return evaluateScope(memory, &.{f.*}, x, x);
+        const n = x.shape[0];
+        if (n >= @bitSizeOf(usize)) return error.Overflow;
+        const limit = @as(usize, 1) << @intCast(n);
+        var data: std.ArrayList(f64) = .empty;
+        var output_shape: ?[]const usize = null;
+        const width = if (n == 0) 0 else x.data.len / n;
+        for (0..n + 1) |size| {
+            for (0..limit) |mask| {
+                if (@popCount(mask) != size) continue;
+                const checkpoint = memory.checkpoint();
+                const selected = try a.alloc(f64, size * width);
+                var used: usize = 0;
+                for (0..n) |i| {
+                    if ((mask & (@as(usize, 1) << @intCast(i))) == 0) continue;
+                    @memcpy(selected[used..][0..width], x.data[i * width ..][0..width]);
+                    used += width;
+                }
+                const shape = try a.dupe(usize, x.shape);
+                shape[0] = size;
+                const subset: Value = .{ .data = selected, .shape = shape };
+                const mapped = try evaluateScope(memory, &.{f.*}, subset, subset);
+                if (mapped.tuple != null) return error.ExpectedArray;
+                if (output_shape) |previous| {
+                    if (!std.mem.eql(usize, previous, mapped.shape)) return error.ShapeMismatch;
+                }
+                // Preserve results before reclaiming temporary subset allocations.
+                const saved = try @import("memory.zig").ReturnImpl(memory, checkpoint, mapped);
+                if (output_shape == null) output_shape = try a.dupe(usize, saved.shape);
+                if (n != 0) try data.appendSlice(a, saved.data);
+            }
+        }
+        return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{if (n == 0) 0 else limit}, output_shape.? }) };
+    }
+    if (arity != 2 or y.tuple != null or y.shape.len != 0 or y.data.len != 1) return error.InvalidInput;
+    const scalar = x.shape.len == 0;
+    const n = if (scalar) try natural(x.data[0]) else x.shape[0];
+    const size = y.data[0];
+    const k = if (size == std.math.inf(f64)) n else if (size < 0) n -| try natural(-size) else try natural(size);
+    const increasing = f.* == .primitive and (std.mem.eql(u8, f.primitive, "less") or std.mem.eql(u8, f.primitive, "less than"));
+    if (increasing and scalar) {
+        var combinations: f64 = if (k > n) 0 else 1;
+        if (k <= n) {
+            for (0..@min(k, n - k)) |i| combinations *= @as(f64, @floatFromInt(n - i)) / @as(f64, @floatFromInt(i + 1));
+        }
+        return .{ .data = try a.dupe(f64, &.{@round(combinations)}) };
+    }
+    if (increasing and k > n) return .{ .data = &.{}, .shape = try std.mem.concat(a, usize, &.{ &.{ 0, k }, x.shape[1..] }) };
+    const indices = try a.alloc(usize, k);
+    var data: std.ArrayList(f64) = .empty;
+    var count: usize = 0;
+    try tupleSelections(memory, x, f, n, indices, 0, &data, &count);
+    if (scalar) return .{ .data = try a.dupe(f64, &.{@floatFromInt(count)}) };
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{ count, k }, x.shape[1..] }) };
+}
+
+fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, f: *const @import("parser.zig").Instruction, n: usize, indices: []usize, depth: usize, data: *std.ArrayList(f64), count: *usize) anyerror!void {
+    const a = memory.allocator();
+    if (depth == indices.len) {
+        count.* = try std.math.add(usize, count.*, 1);
+        if (x.shape.len != 0) {
+            var width: usize = 1;
+            for (x.shape[1..]) |dim| width = try std.math.mul(usize, width, dim);
+            for (indices) |i| try data.appendSlice(a, x.data[i * width ..][0..width]);
+        }
+        return;
+    }
+    for (0..n) |i| {
+        var reps: usize = 1;
+        for (indices[0..depth]) |j| {
+            const checkpoint = memory.checkpoint();
+            const predicate = try evaluateScope(memory, &.{f.*}, .{ .data = &.{@floatFromInt(j)} }, .{ .data = &.{@floatFromInt(i)} });
+            if (predicate.tuple != null or predicate.shape.len != 0 or predicate.data.len != 1) return error.InvalidInput;
+            const times = try natural(predicate.data[0]);
+            if (indices.len > 2 and times > 1) return error.InvalidInput;
+            reps = times;
+            memory.restore(checkpoint);
+            if (reps == 0) break;
+        }
+        indices[depth] = i;
+        for (0..reps) |_| try tupleSelections(memory, x, f, n, indices, depth + 1, data, count);
+    }
 }

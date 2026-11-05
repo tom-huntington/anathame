@@ -11,7 +11,9 @@ pub const Instruction = union(enum) {
     filter: *const Instruction,
     unc: *const Instruction,
     reduce: *const Instruction,
-    stencil: struct { function: *const Instruction, size: ?Value = null },
+    stencil: struct { function: *const Instruction },
+    applied: struct { function: *const Instruction, argument: Value },
+    tuples: *const Instruction,
     partial: struct { name: []const u8, argument: Value },
     choices: []const Instruction,
     function_choices: []const Instruction,
@@ -34,7 +36,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
         }
         if (!validName(name) or @import("primitives.zig").known(name) or
             std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "Pairwise") or
-            std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
+            std.mem.eql(u8, name, "combinations") or std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
         if (names.contains(name)) return error.DuplicateFunctionName;
         const body_start = lexer.offset;
         var depth: usize = 0;
@@ -120,15 +122,16 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
-            const name = switch (previous.*) {
-                .primitive => |name| name,
-                else => return error.ExpectedFunction,
-            };
-            if (@import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
+            const name = if (previous.* == .primitive) previous.primitive else "";
+            if (previous.* != .primitive and previous.* != .scope) return error.ExpectedFunction;
+            if (previous.* == .scope and previous.scope.arity != 2) return error.WrongNumberOfArguments;
+            if (previous.* == .primitive and @import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = previous.*;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
             const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
             var choices: std.ArrayList(Instruction) = .empty;
-            try choices.append(a, .{ .partial = .{ .name = name, .argument = value } });
+            try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = value } } else .{ .applied = .{ .function = function, .argument = value } });
             while (true) {
                 const offset = lexer.offset;
                 const separator = try lexer.next();
@@ -138,7 +141,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 }
                 const next = (try lexer.next()) orelse return error.ExpectedLiteral;
                 const choice = (try strand(a, lexer, next)) orelse return error.ExpectedLiteral;
-                try choices.append(a, .{ .partial = .{ .name = name, .argument = choice } });
+                try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = choice } } else .{ .applied = .{ .function = function, .argument = choice } });
             }
             previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
             continue;
@@ -158,6 +161,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
         if (names.get(token)) |function| {
             try result.append(a, function);
+            continue;
+        }
+        if (std.mem.eql(u8, token, "combinations")) {
+            try result.appendSlice(a, try parse(a, "Tuples less"));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
@@ -286,12 +293,18 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .unc = function });
-        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Filter") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Stencil")) {
+        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Filter") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
             function.* = operand;
-            try result.append(a, if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan")) .{ .scan = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Filter")) .{ .filter = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else .{ .stencil = .{ .function = function, .size = if (instruction == .partial) instruction.partial.argument else null } });
+            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan")) .{ .scan = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Filter")) .{ .filter = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = function } else .{ .stencil = .{ .function = function } };
+            if (instruction == .partial) {
+                const scope = try a.create(Instruction);
+                scope.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{bound}) } };
+                bound = .{ .applied = .{ .function = scope, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
         } else try result.append(a, instruction);
     }
     std.mem.reverse(Instruction, result.items);

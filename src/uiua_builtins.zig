@@ -43,7 +43,7 @@ pub fn not_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .not_equal);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, not_equal }) !Value {
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, not_equal, less }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
@@ -58,6 +58,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
             .subtract => x.data[xi] - y.data[yi],
             .divide => x.data[xi] / y.data[yi],
             .modulo => if (y.data[yi] == 0) std.math.nan(f64) else @mod(x.data[xi], y.data[yi]),
+            .less => @floatFromInt(@intFromBool(x.data[xi] < y.data[yi])),
             .not_equal => @floatFromInt(@intFromBool(x.data[xi] != y.data[yi])),
         };
     }
@@ -112,4 +113,8 @@ pub fn take(a: std.mem.Allocator, x: Value, counts: Value) !Value {
         item.* = x.data[source_index];
     }
     return .{ .data = data, .shape = shape };
+}
+
+pub fn less(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .less);
 }

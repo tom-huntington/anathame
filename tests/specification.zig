@@ -162,7 +162,9 @@ test "Literal alternatives macro" {
 
 test "Aliases" {
     try test_alias("sum", "Reduce add");
-    try test_hof_alias("Pairwise", "Stencil,2");
+    try test_alias("Pairwise add", "Stencil,2 add");
+    // partial application to hof is done to hof result
+    try test_alias("Stencil,2 add", "{Stencil add},2");
 }
 
 test "Regex" {
@@ -196,4 +198,10 @@ test "High order functions (hofs)" {
     // Rows calls a function on each row
     try expect_output("\\ Rows (Unc range length)", .{"[[1 2] [3 4]]"}, "[1 1]");
     try expect_output("\\ Filter mod,2", .{"[1 2 3 4 5]"}, "[1 3 5]");
+}
+
+test "tuples" {
+    try expect_output("\\\\ Tuples less", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
+    try test_alias("Tuples,2 less", "{Tuples less},2");
+    try test_alias("combinations", "Tuples less");
 }

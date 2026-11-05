@@ -216,6 +216,7 @@ pub const names = [_][]const u8{
     "Scan",
     "Reduce",
     "Stencil",
+    "Tuples",
     "select",
     "self",
     "send",
@@ -274,6 +275,7 @@ pub fn lookup(name: []const u8) ?Function {
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }
+    if (std.mem.eql(u8, name, "less than")) return &uiua_builtins.less;
     if (std.mem.eql(u8, name, "absolute value")) return &uiua_builtins.abs;
     if (std.mem.eql(u8, name, "divide")) return &uiua_builtins.div;
     if (std.mem.eql(u8, name, "identity")) return &uiua_builtins.id;

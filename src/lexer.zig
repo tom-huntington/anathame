@@ -5,6 +5,14 @@ pub const Lexer = struct {
     pub fn next(self: *Lexer) !?[]const u8 {
         while (self.offset < self.source.len and (std.ascii.isWhitespace(self.source[self.offset]) or self.source[self.offset] == ';')) self.offset += 1;
         if (self.offset == self.source.len) return null;
+        if (std.mem.startsWith(u8, self.source[self.offset..], "less than")) {
+            const end = self.offset + "less than".len;
+            if (end == self.source.len or (!std.ascii.isAlphanumeric(self.source[end]) and self.source[end] != '_')) {
+                const phrase = self.source[self.offset..end];
+                self.offset = end;
+                return phrase;
+            }
+        }
         const start = self.offset;
         const c = self.source[self.offset];
         self.offset += 1;
