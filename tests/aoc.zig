@@ -18,3 +18,13 @@ test "day 1" {
         \\ \ not_eq,@\n |sig Partition (pop |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add part1 ** part2
     , "[3 6]", @src());
 }
+
+test "day 2" {
+    try expected_unary(
+        \\$ 11-22,95-115,998-1012,1188511880-1188511890,222220-222224,
+        \\$ 1698522-1698528,446443-446449,38593856-38593862,565653-565659,
+        \\$ 824824821-824824827,2121212118-2121212124
+    ,
+        \\ \ re.Findall "(\d+)-(\d+)" |b Rows sum
+    , null, @src());
+}

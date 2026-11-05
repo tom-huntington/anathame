@@ -173,6 +173,8 @@ test "Regex" {
 }
 
 test "High order functions (hofs)" {
+    // Unc uncurry can handle both 2-tuple and array with outer dimension 2
+    try expect_output("\\ Unc range", .{"[1 4]"}, "[1 2 3]");
     // Rows calls a function on each row
-    try expect_output("\\ Rows (sum)", .{"[[1 2] [3 4]]"}, "[3 7]");
+    try expect_output("\\ Rows (Unc range length)", .{"[[1 2] [3 4]]"}, "[1 1]");
 }

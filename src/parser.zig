@@ -8,6 +8,7 @@ pub const Instruction = union(enum) {
     partition: *const Instruction,
     scan: *const Instruction,
     rows: *const Instruction,
+    unc: *const Instruction,
     reduce: *const Instruction,
     stencil: struct { function: *const Instruction, size: ?Value = null },
     partial: struct { name: []const u8, argument: Value },
@@ -278,7 +279,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             .partial => |partial| partial.name,
             else => "",
         };
-        if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Stencil")) {
+        if (std.mem.eql(u8, name, "Unc")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            try result.append(a, .{ .unc = function });
+        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Stencil")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);

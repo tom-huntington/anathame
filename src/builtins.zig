@@ -1,6 +1,14 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Number of leading-axis rows; scalars have one row.
+pub fn length(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const data = try a.alloc(f64, 1);
+    data[0] = @floatFromInt(if (x.shape.len == 0) @as(usize, 1) else x.shape[0]);
+    return .{ .data = data };
+}
+
 /// Integers from start up to, but excluding, sentinel. Reversed bounds are empty.
 pub fn range(a: std.mem.Allocator, start: Value, sentinel: Value) !Value {
     if (start.tuple != null or sentinel.tuple != null or
@@ -10,9 +18,9 @@ pub fn range(a: std.mem.Allocator, start: Value, sentinel: Value) !Value {
     const end = sentinel.data[0];
     if (!std.math.isFinite(first) or !std.math.isFinite(end) or
         @trunc(first) != first or @trunc(end) != end) return error.InvalidInput;
-    const length = @max(end - first, 0);
-    if (length >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
-    const size: usize = @intFromFloat(length);
+    const range_length = @max(end - first, 0);
+    if (range_length >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    const size: usize = @intFromFloat(range_length);
     const data = try a.alloc(f64, size);
     for (data, 0..) |*item, i| item.* = first + @as(f64, @floatFromInt(i));
     return .{ .data = data, .shape = try a.dupe(usize, &.{size}) };

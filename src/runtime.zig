@@ -129,6 +129,24 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .unc) {
+            if (functionArity(instruction.unc.*) != 2) return error.WrongNumberOfArguments;
+            const pair = if (first_argument.tuple) |tuple| blk: {
+                if (tuple.len != 2) return error.WrongNumberOfArguments;
+                break :blk [2]Value{ tuple[0], tuple[1] };
+            } else blk: {
+                if (first_argument.shape.len == 0 or first_argument.shape[0] != 2) return error.WrongNumberOfArguments;
+                break :blk [2]Value{
+                    try rowArgument(memory.allocator(), first_argument, 0),
+                    try rowArgument(memory.allocator(), first_argument, 1),
+                };
+            };
+            const temporary = try evaluateScope(memory, &.{instruction.unc.*}, pair[0], pair[1]);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .partition) {
             const temporary = try partition(memory, first_argument, second_argument, instruction.partition);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -189,7 +207,7 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .partial, .cases => 1,
         .scope => |scope| scope.arity,
         .partition => 2,
-        .scan, .reduce => 1,
+        .scan, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => |st| if (st.size != null or functionArity(st.function.*) == 2) 1 else 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
