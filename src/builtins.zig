@@ -42,6 +42,14 @@ pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
     return .{ .tuple = values };
 }
 
+/// Return the first row and the remaining rows.
+pub fn pop(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    const parts = try split_at(a, x, .{ .data = &.{1} });
+    const values = try a.dupe(Value, parts.tuple.?);
+    values[0].shape = values[0].shape[1..];
+    return .{ .tuple = values };
+}
+
 /// Take rows from the front, or from the back for a negative count.
 pub fn take(a: std.mem.Allocator, x: Value, count: Value) !Value {
     const parts = try split_at(a, x, count);
