@@ -114,7 +114,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (try strand(a, lexer, token)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
-            if (!@import("primitives.zig").known(token)) return error.UnknownPrimitive;
+            if (!@import("primitives.zig").known(token)) {
+                std.debug.print("Unknown primitive: {s}\n", .{token});
+                return error.UnknownPrimitive;
+            }
             try result.append(a, .{ .primitive = token });
         }
     }
