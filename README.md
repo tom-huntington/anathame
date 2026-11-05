@@ -20,6 +20,15 @@ input `2` produces `[4 2]`: `(f |s g)(x) = g(f(x),x)`.
 B composes the result into the next function and can be omitted:
 `{ mul |n couple |b sq }` and `{ mul |n couple sq }` both produce `[36 4]`.
 `sq` squares each element.
+`convolve.same`, `convolve.valid`, and `convolve.full` take the input first
+and a nonempty 1D or 2D kernel second. They perform convolution (flipping
+the kernel) on the trailing kernel-rank axes, independently for each leading
+slice. The input must have at least as many axes as the kernel.
+`same` preserves the input shape; `valid` includes only complete overlaps
+(an axis is empty if the kernel is larger); `full` includes all partial
+overlaps with zero padding. Empty input axes remain empty in all modes.
+`same` crops the full result starting at floor((kernel size - 1) / 2) per axis.
+For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 `reverse` reverses the trailing axis: `[1_2_3 4_5_6]` becomes
 `[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
 `base` converts numbers to digits with the least significant digit first;
