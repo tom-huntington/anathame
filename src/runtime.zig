@@ -18,16 +18,31 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anyty
         inline for (expected, 0..) |part, i| parts[i] = part;
         break :blk try std.mem.join(a, "\n; ", &parts);
     } else @as([]const u8, expected);
+    var mismatch = false;
+    errdefer if (mismatch) {
+        var output = std.Io.Writer.Allocating.init(a);
+        defer output.deinit();
+        for (actual, 0..) |value, i| {
+            if (i > 0) output.writer.writeAll("\n; ") catch break;
+            writeValue(&output.writer, value) catch break;
+        }
+        std.debug.print("expected:\n{s}\nactual:\n{s}\n", .{ source, output.written() });
+    };
     const instructions = try @import("parser.zig").parse(a, source);
-    if (instructions.len != actual.len) return error.OutputMismatch;
+    if (instructions.len != actual.len) {
+        mismatch = true;
+        return error.OutputMismatch;
+    }
     for (instructions, actual) |instruction, value| {
         const want = switch (instruction) {
             .literal => |literal| literal,
             else => return error.ExpectedLiteral,
         };
         if (want.tuple != null or value.tuple != null) return error.ExpectedArray;
-        if (!std.mem.eql(usize, want.shape, value.shape) or !std.mem.eql(f64, want.data, value.data))
+        if (!std.mem.eql(usize, want.shape, value.shape) or !std.mem.eql(f64, want.data, value.data)) {
+            mismatch = true;
             return error.OutputMismatch;
+        }
     }
 }
 
