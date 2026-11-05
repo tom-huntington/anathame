@@ -78,15 +78,25 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try a.dupe(f64, &.{number}) };
 }
 
-/// Format a value as a character vector using its displayed representation.
+/// Format each scalar as characters, appending a character axis to the shape.
 pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
     var text: std.Io.Writer.Allocating = .init(a);
     defer text.deinit();
-    try @import("runtime.zig").writeValue(&text.writer, x);
+    var width: usize = 0;
+    for (x.data, 0..) |number, i| {
+        const start = text.written().len;
+        try @import("runtime.zig").writeValue(&text.writer, .{ .data = &.{number} });
+        const length_ = text.written().len - start;
+        if (i == 0) width = length_ else if (length_ != width) return error.ShapeMismatch;
+    }
     const bytes = text.written();
     const data = try a.alloc(f64, bytes.len);
     for (bytes, data) |byte, *character| character.* = @floatFromInt(byte);
-    return .{ .data = data, .shape = try a.dupe(usize, &.{bytes.len}) };
+    const shape = try a.alloc(usize, x.shape.len + 1);
+    @memcpy(shape[0..x.shape.len], x.shape);
+    shape[x.shape.len] = width;
+    return .{ .data = data, .shape = shape };
 }
 
 pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {

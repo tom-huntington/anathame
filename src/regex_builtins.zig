@@ -19,11 +19,19 @@ fn stringBytes(a: std.mem.Allocator, value: Value) ![]u8 {
 pub fn Matches(a: std.mem.Allocator, input: Value, pattern: Value) !Value {
     const pattern_bytes = try stringBytes(a, pattern);
     defer a.free(pattern_bytes);
-    const input_bytes = try stringBytes(a, input);
-    defer a.free(input_bytes);
     var compiled = try regex.Regex.compile(a, pattern_bytes);
     defer compiled.deinit();
-    return .{ .data = try a.dupe(f64, &.{@floatFromInt(@intFromBool(try compiled.isMatch(input_bytes)))}) };
+    if (input.tuple != null or input.shape.len == 0) return error.ExpectedString;
+    const width = input.shape[input.shape.len - 1];
+    var count_: usize = 1;
+    for (input.shape[0 .. input.shape.len - 1]) |dim| count_ = try std.math.mul(usize, count_, dim);
+    const data = try a.alloc(f64, count_);
+    for (data, 0..) |*result, i| {
+        const input_bytes = try stringBytes(a, .{ .data = input.data[i * width ..][0..width], .shape = &.{width} });
+        defer a.free(input_bytes);
+        result.* = @floatFromInt(@intFromBool(try compiled.isMatch(input_bytes)));
+    }
+    return .{ .data = data, .shape = try a.dupe(usize, input.shape[0 .. input.shape.len - 1]) };
 }
 
 /// Find non-overlapping numeric matches, or numeric capture groups when present.

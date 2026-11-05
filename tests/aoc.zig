@@ -25,6 +25,7 @@ test "day 2" {
         \\$ 1698522-1698528,446443-446449,38593856-38593862,565653-565659,
         \\$ 824824821-824824827,2121212118-2121212124
     ,
-        \\ \ re.Findall "(\d+)-(\d+)" |b Rows sum
-    , null, @src());
+        \\part1 =\ to_string re.Matches "^(\d+)\1$" |s mul
+        \\ \ re.Findall "(\d+)-(\d+)" |b Rows (Unc range_inclusive |b Rows part1 sum) sum
+    , "1227775554", @src());
 }

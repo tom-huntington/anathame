@@ -6,16 +6,11 @@ const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
 const expected_unary = @import("helpers.zig").expected_unary;
 
-test "part1 to_string on an array" {
-    // Formats the whole array as "[11 12]", including brackets and the space.
-    try expected_unary("[11 12]", "\\ to_string", "[91 49 49 32 49 50 93]", @src());
-}
-
 test "part1 regex on the to_string output" {
-    // Feed the character codes from the preceding test directly to the regex.
-    try expected_unary("[91 49 49 32 49 50 93]",
+    // Match each row of character codes independently.
+    try expected_unary("[49_49 49_50]",
         \\ \ re.Matches "^(\d+)\1$"
-    , "0", @src());
+    , "[1 0]", @src());
 }
 
 test "Must declare arity explicitly" {
@@ -128,6 +123,8 @@ test "builtins" {
     try expect_output("\\ parse", .{
         \\"11"
     }, .{"11"});
+    try expect_output("\\ to_string", .{"11"}, .{"[49 49]"});
+    try expect_output("\\ to_string", .{"[11 12]"}, "[49_49 49_50]");
 
     // inclusive range
     try expect_output("\\\\ range_inclusive", .{ "1", "3" }, "[1 2 3]");
