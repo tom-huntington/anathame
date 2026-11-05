@@ -451,16 +451,18 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pars
     return .{ .data = data, .shape = shape };
 }
 
-/// Left fold over leading-axis rows, as in Uiua's reduce.
+/// Left fold independently along each trailing-axis vector.
 fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len == 0) return x;
     const a = memory.allocator();
-    const shape = x.shape[1..];
-    var width: usize = 1;
-    for (shape) |dimension| width = try std.math.mul(usize, width, dimension);
-    if (x.shape[0] == 0) {
+    const shape = x.shape[0 .. x.shape.len - 1];
+    const width = x.shape[x.shape.len - 1];
+    var count: usize = 1;
+    for (shape) |dimension| count = try std.math.mul(usize, count, dimension);
+    const data = try a.alloc(f64, count);
+    if (width == 0) {
         const identity: f64 = if (function.* == .primitive) blk: {
             const name = function.primitive;
             if (std.mem.eql(u8, name, "add") or std.mem.eql(u8, name, "sub")) break :blk 0;
@@ -469,18 +471,23 @@ fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pa
             if (std.mem.eql(u8, name, "max")) break :blk -std.math.inf(f64);
             return error.NoReductionIdentity;
         } else return error.NoReductionIdentity;
-        const data = try a.alloc(f64, width);
         @memset(data, identity);
         return .{ .data = data, .shape = shape };
     }
-    var acc: Value = .{ .data = x.data[0..width], .shape = shape };
-    const checkpoint = memory.checkpoint();
-    for (1..x.shape[0]) |i| {
-        const row: Value = .{ .data = x.data[i * width ..][0..width], .shape = shape };
-        const result = try evaluateScope(memory, &.{function.*}, acc, row);
-        acc = try @import("memory.zig").ReturnImpl(memory, checkpoint, result);
+    for (0..count) |row| {
+        const start = row * width;
+        data[row] = x.data[start];
+        for (1..width) |column| {
+            const checkpoint = memory.checkpoint();
+            const acc: Value = .{ .data = data[row..][0..1] };
+            const next: Value = .{ .data = x.data[start + column ..][0..1] };
+            const result = try evaluateScope(memory, &.{function.*}, acc, next);
+            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ShapeMismatch;
+            data[row] = result.data[0];
+            memory.restore(checkpoint);
+        }
     }
-    return acc;
+    return .{ .data = data, .shape = shape };
 }
 
 /// Scalar window sizes traverse the leading axis. Dyadic operands receive adjacent rows.

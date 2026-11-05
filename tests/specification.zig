@@ -198,10 +198,12 @@ test "High order functions (hofs)" {
     // Rows calls a function on each row
     try expect_output("\\ Rows (Unc range length)", .{"[[1 2] [3 4]]"}, "[1 1]");
     try expect_output("\\ Filter mod,2", .{"[1 2 3 4 5]"}, "[1 3 5]");
+    // Uiua is leading access conventions. We mostly prefer trailing axis conventions
+    try expect_output("\\ Reduce mul", "[2_3_5_7 3_5_7_11]", "[210 1155]");
 }
 
 test "tuples" {
     try expect_output("\\\\ Tuples less", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
-    try expect_output("\\\\ Tuples less", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]");
+    try expect_output("\\\\ Tuples less", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
     try test_aliases(&.{ "combinations", "Tuples,2 less", "{Tuples less},2" });
 }

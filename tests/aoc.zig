@@ -38,6 +38,6 @@ test "day 3" {
         \\$ 234234234234278
         \\$ 818181911112111
     ,
-        \\ \ digits
+        \\ \ digits2d combinations radix,10 Reduce max
     , null, @src());
 }
