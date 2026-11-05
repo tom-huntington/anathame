@@ -62,7 +62,7 @@ test "strings" {
     // ints finds all connected digit codepoints and evals them into integer
     try expect_output(
         \\\ ints
-    , .{"[49 50 32 32 51 52 10 53 54]"}, "[12 34 56]");
+    , "[49 50 32 32 51 52 10 53 54]", "[12 34 56]");
 }
 
 test "Partial application" {

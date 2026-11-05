@@ -4,9 +4,11 @@ pub const Value = struct { data: []const f64 = &.{}, shape: []const usize = &.{}
 pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, expected: anytype) !void {
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
-    var arguments: [input.len][]const u8 = undefined;
-    inline for (input, 0..) |argument, i| arguments[i] = argument;
-    const source: ?[]const u8 = if (arguments.len == 0) null else try std.mem.join(a, "\n; ", &arguments);
+    const source: ?[]const u8 = if (comptime @typeInfo(@TypeOf(input)) == .@"struct") blk: {
+        var arguments: [input.len][]const u8 = undefined;
+        inline for (input, 0..) |argument, i| arguments[i] = argument;
+        break :blk if (arguments.len == 0) null else try std.mem.join(a, "\n; ", &arguments);
+    } else try a.dupe(u8, @as([]const u8, input));
     defer if (source) |text| a.free(text);
     const actual = try evaluate(&memory, code, source);
     try expectOutput(a, actual, expected);
