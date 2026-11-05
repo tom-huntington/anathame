@@ -116,7 +116,7 @@ test "tuple literal" {
 test "builtins" {
     try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
     try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
-    try expect_output("\\ pop", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
+    try expect_output("\\ uncons", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
 
     try expect_output("\\ parse", .{"[49 49]"}, .{"11"});
     try expect_output("\\ parse", .{

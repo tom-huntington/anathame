@@ -151,7 +151,7 @@ pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
 }
 
 /// Return the first row and the remaining rows.
-pub fn pop(a: std.mem.Allocator, x: Value, _: Value) !Value {
+pub fn uncons(a: std.mem.Allocator, x: Value, _: Value) !Value {
     const parts = try split_at(a, x, .{ .data = &.{1} });
     const values = try a.dupe(Value, parts.tuple.?);
     values[0].shape = values[0].shape[1..];
