@@ -1,6 +1,5 @@
 const test_alias = @import("helpers.zig").test_alias;
 const test_hof_alias = @import("helpers.zig").test_hof_alias;
-const expected_output21 = @import("helpers.zig").expected_output21;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
@@ -111,11 +110,8 @@ test "tuple literal" {
     , .{ "1", "[2 3]" });
 }
 
-test "builtins from uiua" {
-    try expected_output21("\\\\ take", "[8 3 9 2 0]", "3", "[8 3 9]");
-}
-
 test "builtins" {
+    try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
     try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
     try expect_output("\\ pop", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
 

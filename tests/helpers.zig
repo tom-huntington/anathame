@@ -52,10 +52,6 @@ pub fn literal_eval(code: []const u8, expected: anytype) !void {
     try language.runtime.expectOutput(a, value.tuple orelse &.{value}, expected);
 }
 
-pub fn expected_output21(code: []const u8, first: []const u8, second: []const u8, expected: []const u8) !void {
-    try expect_output(code, .{ first, second }, expected);
-}
-
 /// Compare fully bound instruction trees, including pointed-to HOF operands.
 pub fn test_alias(alias: []const u8, expansion: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
