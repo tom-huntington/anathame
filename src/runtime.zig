@@ -279,23 +279,8 @@ fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
     return .{ .data = data, .shape = try a.dupe(usize, input.shape) };
 }
 
-pub fn writeValue(w: *std.Io.Writer, value: Value) std.Io.Writer.Error!void {
-    if (value.tuple) |tuple| {
-        try w.writeAll("tup( ");
-        for (tuple, 0..) |item, i| {
-            if (i > 0) try w.writeAll(", ");
-            try writeValue(w, item);
-        }
-        return w.writeAll(" )");
-    }
-    if (value.shape.len == 0) return w.print("{d}", .{value.data[0]});
-    try w.writeAll("[");
-    const stride = if (value.shape[0] == 0) 0 else value.data.len / value.shape[0];
-    for (0..value.shape[0]) |i| {
-        if (i > 0) try w.writeAll(" ");
-        try writeValue(w, .{ .data = value.data[i * stride ..][0..stride], .shape = value.shape[1..] });
-    }
-    try w.writeAll("]");
+pub fn writeValue(w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
+    return @import("display.zig").write(w, value);
 }
 
 /// Stack positive marker runs; unequal runs return (rows, cumulative row offsets).

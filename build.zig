@@ -177,6 +177,16 @@ pub fn build(b: *std.Build) void {
     const run_differential = b.addRunArtifact(differential);
     run_differential.addPassthruArgs();
     b.step("test-uiua", "Compare generated primitive cases with Uiua").dependOn(&run_differential.step);
+    const display_tests = b.addExecutable(.{
+        .name = "uiua-display",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/uiua_display.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "anathame", .module = mod }},
+        }),
+    });
+    b.step("test-uiua-display", "Compare numeric array displays with Uiua (requires uiua on PATH)").dependOn(&b.addRunArtifact(display_tests).step);
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

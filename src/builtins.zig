@@ -167,7 +167,7 @@ pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
     var width: usize = 0;
     for (x.data, 0..) |number, i| {
         const start = text.written().len;
-        try @import("runtime.zig").writeValue(&text.writer, .{ .data = &.{number} });
+        try text.writer.print("{d}", .{number});
         const length_ = text.written().len - start;
         if (i == 0) width = length_ else if (length_ != width) return error.ShapeMismatch;
     }
