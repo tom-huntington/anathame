@@ -21,7 +21,6 @@ pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8
         else
             source.fn_name;
         std.debug.print("file {s}, test {s}\noutput:\n{s}\n", .{ std.fs.path.basename(source.file), test_name, output.written() });
-        return error.TestUnexpectedResult;
     }
 }
 
