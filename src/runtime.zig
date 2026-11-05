@@ -537,10 +537,25 @@ fn natural(n: f64) !usize {
     return @intFromFloat(n);
 }
 
-/// Uiua tuples: subsets for monadic operands, index-predicate selections for dyadic operands.
+/// Subsets for monadic operands, index-predicate selections for dyadic operands.
+/// Apply independently within rows of multidimensional arrays.
 fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import("parser.zig").Instruction) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
+    if (x.shape.len > 1) {
+        const count = x.shape[0];
+        var data: std.ArrayList(f64) = .empty;
+        var output_shape: ?[]const usize = null;
+        for (0..@max(count, 1)) |i| {
+            const row = try rowArgument(a, x, i);
+            const result = try tuples(memory, row, y, f);
+            if (output_shape) |shape| {
+                if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+            } else output_shape = try a.dupe(usize, result.shape);
+            if (count != 0) try data.appendSlice(a, result.data);
+        }
+        return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
+    }
     const arity = functionArity(f.*) orelse return error.WrongNumberOfArguments;
     if (arity == 1) {
         if (x.shape.len == 0) return evaluateScope(memory, &.{f.*}, x, x);
