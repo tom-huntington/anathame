@@ -209,6 +209,7 @@ pub const names = [_][]const u8{
     "rotate",
     "round",
     "rows",
+    "Rows",
     "Scan",
     "Reduce",
     "Stencil",

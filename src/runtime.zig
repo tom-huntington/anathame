@@ -146,8 +146,11 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
-        if (instruction == .scan) {
-            const temporary = try scan(memory, first_argument, instruction.scan);
+        if (instruction == .scan or instruction == .rows) {
+            const temporary = if (instruction == .rows)
+                try rows(memory, first_argument, second_argument, instruction.rows)
+            else
+                try scan(memory, first_argument, instruction.scan);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -187,6 +190,7 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .partition => 2,
         .scan, .reduce => 1,
+        .rows => |function| functionArity(function.*),
         .stencil => |st| if (st.size != null or functionArity(st.function.*) == 2) 1 else 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
         else => null,
@@ -305,6 +309,48 @@ fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function:
     shape[1] = group_len;
     @memcpy(shape[2..], output_shape.?[1..]);
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
+/// Map a function over leading-axis rows, repeating single-row arguments.
+fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+    const arity = functionArity(function.*) orelse return error.WrongNumberOfArguments;
+    if (arity != 1 and arity != 2) return error.WrongNumberOfArguments;
+    if (x.tuple != null or (arity == 2 and y.tuple != null)) return error.ExpectedArray;
+    const right = if (arity == 1) x else y;
+    if (x.shape.len == 0 and right.shape.len == 0)
+        return evaluateScope(memory, &.{function.*}, x, right);
+    const nx = if (x.shape.len == 0) 1 else x.shape[0];
+    const ny = if (right.shape.len == 0) 1 else right.shape[0];
+    if (nx != ny and nx != 1 and ny != 1) return error.ShapeMismatch;
+    const count = if (nx == 1) ny else nx;
+    const a = memory.allocator();
+    var data: std.ArrayList(f64) = .empty;
+    var output_shape: ?[]const usize = null;
+    for (0..@max(count, 1)) |i| {
+        const first = try rowArgument(a, x, i);
+        const second = if (arity == 1) first else try rowArgument(a, right, i);
+        const result = try evaluateScope(memory, &.{function.*}, first, second);
+        if (result.tuple != null) return error.ExpectedArray;
+        if (output_shape) |shape| {
+            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+        } else output_shape = try a.dupe(usize, result.shape);
+        if (count != 0) try data.appendSlice(a, result.data);
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
+}
+
+fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
+    if (value.shape.len == 0) return value;
+    const shape = value.shape[1..];
+    var width: usize = 1;
+    for (shape) |dimension| width = try std.math.mul(usize, width, dimension);
+    if (value.shape[0] == 0) {
+        const data = try a.alloc(f64, width);
+        @memset(data, 0);
+        return .{ .data = data, .shape = shape };
+    }
+    const start = (if (value.shape[0] == 1) 0 else index) * width;
+    return .{ .data = value.data[start..][0..width], .shape = shape };
 }
 
 /// Inclusive left scan, independently along each innermost vector.

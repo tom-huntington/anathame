@@ -171,3 +171,8 @@ test "Regex" {
         \\$ 998-1012
     }, "[11_22 95_115 998_1012]");
 }
+
+test "High order functions (hofs)" {
+    // Rows calls a function on each row
+    try expect_output("\\ Rows (sum)", .{"[[1 2] [3 4]]"}, "[3 7]");
+}
