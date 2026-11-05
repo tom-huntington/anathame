@@ -1,6 +1,20 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Reverse the trailing axis, preserving the order of all outer axes.
+pub fn reverse(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const data = try a.dupe(f64, x.data);
+    const width = if (x.shape.len == 0) 1 else x.shape[x.shape.len - 1];
+    if (width > 1) {
+        var offset: usize = 0;
+        while (offset < data.len) : (offset += width) {
+            std.mem.reverse(f64, data[offset..][0..width]);
+        }
+    }
+    return .{ .data = data, .shape = x.shape };
+}
+
 /// Print a value and return it unchanged.
 pub fn log(a: std.mem.Allocator, x: Value, _: Value) !Value {
     var text: std.Io.Writer.Allocating = .init(a);

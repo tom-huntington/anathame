@@ -20,6 +20,8 @@ input `2` produces `[4 2]`: `(f |s g)(x) = g(f(x),x)`.
 B composes the result into the next function and can be omitted:
 `{ mul |n couple |b sq }` and `{ mul |n couple sq }` both produce `[36 4]`.
 `sq` squares each element.
+`reverse` reverses the trailing axis: `[1_2_3 4_5_6]` becomes
+`[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
 `base` converts numbers to digits with the least significant digit first;
 the value is the first argument and the scalar base or mixed-radix list is second.
 It adds a trailing digit axis and pads shorter results with zeros.
