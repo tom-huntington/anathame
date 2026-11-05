@@ -4,6 +4,19 @@ const expected_output21 = @import("helpers.zig").expected_output21;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
+const expected_unary = @import("helpers.zig").expected_unary;
+
+test "part1 to_string on an array" {
+    // Formats the whole array as "[11 12]", including brackets and the space.
+    try expected_unary("[11 12]", "\\ to_string", "[91 49 49 32 49 50 93]", @src());
+}
+
+test "part1 regex on the to_string output" {
+    // Feed the character codes from the preceding test directly to the regex.
+    try expected_unary("[91 49 49 32 49 50 93]",
+        \\ \ re.Matches "^(\d+)\1$"
+    , "0", @src());
+}
 
 test "Must declare arity explicitly" {
     try invalid_syntax("mul |n couple"); // scope arity must be declared
