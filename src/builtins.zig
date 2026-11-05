@@ -1,6 +1,30 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Integers from start up to, but excluding, sentinel. Reversed bounds are empty.
+pub fn range(a: std.mem.Allocator, start: Value, sentinel: Value) !Value {
+    if (start.tuple != null or sentinel.tuple != null or
+        start.shape.len != 0 or sentinel.shape.len != 0 or
+        start.data.len != 1 or sentinel.data.len != 1) return error.InvalidInput;
+    const first = start.data[0];
+    const end = sentinel.data[0];
+    if (!std.math.isFinite(first) or !std.math.isFinite(end) or
+        @trunc(first) != first or @trunc(end) != end) return error.InvalidInput;
+    const length = @max(end - first, 0);
+    if (length >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    const size: usize = @intFromFloat(length);
+    const data = try a.alloc(f64, size);
+    for (data, 0..) |*item, i| item.* = first + @as(f64, @floatFromInt(i));
+    return .{ .data = data, .shape = try a.dupe(usize, &.{size}) };
+}
+
+/// Zero-based integer indices below a nonnegative scalar count.
+pub fn iota(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null or x.shape.len != 0 or x.data.len != 1 or x.data[0] < 0)
+        return error.InvalidInput;
+    return range(a, .{ .data = &.{0} }, x);
+}
+
 /// Count occurrences of scalar y among the elements of array x.
 pub fn count(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.tuple != null or y.tuple != null or y.shape.len != 0 or y.data.len != 1)
