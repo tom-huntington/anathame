@@ -134,6 +134,9 @@ test "Literal alternatives macro" {
     // * separates alternative literals for inlining.
     // Run every composition on the same input
     try expect_output("\\ mul,2*3 mul,5*7", .{"1"}, .{"[10_15 14_21]"});
+
+    // ** does the same but with functions
+    try expect_output("\\ (sq ** mul,3) |b (mul,5 ** mul,7)", .{"2"}, .{"[20_28 30_42]"});
 }
 
 test "Aliases" {

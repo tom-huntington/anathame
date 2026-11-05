@@ -65,6 +65,19 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             skip -= 1;
             continue;
         }
+        if (instruction == .combinator and instruction.combinator == .psi) {
+            if (index == 0 or index + 1 == instructions.len) return error.ExpectedFunction;
+            const function = instructions[index + 1];
+            if (functionArity(function) != 2) return error.WrongNumberOfArguments;
+            const right = try evaluateScope(memory, instructions[0..index], y, y);
+            const temporary = try evaluateScope(memory, &.{function}, result, right);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            skip = 1;
+            first_function = false;
+            retain_x = false;
+            reverse_arguments = false;
+            continue;
+        }
         if (instruction == .combinator and instruction.combinator == .phi) {
             const remaining = instructions[index + 1 ..];
             const temporary = if (result.tuple) |tuple| blk: {

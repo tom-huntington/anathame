@@ -52,6 +52,10 @@ pub const Lexer = struct {
             }
             return error.UnclosedLiteral;
         }
+        if (c == '*' and self.offset < self.source.len and self.source[self.offset] == '*') {
+            self.offset += 1;
+            return self.source[start..self.offset];
+        }
         if (c == '\\') {
             if (self.offset < self.source.len and self.source[self.offset] == '\\') self.offset += 1;
             return self.source[start..self.offset];

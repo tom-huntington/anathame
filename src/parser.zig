@@ -11,13 +11,15 @@ pub const Instruction = union(enum) {
     stencil: struct { function: *const Instruction, size: ?Value = null },
     partial: struct { name: []const u8, argument: Value },
     choices: []const Instruction,
-    product: struct { branches: []const []const Instruction, shape: []const usize },
-    combinator: enum { n, s, sig, b, phi },
+    function_choices: []const Instruction,
+    alternative,
+    product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
+    combinator: enum { n, s, sig, b, phi, psi },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
-    return sequence(a, &lexer, null, false);
+    return sequence(a, &lexer, null, false, true);
 }
 
 pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
@@ -26,12 +28,12 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
     return instructions[0];
 }
 
-fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool) anyerror![]const Instruction {
+fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi")) {
+        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
             if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (token[1] == 'p') .phi else .b });
+            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
             continue;
         }
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
@@ -45,7 +47,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     else => return error.ExpectedLiteral,
                 };
             }
-            const body = try sequence(a, lexer, close, implicit);
+            const body = try sequence(a, lexer, close, implicit, root);
             if (body.len != 1 or body[0] != .scope) return error.ExpectedFunction;
             var application = body[0];
             application.scope.arity = arguments.len;
@@ -55,14 +57,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
             if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
             if (implicit) lexer.offset -= token.len;
-            return bindFunctions(a, result.items);
+            return bindFunctions(a, result.items, !root);
         }
         const monadic = std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "\\");
         const dyadic = std.mem.eql(u8, token, "{") or std.mem.eql(u8, token, "\\\\");
         if (monadic or dyadic) {
             const is_implicit = token[0] == '\\';
             const end = if (is_implicit) close else if (monadic) ")" else "}";
-            const body = try sequence(a, lexer, end, is_implicit);
+            const body = try sequence(a, lexer, end, is_implicit, false);
             if (body.len == 0) return error.InvalidSyntax;
             for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
@@ -94,6 +96,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
             continue;
         }
+        if (std.mem.eql(u8, token, "**")) {
+            try result.append(a, .alternative);
+            continue;
+        }
         if (std.mem.eql(u8, token, "Cases")) {
             const open = (try lexer.next()) orelse return error.ExpectedLiteral;
             if (!std.mem.eql(u8, open, "[")) return error.ExpectedArray;
@@ -123,16 +129,60 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
     }
     if (close != null and !implicit) return error.InvalidSyntax;
     if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-    return bindFunctions(a, result.items);
+    return bindFunctions(a, result.items, !root);
 }
 // Fold from the right after partial applications have been parsed.
-fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]const Instruction {
+fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: bool) anyerror![]const Instruction {
+    // Lift grouped function alternatives so subsequent functions compose with
+    // each branch. Keep the outermost scope as the program arity declaration.
+    var prepared: std.ArrayList(Instruction) = .empty;
+    for (input) |original| {
+        var instruction = original;
+        if (lift_scopes and instruction == .scope) {
+            const body = instruction.scope.instructions;
+            if (body.len == 1 and body[0] == .product and body[0].product.function_alternatives) {
+                const alternatives = try a.alloc(Instruction, body[0].product.branches.len);
+                for (alternatives, body[0].product.branches) |*choice, branch| {
+                    choice.* = instruction;
+                    choice.scope.instructions = branch;
+                }
+                instruction = .{ .function_choices = alternatives };
+            }
+        }
+        try prepared.append(a, instruction);
+    }
+    var expanded: std.ArrayList(Instruction) = .empty;
+    var cursor: usize = 0;
+    while (cursor < prepared.items.len) {
+        var instruction = prepared.items[cursor];
+        cursor += 1;
+        if (instruction == .alternative) return error.ExpectedFunction;
+        if (cursor < prepared.items.len and prepared.items[cursor] == .alternative) {
+            var choices: std.ArrayList(Instruction) = .empty;
+            if (instruction == .literal or instruction == .combinator) return error.ExpectedFunction;
+            if (instruction == .function_choices) try choices.appendSlice(a, instruction.function_choices) else try choices.append(a, instruction);
+            while (cursor < prepared.items.len and prepared.items[cursor] == .alternative) {
+                cursor += 1;
+                if (cursor == prepared.items.len) return error.ExpectedFunction;
+                const next = prepared.items[cursor];
+                cursor += 1;
+                if (next == .literal or next == .combinator or next == .alternative) return error.ExpectedFunction;
+                if (next == .function_choices) try choices.appendSlice(a, next.function_choices) else try choices.append(a, next);
+            }
+            instruction = .{ .function_choices = try choices.toOwnedSlice(a) };
+        }
+        try expanded.append(a, instruction);
+    }
+    const instructions = expanded.items;
     var dimensions: std.ArrayList(usize) = .empty;
     var count: usize = 1;
+    var function_alternatives = false;
     for (instructions) |instruction| {
-        if (instruction == .choices) {
-            try dimensions.append(a, instruction.choices.len);
-            count = try std.math.mul(usize, count, instruction.choices.len);
+        if (instruction == .function_choices) function_alternatives = true;
+        if (instruction == .choices or instruction == .function_choices) {
+            const choices = if (instruction == .choices) instruction.choices else instruction.function_choices;
+            try dimensions.append(a, choices.len);
+            count = try std.math.mul(usize, count, choices.len);
         }
     }
     if (dimensions.items.len > 0) {
@@ -140,17 +190,25 @@ fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]con
         for (branches, 0..) |*branch, index| {
             const selected = try a.dupe(Instruction, instructions);
             var remaining = index;
+            // Function alternatives follow source order; literal-only products
+            // retain their existing first-choice-fastest ordering.
+            var stride = count;
             for (selected) |*instruction| {
-                if (instruction.* == .choices) {
-                    const choices = instruction.choices;
-                    instruction.* = choices[remaining % choices.len];
-                    remaining /= choices.len;
+                if (instruction.* == .choices or instruction.* == .function_choices) {
+                    const choices = if (instruction.* == .choices) instruction.choices else instruction.function_choices;
+                    if (function_alternatives) {
+                        stride /= choices.len;
+                        instruction.* = choices[(index / stride) % choices.len];
+                    } else {
+                        instruction.* = choices[remaining % choices.len];
+                        remaining /= choices.len;
+                    }
                 }
             }
-            branch.* = try bindFunctions(a, selected);
+            branch.* = try bindFunctions(a, selected, false);
         }
-        std.mem.reverse(usize, dimensions.items);
-        return a.dupe(Instruction, &.{.{ .product = .{ .branches = branches, .shape = try dimensions.toOwnedSlice(a) } }});
+        if (!function_alternatives) std.mem.reverse(usize, dimensions.items);
+        return a.dupe(Instruction, &.{.{ .product = .{ .branches = branches, .shape = try dimensions.toOwnedSlice(a), .function_alternatives = function_alternatives } }});
     }
     var result: std.ArrayList(Instruction) = .empty;
     var i = instructions.len;

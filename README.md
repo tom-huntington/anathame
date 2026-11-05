@@ -20,6 +20,9 @@ input `2` produces `[4 2]`: `(f |s g)(x) = g(f(x),x)`.
 B composes the result into the next function and can be omitted:
 `{ mul |n couple |b sq }` and `{ mul |n couple sq }` both produce `[36 4]`.
 `sq` squares each element.
+The Psi combinator applies the preceding composition to both inputs before
+combining them: `{ sq |psi add }` on `2 3` produces `13`, following
+`(f |psi g)(x,y) = g(f(x),f(y))`. Its combining function must be dyadic.
 Inputs contain one value for monadic scopes and two for dyadic
 functions. Values can be numbers, rectangular arrays, characters (`@a`), or
 quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
@@ -66,6 +69,14 @@ axes, followed by the result's own dimensions. For example,
 compositions multiply by (2,5), (3,5), (2,7), and (3,7).
 Each alternative may be a scalar, strand, or array literal. Branch results
 must be arrays with matching shapes.
+
+`**` separates function alternatives. Parentheses group compositions, and
+alternatives expand through those groups into the enclosing composition.
+Function choices run in source order, with the last choice varying fastest:
+`\ (sq ** mul,3) |b (mul,5 ** mul,7)` on `2` produces
+`[20_28 30_42]`. Use a scope around a multi-function alternative, such as
+`(sq add,1) ** (mul,3 sub,2)`. Every branch receives the same original inputs;
+its complete composition runs before the results are stacked.
 
 `Reduce add` (alias `sum`) folds leading-axis rows from left to right;
 `[[1 2] [3 4]]` becomes `[4 6]`. Its operand must be dyadic. Empty arrays
