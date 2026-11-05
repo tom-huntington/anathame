@@ -164,7 +164,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {
-            try result.appendSlice(a, try parse(a, "Tuples less"));
+            try result.appendSlice(a, try parse(a, "Tuples,2 less"));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {

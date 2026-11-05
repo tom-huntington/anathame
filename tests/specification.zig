@@ -1,5 +1,5 @@
 const test_alias = @import("helpers.zig").test_alias;
-const test_hof_alias = @import("helpers.zig").test_hof_alias;
+const test_aliases = @import("helpers.zig").test_aliases;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
@@ -202,6 +202,5 @@ test "High order functions (hofs)" {
 
 test "tuples" {
     try expect_output("\\\\ Tuples less", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
-    try test_alias("Tuples,2 less", "{Tuples less},2");
-    try test_alias("combinations", "Tuples less");
+    try test_aliases(&.{ "combinations", "Tuples,2 less", "{Tuples less},2" });
 }

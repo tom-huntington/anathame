@@ -61,12 +61,9 @@ pub fn test_alias(alias: []const u8, expansion: []const u8) !void {
     try std.testing.expectEqualDeep(expected, actual);
 }
 
-pub fn test_hof_alias(alias: []const u8, expansion: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    // Exercise both primitive and compound operands, including nested HOFs.
-    for ([_][]const u8{ "add", "sub", "id", "{ sub abs }", "Reduce add" }) |operand| {
-        try test_alias(try std.mem.concat(a, u8, &.{ alias, " ", operand }), try std.mem.concat(a, u8, &.{ expansion, " ", operand }));
+/// Compare every alias with the first fully bound instruction tree.
+pub fn test_aliases(aliases: []const []const u8) !void {
+    for (aliases[1..]) |alias| {
+        try test_alias(alias, aliases[0]);
     }
 }
