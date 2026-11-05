@@ -2,7 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
-    return if (std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "pop") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) 1 else 2;
+    return if (std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "pop") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) 1 else 2;
 }
 // ASCII names snapshotted from uiua/site/primitives.json.
 pub const names = [_][]const u8{
@@ -262,6 +262,8 @@ pub fn lookup(name: []const u8) ?Function {
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }
+    if (std.mem.eql(u8, name, "absolute value")) return &uiua_builtins.abs;
+    if (std.mem.eql(u8, name, "divide")) return &uiua_builtins.div;
     if (std.mem.eql(u8, name, "identity")) return &uiua_builtins.id;
     if (std.mem.eql(u8, name, "multiply")) return &uiua_builtins.mul;
     if (std.mem.eql(u8, name, "subtract")) return &uiua_builtins.sub;

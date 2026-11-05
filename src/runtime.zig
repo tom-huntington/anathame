@@ -31,7 +31,7 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anyty
     }
 }
 
-/// Composition defaults to B; explicit N and S retain the scope's x.
+/// Composition defaults to B; explicit N, s, and sig retain the scope's x.
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
 pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]const u8) ![]const Value {
     const a = memory.allocator();
@@ -78,10 +78,12 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
                     skip = 3;
                     break :blk try evaluateScope(memory, remaining[2..3], left, right);
                 }
+                if (functionArity(remaining[0]) != 2) return error.WrongNumberOfArguments;
                 skip = 1;
                 break :blk try evaluateScope(memory, remaining[0..1], tuple[0], tuple[1]);
             } else blk: {
                 if (remaining.len < 2) return error.ExpectedFunction;
+                if (functionArity(remaining[0]) != 1 or functionArity(remaining[1]) != 2) return error.WrongNumberOfArguments;
                 const branch = try evaluateScope(memory, remaining[0..1], x, x);
                 skip = 2;
                 break :blk try evaluateScope(memory, remaining[1..2], result, branch);
@@ -89,11 +91,12 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
+            reverse_arguments = false;
             continue;
         }
         if (instruction == .combinator) {
             retain_x = instruction.combinator != .b;
-            reverse_arguments = instruction.combinator == .S;
+            reverse_arguments = instruction.combinator == .sig;
             continue;
         }
         const first_argument = if (first_function or reverse_arguments) x else result;

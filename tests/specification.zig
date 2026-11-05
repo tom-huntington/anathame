@@ -12,12 +12,16 @@ test "N combinator" {
     try expect_output("\\\\ mul |n couple sq", .{ "2", "3" }, "[36 4]"); // |b combinator can be implicit
 }
 
-test "S combinator" {
+test "S and Sig combinators" {
     // s combinator 12.1 (f,g) = x -> g(f(x), x)
     try expect_output("\\ sq |s couple", .{"2"}, "[4 2]"); // backslash \ starts new monadic scope
     try expect_output("( sq |s couple )", .{"2"}, "[4 2]"); // parentheses denote monadic scope
-    // S combinator 12.1 (f,g) = x -> g(x, f(x))
-    try expect_output("\\ sq |S couple", .{"2"}, "[2 4]"); // backslash \ starts new monadic scope
+    // sig combinator 12.1 (f,g) = x -> g(x, f(x))
+    try expect_output("\\ sq |sig couple", .{"2"}, "[2 4]"); // backslash \ starts new monadic scope
+}
+
+test "Combinators" {
+    // psi combinator 12.2 (f,g) = x, y -> g(f(x), f(y))
 }
 
 test "character" {

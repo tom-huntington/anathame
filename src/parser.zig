@@ -10,7 +10,7 @@ pub const Instruction = union(enum) {
     partial: struct { name: []const u8, argument: Value },
     choices: []const Instruction,
     product: struct { branches: []const []const Instruction, shape: []const usize },
-    combinator: enum { n, s, S, b, phi },
+    combinator: enum { n, s, sig, b, phi },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
@@ -27,9 +27,9 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|S") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi")) {
+        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi")) {
             if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (token[1] == 's') .s else if (token[1] == 'S') .S else if (token[1] == 'p') .phi else .b });
+            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (token[1] == 'p') .phi else .b });
             continue;
         }
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
