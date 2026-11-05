@@ -99,8 +99,8 @@ same with several primitive, scoped, and nested-HOF operands appended.
 Named functions are defined before the main scope with `name = body`:
 
 ```text
-part1 = mod,100 count,0
-part2 = sub,1 |s {(div,100 floor Pairwise sub abs sum) |psi add} |b div,2
+part1 = \ mod,100 count,0
+part2 = \ sub,1 |s {(div,100 floor Pairwise sub abs sum) |psi add} |b div,2
 \ prepend,50 Scan add part1 ** part2
 ```
 
@@ -109,5 +109,7 @@ start with a letter and may contain letters, digits, and underscores. They
 can reference earlier definitions and be used in nested scopes, alternatives,
 and as higher-order operands. Primitive names cannot be redefined; duplicate
 names are rejected. Recursion and forward references are not supported.
-A single-function definition preserves its arity; a composition defaults to
-monadic. Use braces for a dyadic composition, such as `combine = { add sq }`.
+Every definition must explicitly declare its arity: use `\` or parentheses
+for a monadic function, and `\\` or braces for a dyadic function. For example,
+`double = \ mul,2` and `combine = { add sq }`. Bare primitive aliases and
+unscoped compositions are rejected.

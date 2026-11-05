@@ -49,11 +49,13 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             }
         }
         var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset] };
+        const declaration = (try body_lexer.next()) orelse return error.InvalidSyntax;
+        if (!std.mem.eql(u8, declaration, "(") and !std.mem.eql(u8, declaration, "{") and
+            !std.mem.eql(u8, declaration, "\\") and !std.mem.eql(u8, declaration, "\\\\")) return error.InvalidSyntax;
+        body_lexer.offset = 0;
         const body = try sequence(a, &body_lexer, null, false, true, &names);
-        if (body.len == 0) return error.ExpectedFunction;
-        for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
-        const function: Instruction = if (body.len == 1) body[0] else .{ .scope = .{ .arity = 1, .instructions = body } };
-        try names.put(a, name, function);
+        if (body.len != 1 or body[0] != .scope) return error.InvalidSyntax;
+        try names.put(a, name, body[0]);
     }
     return sequence(a, &lexer, null, false, true, &names);
 }

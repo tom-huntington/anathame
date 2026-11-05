@@ -5,8 +5,11 @@ const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
 
-test "N combinator" {
+test "Must declare arity explicitly" {
     try invalid_syntax("mul |n couple"); // scope arity must be declared
+    try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
+}
+test "N combinator" {
     try expect_output("\\\\ mul |n couple", .{ "2", "3" }, "[6 2]"); // double backslash \\ starts new dyadic scope that closes only when the current scope ends
     try expect_output("{ mul |n couple }", .{ "2", "3" }, "[6 2]"); // curley braces denote dyadic scope
 
