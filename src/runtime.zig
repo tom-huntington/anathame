@@ -126,7 +126,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         }
         if (instruction == .combinator) {
             retain_x = instruction.combinator != .b;
-            reverse_arguments = instruction.combinator == .sig;
+            reverse_arguments = instruction.combinator == .sig or instruction.combinator == .nu;
             continue;
         }
         const first_argument = if (first_function or reverse_arguments) x else result;

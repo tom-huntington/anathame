@@ -185,7 +185,7 @@ pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
 }
 
 /// Split an array's rows at an integer index; negative indices count from the end.
-pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
+fn splitRowsAt(a: std.mem.Allocator, x: Value, index: Value) !Value {
     if (x.tuple != null or x.shape.len == 0 or index.tuple != null or
         index.shape.len != 0 or index.data.len != 1) return error.InvalidInput;
     const row_count = index.data[0];
@@ -207,7 +207,7 @@ pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
 
 /// Return the first row and the remaining rows.
 pub fn uncons(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    const parts = try split_at(a, x, .{ .data = &.{1} });
+    const parts = try splitRowsAt(a, x, .{ .data = &.{1} });
     const values = try a.dupe(Value, parts.tuple.?);
     values[0].shape = values[0].shape[1..];
     return .{ .tuple = values };
@@ -215,13 +215,13 @@ pub fn uncons(a: std.mem.Allocator, x: Value, _: Value) !Value {
 
 /// Take rows from the front, or from the back for a negative count.
 pub fn take(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
-    const parts = try split_at(a, x, row_count);
+    const parts = try splitRowsAt(a, x, row_count);
     return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 1) else 0];
 }
 
 /// Drop rows from the front, or from the back for a negative count.
 pub fn drop(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
-    const parts = try split_at(a, x, row_count);
+    const parts = try splitRowsAt(a, x, row_count);
     return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 0) else 1];
 }
 

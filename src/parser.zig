@@ -18,7 +18,7 @@ pub const Instruction = union(enum) {
     function_choices: []const Instruction,
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
-    combinator: enum { n, s, sig, b, phi, psi },
+    combinator: enum { n, nu, s, sig, b, phi, psi },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
@@ -34,7 +34,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             break;
         }
         if (!validName(name) or @import("primitives.zig").known(name) or
-            std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "Pairwise") or
+            std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "split") or std.mem.eql(u8, name, "Pairwise") or
             std.mem.eql(u8, name, "combinations") or std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
         if (names.contains(name)) return error.DuplicateFunctionName;
         const body_start = lexer.offset;
@@ -79,9 +79,9 @@ fn validName(name: []const u8) bool {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
+        if (std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
             if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-            try result.append(a, .{ .combinator = if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
+            try result.append(a, .{ .combinator = if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
             continue;
         }
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
@@ -160,6 +160,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
         if (names.get(token)) |function| {
             try result.append(a, function);
+            continue;
+        }
+        if (std.mem.eql(u8, token, "split")) {
+            try result.appendSlice(a, try parse(a, "{ not_eq |nu Partition id }"));
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {

@@ -16,7 +16,9 @@ test "Must declare arity explicitly" {
     try invalid_syntax("mul |n couple"); // scope arity must be declared
     try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
 }
-test "N combinator" {
+test "N and Nu combinator" {
+    // nu combinator 22.2 (f,g) = x, y -> g(x, f(x,y))
+    // n combinator 22.2 (f,g) = x, y -> g(f(x,y), x)
     try expect_output("\\\\ mul |n couple", .{ "2", "3" }, "[6 2]"); // double backslash \\ starts new dyadic scope that closes only when the current scope ends
     try expect_output("{ mul |n couple }", .{ "2", "3" }, "[6 2]"); // curley braces denote dyadic scope
 
@@ -121,7 +123,8 @@ test "tuple literal" {
 
 test "builtins" {
     try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
-    try expect_output("\\\\ split_at", .{ "[1 2 3 4]", "2" }, .{ "[1 2]", "[3 4]" });
+    try test_alias("split", "{ not_eq |nu Partition id}");
+    try expect_output("\\\\ split", .{ "[1 2 3 4 5 2 6 7]", "2" }, .{ "[1 3 4 5 6 7]", "[0 1 4 6]" });
     try expect_output("\\ uncons", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
 
     try expect_output("\\ parse", .{"[49 49]"}, .{"11"});
@@ -140,9 +143,9 @@ test "Phi combinator" {
     try expect_output("\\ take,2 |phi drop,2 mul", .{"[1 2 3 4]"}, .{"[3 8]"});
     // if instead first argument returns 2-tuple (denoted 1²) we have
     // phi combinator 1²2.1 (f,g) = x -> g(*f(x))
-    try expect_output("\\ split_at,2 |phi mul", .{"[1 2 3 4]"}, .{"[3 8]"});
+    try expect_output("\\ id |phi mul", .{"tup([1 2], [3 4])"}, .{"[3 8]"});
     // phi combinator 1²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
-    try expect_output("\\ split_at,2 |phi add,1 sq couple", .{"[1 2 3 4]"}, .{"[2_3 9_16]"});
+    try expect_output("\\ id |phi add,1 sq couple", .{"tup([1 2], [3 4])"}, .{"[2_3 9_16]"});
 }
 
 test "Keywords" {
