@@ -20,6 +20,12 @@ input `2` produces `[4 2]`: `(f |s g)(x) = g(f(x),x)`.
 B composes the result into the next function and can be omitted:
 `{ mul |n couple |b sq }` and `{ mul |n couple sq }` both produce `[36 4]`.
 `sq` squares each element.
+`base` converts numbers to digits with the least significant digit first;
+the value is the first argument and the scalar base or mixed-radix list is second.
+It adds a trailing digit axis and pads shorter results with zeros.
+`radix` performs Uiua's anti-base operation, collapsing the trailing digit axis.
+`base10` and `radix10` are monadic aliases for `base,10` and `radix,10`.
+For example, `base10` on `123` gives `[3 2 1]`, and `radix10` converts it back.
 The Psi combinator applies the preceding composition to both inputs before
 combining them: `{ sq |psi add }` on `2 3` produces `13`, following
 `(f |psi g)(x,y) = g(f(x),f(y))`. Its combining function must be dyadic.

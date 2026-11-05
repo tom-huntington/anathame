@@ -1,5 +1,123 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
+
+pub fn base10(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return base(a, x, .{ .data = &.{10} });
+}
+
+pub fn radix10(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return radix(a, x, .{ .data = &.{10} });
+}
+
+fn validateBase(b: f64) !void {
+    if (b == 0 or b == 1 or b == -1 or std.math.isNan(b) or (b > -1 and b < 0))
+        return error.InvalidInput;
+}
+
+fn digitCount(n: f64, b: f64) !usize {
+    if (n == 0) return 0;
+    const log = if (b == 2) @log2(@abs(n)) else if (b == 10) @log10(@abs(n)) else @log(@abs(n)) / @log(b);
+    if (std.math.isNan(log) or log < 0) return 1;
+    if (!std.math.isFinite(log) or log >= @as(f64, @floatFromInt(std.math.maxInt(usize) - 1))) return error.InvalidInput;
+    return @as(usize, @intFromFloat(log)) + 1;
+}
+
+// Adapted from Uiua's algorithm/dyadic/mod.rs. Digits occupy a new trailing axis.
+pub fn base(a: std.mem.Allocator, x: Value, bases: Value) !Value {
+    if (x.tuple != null or bases.tuple != null or bases.shape.len > 1) return error.InvalidInput;
+    const scalar = bases.shape.len == 0;
+    for (bases.data) |b| {
+        try validateBase(b);
+        if (std.math.isNegativeInf(b) or (scalar and !std.math.isFinite(b))) return error.InvalidInput;
+    }
+    for (x.data) |n| if (std.math.isInf(n)) return error.InvalidInput;
+    var width: usize = if (scalar) 0 else bases.data.len;
+    var negative_digits: std.ArrayList(f64) = .empty;
+    defer negative_digits.deinit(a);
+    const b = if (scalar) bases.data[0] else 0;
+    if (scalar) {
+        for (x.data) |n| {
+            if (b > 0) {
+                width = @max(width, try digitCount(n, b));
+            } else {
+                var remaining = n;
+                var count: usize = 0;
+                while (@abs(remaining) > std.math.floatEps(f64)) {
+                    const digit = @mod(remaining, -b);
+                    try negative_digits.append(a, digit);
+                    remaining = @round((remaining - digit) / b);
+                    count += 1;
+                }
+                width = @max(width, count);
+                // NaN marks the end of each variable-length row.
+                try negative_digits.append(a, std.math.nan(f64));
+            }
+        }
+    }
+    const shape = try a.alloc(usize, x.shape.len + 1);
+    @memcpy(shape[0..x.shape.len], x.shape);
+    shape[x.shape.len] = width;
+    const data = try a.alloc(f64, try std.math.mul(usize, x.data.len, width));
+    @memset(data, 0);
+    var offset: usize = 0;
+    for (x.data, 0..) |n, i| {
+        if (scalar and b < 0) {
+            var j: usize = 0;
+            while (!std.math.isNan(negative_digits.items[offset])) : (offset += 1) {
+                data[i * width + j] = negative_digits.items[offset];
+                j += 1;
+            }
+            offset += 1;
+        } else {
+            var remaining = if (scalar) @abs(n) else n;
+            for (0..width) |j| {
+                const divisor = if (scalar) b else bases.data[j];
+                if (scalar) {
+                    const quotient = @floor(remaining / divisor);
+                    data[i * width + j] = @mulAdd(f64, quotient, -divisor, remaining) * (if (n < 0) @as(f64, -1) else 1);
+                    remaining = quotient;
+                } else {
+                    if (std.math.isPositiveInf(remaining)) {
+                        data[i * width + j] = remaining;
+                        break;
+                    }
+                    const digit = @mod(remaining, @abs(divisor));
+                    data[i * width + j] = digit;
+                    const remainder = @rem(remaining, divisor);
+                    remaining = @trunc(remaining / divisor);
+                    if (remainder < 0) remaining += if (divisor < 0) @as(f64, 1) else -1;
+                }
+            }
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+/// Uiua anti-base: collapse the trailing digit axis.
+pub fn radix(a: std.mem.Allocator, x: Value, bases: Value) !Value {
+    if (x.tuple != null or bases.tuple != null or bases.shape.len > 1) return error.InvalidInput;
+    const shape = x.shape[0 .. x.shape.len - @intFromBool(x.shape.len > 0)];
+    const width = if (x.shape.len == 0) 1 else x.shape[x.shape.len - 1];
+    var count: usize = 1;
+    for (shape) |dim| count = try std.math.mul(usize, count, dim);
+    const data = try a.alloc(f64, count);
+    @memset(data, 0);
+    for (data, 0..) |*output, i| {
+        var j = width;
+        while (j > 0) {
+            j -= 1;
+            var b: f64 = if (bases.shape.len == 0) bases.data[0] else if (j < bases.data.len) bases.data[j] else 1;
+            if (bases.shape.len != 0 and std.math.isInf(b)) {
+                b = 1;
+                for (bases.data[0..@min(width - j, bases.data.len)]) |factor| {
+                    if (!std.math.isInf(factor)) b *= factor;
+                }
+            }
+            output.* = @mulAdd(f64, output.*, b, x.data[i * width + j]);
+        }
+    }
+    return .{ .data = data, .shape = try a.dupe(usize, shape) };
+}
 pub fn add(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .add);
 }
