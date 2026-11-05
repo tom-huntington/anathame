@@ -57,3 +57,12 @@ and empty arrays keep their shape.
 `prepend` takes an array first and a row second, adding that row at the front.
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
 the row's shape must match the array's trailing dimensions.
+
+Partial applications accept literal choices separated by `*`. A scope runs
+every combination of choices on the same input and stacks the results into
+a Cartesian array. The first choice varies fastest; later choices add outer
+axes, followed by the result's own dimensions. For example,
+`\ mul,2*3 mul,5*7` on `1` produces `[10_15 14_21]`: the four
+compositions multiply by (2,5), (3,5), (2,7), and (3,7).
+Each alternative may be a scalar, strand, or array literal. Branch results
+must be arrays with matching shapes.

@@ -122,3 +122,10 @@ test "Keywords" {
     // cases binds to 2D array literal on right
     try expect_output("\\ Cases [1_11 2_22 3_33]", .{"[1 2 3]"}, .{"[11 22 33]"});
 }
+
+test "Literal alternatives macro" {
+    //  Cartesian array of compositions
+    // * separates alternative literals for inlining.
+    // Run every composition on the same input
+    try expect_output("\\ mul,2*3 mul,5*7", .{"1"}, .{"[10_15 14_21]"});
+}

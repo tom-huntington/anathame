@@ -99,6 +99,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         const first_argument = if (first_function or reverse_arguments) x else result;
         const second_argument = if (first_function) y else if (reverse_arguments) result else if (retain_x) x else result;
         reverse_arguments = false;
+        if (instruction == .product) {
+            const temporary = try product(memory, instruction.product, first_argument, second_argument);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .cases) {
             const temporary = try cases(memory.allocator(), first_argument, instruction.cases);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -154,8 +161,26 @@ fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .partition => 2,
         .scan => 1,
+        .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
         else => null,
     };
+}
+
+/// Each branch receives the same inputs; choice axes precede the result axes.
+fn product(memory: *ReservedBumpAllocator, p: @FieldType(@import("parser.zig").Instruction, "product"), x: Value, y: Value) anyerror!Value {
+    const a = memory.allocator();
+    var data: std.ArrayList(f64) = .empty;
+    var result_shape: ?[]const usize = null;
+    for (p.branches) |branch| {
+        const result = try evaluateScope(memory, branch, x, y);
+        if (result.tuple != null) return error.ExpectedArray;
+        if (result_shape) |shape| {
+            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+        } else result_shape = result.shape;
+        try data.appendSlice(a, result.data);
+    }
+    const shape = try std.mem.concat(a, usize, &.{ p.shape, result_shape.? });
+    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
     if (input.tuple != null) return error.ExpectedArray;

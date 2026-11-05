@@ -8,6 +8,8 @@ pub const Instruction = union(enum) {
     partition: *const Instruction,
     scan: *const Instruction,
     partial: struct { name: []const u8, argument: Value },
+    choices: []const Instruction,
+    product: struct { branches: []const []const Instruction, shape: []const usize },
     combinator: enum { n, s, S, b, phi },
     scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
@@ -74,7 +76,20 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             if (@import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
             const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
-            previous.* = .{ .partial = .{ .name = name, .argument = value } };
+            var choices: std.ArrayList(Instruction) = .empty;
+            try choices.append(a, .{ .partial = .{ .name = name, .argument = value } });
+            while (true) {
+                const offset = lexer.offset;
+                const separator = try lexer.next();
+                if (separator == null or !std.mem.eql(u8, separator.?, "*")) {
+                    lexer.offset = offset;
+                    break;
+                }
+                const next = (try lexer.next()) orelse return error.ExpectedLiteral;
+                const choice = (try strand(a, lexer, next)) orelse return error.ExpectedLiteral;
+                try choices.append(a, .{ .partial = .{ .name = name, .argument = choice } });
+            }
+            previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
             continue;
         }
         if (std.mem.eql(u8, token, "Cases")) {
@@ -99,6 +114,31 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
 }
 // Fold from the right after partial applications have been parsed.
 fn bindFunctions(a: std.mem.Allocator, instructions: []const Instruction) ![]const Instruction {
+    var dimensions: std.ArrayList(usize) = .empty;
+    var count: usize = 1;
+    for (instructions) |instruction| {
+        if (instruction == .choices) {
+            try dimensions.append(a, instruction.choices.len);
+            count = try std.math.mul(usize, count, instruction.choices.len);
+        }
+    }
+    if (dimensions.items.len > 0) {
+        const branches = try a.alloc([]const Instruction, count);
+        for (branches, 0..) |*branch, index| {
+            const selected = try a.dupe(Instruction, instructions);
+            var remaining = index;
+            for (selected) |*instruction| {
+                if (instruction.* == .choices) {
+                    const choices = instruction.choices;
+                    instruction.* = choices[remaining % choices.len];
+                    remaining /= choices.len;
+                }
+            }
+            branch.* = try bindFunctions(a, selected);
+        }
+        std.mem.reverse(usize, dimensions.items);
+        return a.dupe(Instruction, &.{.{ .product = .{ .branches = branches, .shape = try dimensions.toOwnedSlice(a) } }});
+    }
     var result: std.ArrayList(Instruction) = .empty;
     var i = instructions.len;
     while (i > 0) {
