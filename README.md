@@ -37,6 +37,13 @@ backslashes for the regex engine. Strings are converted from numeric Unicode
 codepoints to UTF-8. Matching uses [zig-regex](https://github.com/zig-utils/zig-regex),
 including backreferences such as `\1`.
 
+`(re.Findall "(\d+)-(\d+)")` returns numeric capture rows, for example
+`[11_22 95_115]` for `"11-22,95-115"`. Matches do not overlap. Without
+capture groups it parses each whole match; one capture group produces a
+vector, and multiple groups produce a matrix with one row per match.
+No matches produces an empty array with the same column count. Nonnumeric
+or empty matches/captures return `InvalidInput`.
+
 Reverse application supplies one or two literal arguments before `|>`:
 `2 3 |> \ mul |n couple` produces `[6 2]`. The supplied argument count determines
 the application's arity. At the top level these are default arguments;

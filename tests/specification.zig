@@ -150,12 +150,24 @@ test "Aliases" {
 test "Regex" {
     // regex functions bind tightly to literal on right
     try expect_output(
-        \\(re.Matches "^(\d+)\1$")
-    , .{"\"99\""}, "1");
+        \\ \ re.Matches "^(\d+)\1$"
+    , .{
+        \\"99"
+    }, "1");
     try expect_output(
-        \\(re.Matches "^(\d+)\1$")
-    , .{"\"1010\""}, "1");
+        \\ \ re.Matches "^(\d+)\1$"
+    , .{
+        \\"1010"
+    }, "1");
     try expect_output(
-        \\(re.Matches "^(\d+)\1$")
-    , .{"\"101\""}, "0");
+        \\ \ re.Matches "^(\d+)\1$"
+    , .{
+        \\"101"
+    }, "0");
+    try expect_output(
+        \\ \ re.Findall "(\d+)-(\d+)"
+    , .{
+        \\$ 11-22,95-115,
+        \\$ 998-1012
+    }, "[11_22 95_115 998_1012]");
 }
