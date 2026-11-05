@@ -34,8 +34,8 @@ Separate input values with whitespace or semicolons outside literals.
 otherwise. The `re.` prefix groups regex functions, and each function binds
 tightly to its right-hand pattern literal. Quoted regex patterns preserve
 backslashes for the regex engine. Strings are converted from numeric Unicode
-codepoints to UTF-8. Matching uses regex.zig 0.0.1, which rejects backreferences
-such as `\1` with `UnsupportedBackreference`.
+codepoints to UTF-8. Matching uses [zig-regex](https://github.com/zig-utils/zig-regex),
+including backreferences such as `\1`.
 
 Reverse application supplies one or two literal arguments before `|>`:
 `2 3 |> \ mul |n couple` produces `[6 2]`. The supplied argument count determines

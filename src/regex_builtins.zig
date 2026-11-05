@@ -2,7 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 const regex = @import("regex");
 
-// Strings contain Unicode codepoints as f64 values; regex.zig takes UTF-8.
+// Strings contain Unicode codepoints as f64 values; zig-regex takes UTF-8.
 fn stringBytes(a: std.mem.Allocator, value: Value) ![]u8 {
     if (value.tuple != null or value.shape.len != 1) return error.ExpectedString;
     var bytes: std.ArrayList(u8) = .empty;
@@ -21,7 +21,7 @@ pub fn Matches(a: std.mem.Allocator, input: Value, pattern: Value) !Value {
     defer a.free(pattern_bytes);
     const input_bytes = try stringBytes(a, input);
     defer a.free(input_bytes);
-    var compiled = try regex.compile(a, pattern_bytes, .{});
+    var compiled = try regex.Regex.compile(a, pattern_bytes);
     defer compiled.deinit();
-    return .{ .data = try a.dupe(f64, &.{@floatFromInt(@intFromBool(compiled.isMatch(input_bytes, .{})))}) };
+    return .{ .data = try a.dupe(f64, &.{@floatFromInt(@intFromBool(try compiled.isMatch(input_bytes)))}) };
 }
