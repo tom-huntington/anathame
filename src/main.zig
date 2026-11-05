@@ -1,6 +1,8 @@
 const std = @import("std");
 const runtime = @import("anathame").runtime;
 pub fn main(init: std.process.Init) !void {
+    @import("console.zig").init();
+
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
     const is_test = args.len >= 2 and std.mem.eql(u8, args[1], "test");
