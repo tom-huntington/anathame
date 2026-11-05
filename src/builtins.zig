@@ -1,6 +1,17 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Count occurrences of scalar y among the elements of array x.
+pub fn count(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    if (x.tuple != null or y.tuple != null or y.shape.len != 0 or y.data.len != 1)
+        return error.InvalidInput;
+    var occurrences: usize = 0;
+    for (x.data) |item| {
+        if (item == y.data[0]) occurrences += 1;
+    }
+    return .{ .data = try a.dupe(f64, &.{@floatFromInt(occurrences)}) };
+}
+
 /// Parse a scalar character or character vector as a number.
 pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
@@ -25,11 +36,11 @@ pub fn sq(a: std.mem.Allocator, x: Value, _: Value) !Value {
 pub fn split_at(a: std.mem.Allocator, x: Value, index: Value) !Value {
     if (x.tuple != null or x.shape.len == 0 or index.tuple != null or
         index.shape.len != 0 or index.data.len != 1) return error.InvalidInput;
-    const count = index.data[0];
-    if (!std.math.isFinite(count) or @trunc(count) != count) return error.InvalidInput;
-    if (@abs(count) > @as(f64, @floatFromInt(x.shape[0]))) return error.ShapeMismatch;
-    const amount: usize = @intFromFloat(@abs(count));
-    const split = if (count < 0) x.shape[0] - amount else amount;
+    const row_count = index.data[0];
+    if (!std.math.isFinite(row_count) or @trunc(row_count) != row_count) return error.InvalidInput;
+    if (@abs(row_count) > @as(f64, @floatFromInt(x.shape[0]))) return error.ShapeMismatch;
+    const amount: usize = @intFromFloat(@abs(row_count));
+    const split = if (row_count < 0) x.shape[0] - amount else amount;
     var row_size: usize = 1;
     for (x.shape[1..]) |dim| row_size = try std.math.mul(usize, row_size, dim);
     const left_shape = try a.dupe(usize, x.shape);
@@ -51,15 +62,15 @@ pub fn pop(a: std.mem.Allocator, x: Value, _: Value) !Value {
 }
 
 /// Take rows from the front, or from the back for a negative count.
-pub fn take(a: std.mem.Allocator, x: Value, count: Value) !Value {
-    const parts = try split_at(a, x, count);
-    return parts.tuple.?[if (count.data[0] < 0) @as(usize, 1) else 0];
+pub fn take(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
+    const parts = try split_at(a, x, row_count);
+    return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 1) else 0];
 }
 
 /// Drop rows from the front, or from the back for a negative count.
-pub fn drop(a: std.mem.Allocator, x: Value, count: Value) !Value {
-    const parts = try split_at(a, x, count);
-    return parts.tuple.?[if (count.data[0] < 0) @as(usize, 0) else 1];
+pub fn drop(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
+    const parts = try split_at(a, x, row_count);
+    return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 0) else 1];
 }
 
 /// Prepend a row y to the leading axis of array x.

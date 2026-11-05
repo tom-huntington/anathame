@@ -265,5 +265,6 @@ pub fn lookup(name: []const u8) ?Function {
     if (std.mem.eql(u8, name, "identity")) return &uiua_builtins.id;
     if (std.mem.eql(u8, name, "multiply")) return &uiua_builtins.mul;
     if (std.mem.eql(u8, name, "subtract")) return &uiua_builtins.sub;
+    if (std.mem.eql(u8, name, "modulo")) return &uiua_builtins.mod;
     return null;
 }

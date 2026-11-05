@@ -12,11 +12,15 @@ pub fn sub(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .subtract);
 }
 
+pub fn mod(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .modulo);
+}
+
 pub fn not_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .not_equal);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, not_equal }) !Value {
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, modulo, not_equal }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
@@ -29,6 +33,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
             .add => x.data[xi] + y.data[yi],
             .multiply => x.data[xi] * y.data[yi],
             .subtract => x.data[xi] - y.data[yi],
+            .modulo => if (y.data[yi] == 0) std.math.nan(f64) else @mod(x.data[xi], y.data[yi]),
             .not_equal => @floatFromInt(@intFromBool(x.data[xi] != y.data[yi])),
         };
     }
