@@ -29,6 +29,14 @@ quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
 are vectors of code points. Literals support escapes such as `\n`, `\t`,
 `\\`, `\"`, and `\u{1F600}`. `id` returns its argument unchanged.
 Separate input values with whitespace or semicolons outside literals.
+
+`(re.Matches "^\d+$")` returns `1` when the input string matches and `0`
+otherwise. The `re.` prefix groups regex functions, and each function binds
+tightly to its right-hand pattern literal. Quoted regex patterns preserve
+backslashes for the regex engine. Strings are converted from numeric Unicode
+codepoints to UTF-8. Matching uses regex.zig 0.0.1, which rejects backreferences
+such as `\1` with `UnsupportedBackreference`.
+
 Reverse application supplies one or two literal arguments before `|>`:
 `2 3 |> \ mul |n couple` produces `[6 2]`. The supplied argument count determines
 the application's arity. At the top level these are default arguments;

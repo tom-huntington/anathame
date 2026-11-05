@@ -257,6 +257,12 @@ pub fn known(name: []const u8) bool {
 }
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
+    if (std.mem.startsWith(u8, name, "re.")) {
+        inline for (comptime std.meta.declarations(@import("regex_builtins.zig"))) |decl| {
+            if (std.mem.eql(u8, name[3..], decl)) return &@field(@import("regex_builtins.zig"), decl);
+        }
+        return null;
+    }
     const builtins = @import("builtins.zig");
     const uiua_builtins = @import("uiua_builtins.zig");
     inline for (.{ builtins, uiua_builtins }) |implementations| {

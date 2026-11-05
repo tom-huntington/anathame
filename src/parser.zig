@@ -165,6 +165,15 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, .{ .partial = .{ .name = "Stencil", .argument = .{ .data = &.{2} } } });
             continue;
         }
+        if (std.mem.startsWith(u8, token, "re.") and @import("primitives.zig").known(token)) {
+            const pattern = (try lexer.next()) orelse return error.ExpectedLiteral;
+            // Regex literals preserve backslashes for the regex parser.
+            const escaped = if (pattern[0] == '"') try std.mem.replaceOwned(u8, a, pattern, "\\", "\\\\") else pattern;
+            defer if (pattern[0] == '"') a.free(escaped);
+            const argument = (try strand(a, lexer, escaped)) orelse return error.ExpectedLiteral;
+            try result.append(a, .{ .partial = .{ .name = token, .argument = argument } });
+            continue;
+        }
         if (try strand(a, lexer, token)) |value| {
             try result.append(a, .{ .literal = value });
         } else {

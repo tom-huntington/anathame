@@ -146,3 +146,16 @@ test "Aliases" {
     try test_alias("sum", "Reduce add");
     try test_hof_alias("Pairwise", "Stencil,2");
 }
+
+test "Regex" {
+    // regex functions bind tightly to literal on right
+    try expect_output(
+        \\(re.Matches "^(\d+)\1$")
+    , .{"\"99\""}, "1");
+    try expect_output(
+        \\(re.Matches "^(\d+)\1$")
+    , .{"\"1010\""}, "1");
+    try expect_output(
+        \\(re.Matches "^(\d+)\1$")
+    , .{"\"101\""}, "0");
+}
