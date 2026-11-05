@@ -30,3 +30,14 @@ test "day 2" {
         \\ \ not_eq,@, |sig Partition ints |b Rows (Unc range_inclusive Filter part1**part2 sum) sum
     , "[1227775554 4174379265]", @src());
 }
+
+test "day 3" {
+    try expected_unary(
+        \\$ 987654321111111
+        \\$ 811111111111119
+        \\$ 234234234234278
+        \\$ 818181911112111
+    ,
+        \\ \ digits
+    , "[9 8 7 6 5 4 3 2 1 1 1 1 1 1 1 8 1 1 1 1 1 1 1 1 1 1 1 1 1 9 2 3 4 2 3 4 2 3 4 2 3 4 2 7 8 8 1 8 1 8 1 9 1 1 1 1 2 1 1 1]", @src());
+}

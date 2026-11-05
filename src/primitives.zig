@@ -2,7 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
-    if (std.mem.eql(u8, name, "ints")) return 1;
+    if (std.mem.eql(u8, name, "ints") or std.mem.eql(u8, name, "digits") or std.mem.eql(u8, name, "digits2d")) return 1;
     return if (std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) 1 else 2;
 }
 // ASCII names snapshotted from uiua/site/primitives.json.

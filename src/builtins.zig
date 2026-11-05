@@ -104,6 +104,47 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
 }
 
+/// Extract individual ASCII digits as a vector.
+pub fn digits(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return extractDigits(a, x, false);
+}
+
+/// Extract digit-bearing lines as equally sized rows of a matrix.
+pub fn digits2d(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return extractDigits(a, x, true);
+}
+
+fn extractDigits(a: std.mem.Allocator, x: Value, matrix: bool) !Value {
+    if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
+    var numbers: std.ArrayList(f64) = .empty;
+    defer numbers.deinit(a);
+    var width: ?usize = null;
+    var row_start: usize = 0;
+    var rows: usize = 0;
+    for (0..x.data.len + 1) |i| {
+        const character = if (i < x.data.len) x.data[i] else '\n';
+        if (!std.math.isFinite(character) or character < 0 or character > 0x10ffff or
+            @trunc(character) != character or (character >= 0xd800 and character <= 0xdfff))
+            return error.InvalidInput;
+        if (character >= '0' and character <= '9') {
+            try numbers.append(a, character - '0');
+        } else if (matrix and character == '\n' and numbers.items.len > row_start) {
+            const row_width = numbers.items.len - row_start;
+            if (width) |expected| {
+                if (row_width != expected) return error.ShapeMismatch;
+            } else width = row_width;
+            rows += 1;
+            row_start = numbers.items.len;
+        }
+    }
+    const shape = if (matrix)
+        try a.dupe(usize, &.{ rows, width orelse 0 })
+    else
+        try a.dupe(usize, &.{numbers.items.len});
+    errdefer a.free(shape);
+    return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
+}
+
 /// Format each scalar as characters, appending a character axis to the shape.
 pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
