@@ -1,6 +1,15 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Print a value and return it unchanged.
+pub fn log(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    var text: std.Io.Writer.Allocating = .init(a);
+    defer text.deinit();
+    try @import("runtime.zig").writeValue(&text.writer, x);
+    std.debug.print("{s}\n", .{text.written()});
+    return x;
+}
+
 /// Number of leading-axis rows; scalars have one row.
 pub fn length(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;

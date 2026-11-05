@@ -28,6 +28,7 @@ functions. Values can be numbers, rectangular arrays, characters (`@a`), or
 quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
 are vectors of code points. Literals support escapes such as `\n`, `\t`,
 `\\`, `\"`, and `\u{1F600}`. `id` returns its argument unchanged.
+`log` prints its argument to stderr followed by a newline and returns it unchanged.
 Separate input values with whitespace or semicolons outside literals.
 
 `(re.Matches "^\d+$")` returns `1` when the input string matches and `0`
