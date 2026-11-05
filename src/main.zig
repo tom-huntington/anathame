@@ -1,7 +1,7 @@
 const std = @import("std");
 const runtime = @import("anathame").runtime;
 pub fn main(init: std.process.Init) !void {
-    @import("console.zig").init();
+    @import("anathame").console.init();
 
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
