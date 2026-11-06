@@ -55,6 +55,8 @@ test "day 4" {
         \\$ .@@@@@@@@.
         \\$ @.@.@@@.@.
     ,
-        \\ \ split,@\n eq,@@ \ convolve.same,[[3 3] 1 |> fill] greater,4 |s and |sig sub \ flatten sum
-    , "13", @src());
+        \\ part1 =\ convolve.same,[[3 3] 1 |> fill] greater,4 |s and
+        \\ part2 =\ Fix part1
+        \\ \ split,@\n eq,@@ \ part1**part2 |sig sub \ flatten sum
+    , "[13 43]", @src());
 }
