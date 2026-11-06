@@ -30,11 +30,14 @@ test "S and Sig combinators" {
     // s combinator 12.1 (f,g) = x -> g(f(x), x)
     try expect_output("\\ sq |s couple", .{"2"}, "[4 2]"); // backslash \ starts new monadic scope
     try expect_output("( sq |s couple )", .{"2"}, "[4 2]"); // parentheses denote monadic scope
+    try invalid_syntax("\\\\ mul |s mul"); // the scope is declared dyadic by s produces a monad
     // sig combinator 12.1 (f,g) = x -> g(x, f(x))
     try expect_output("\\ sq |sig couple", .{"2"}, "[2 4]"); // backslash \ starts new monadic scope
 }
 
 test "Combinators" {
+    // delta combinator 12.2 (f,g) = x, y -> g(f(x), y)
+    // d combinator 12.2 (f,g) = x, y -> g(x, f(y))
     // psi combinator 12.2 (f,g) = x, y -> g(f(x), f(y))
 }
 
@@ -80,12 +83,12 @@ test "Partial application" {
 
 test "reverse function application" {
     try expect_output(
-        \\ 2 3 |> \ mul |n couple
+        \\ 2 3 |> \\ mul |n couple
     , .{}, "[2 6]");
 
     // when we have |> at top level it specifies default arguments
     try expect_output(
-        \\ 2 3 |> \ mul |n couple
+        \\ 2 3 |> \\ mul |n couple
     , .{ "5", "7" }, "[5 35]");
 }
 

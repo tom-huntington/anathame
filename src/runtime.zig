@@ -113,7 +113,16 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     var retain_y = false;
     var first_function = true;
     var skip: usize = 0;
+    // D transforms only the right input, so do not evaluate its prefix on x.
+    var start: usize = 0;
     for (instructions, 0..) |instruction, index| {
+        if (instruction == .combinator and instruction.combinator == .d) start = index;
+    }
+    if (start > 0) {
+        result = try evaluateScope(memory, instructions[0..start], y, y);
+        first_function = false;
+    }
+    for (instructions[start..], start..) |instruction, index| {
         if (skip > 0) {
             skip -= 1;
             continue;
@@ -162,8 +171,8 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         }
         if (instruction == .combinator) {
             retain_x = instruction.combinator != .b;
-            reverse_arguments = instruction.combinator == .sig or instruction.combinator == .n;
-            retain_y = instruction.combinator == .nu;
+            reverse_arguments = instruction.combinator == .sig or instruction.combinator == .n or instruction.combinator == .d;
+            retain_y = instruction.combinator == .nu or instruction.combinator == .delta;
             continue;
         }
         const first_argument = if (first_function or reverse_arguments) x else result;
