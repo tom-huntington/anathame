@@ -217,6 +217,8 @@ pub const names = [_][]const u8{
     "Unc",
     "Scan",
     "Reduce",
+    "Repeat",
+    "Fix",
     "Stencil",
     "Tuples",
     "select",

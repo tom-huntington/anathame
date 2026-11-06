@@ -10,6 +10,7 @@ pub const Instruction = union(enum) {
     rows: *const Instruction,
     unc: *const Instruction,
     reduce: *const Instruction,
+    repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
     tuples: *const Instruction,
@@ -304,6 +305,27 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .unc = function });
+        } else if (std.mem.eql(u8, name, "Repeat") or std.mem.eql(u8, name, "Fix")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;
+            const first = try a.create(Instruction);
+            first.* = operand;
+            var second: ?*const Instruction = null;
+            if (arity == 2) {
+                if (instruction != .partial and std.mem.eql(u8, name, "Repeat")) return error.WrongNumberOfArguments;
+                const other = result.pop() orelse return error.ExpectedFunction;
+                if (@import("runtime.zig").functionArity(other) != 2) return error.WrongNumberOfArguments;
+                const ptr = try a.create(Instruction);
+                ptr.* = other;
+                second = ptr;
+            }
+            if (instruction == .partial and std.mem.eql(u8, name, "Fix")) return error.WrongNumberOfArguments;
+            try result.append(a, .{ .repeat = .{
+                .first = first,
+                .second = second,
+                .count = if (instruction == .partial) instruction.partial.argument else null,
+                .fixed = std.mem.eql(u8, name, "Fix"),
+            } });
         } else if (std.mem.eql(u8, name, "Filter")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;

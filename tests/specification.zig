@@ -203,6 +203,19 @@ test "High order functions (hofs)" {
     try test_alias("Filter mod,2", "(mod,2 |sig keep)"); // mod,2 is place holder for any predicate
     // Uiua is leading access conventions. We mostly prefer trailing axis conventions
     try expect_output("\\ Reduce mul", "[2_3_5_7 3_5_7_11]", "[210 1155]");
+
+    // repeat with accepts 1 monadic argument or 2 dyadic arguments
+    try expect_output(
+        \\\\ Repeat sq
+    , .{ "2", "3" }, "256");
+    try expect_output(
+        \\\ Repeat,3 sq
+    , "2", "256");
+
+    // our tacit composition model doesn't have triadic functions. So repeat must be partially applied
+    try expect_output(
+        \\\\ Repeat,2 mul sub
+    , .{ "2", "3" }, "[-6 7]");
 }
 
 test "tuples" {

@@ -167,6 +167,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .repeat) {
+            const temporary = try repeat(memory, first_argument, second_argument, instruction.repeat);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .partition) {
             const temporary = try partition(memory, first_argument, second_argument, instruction.partition);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -248,12 +255,13 @@ fn cloneValue(a: std.mem.Allocator, value: Value) anyerror!Value {
     return .{ .data = try a.dupe(f64, value.data), .shape = try a.dupe(usize, value.shape) };
 }
 
-fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
+pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .primitive => |name| @import("primitives.zig").arity(name),
         .partial, .applied, .cases => 1,
         .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
+        .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition => 2,
         .scan, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
@@ -624,4 +632,42 @@ fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, f: *const @import("
         indices[depth] = i;
         for (0..reps) |_| try tupleSelections(memory, x, f, n, indices, depth + 1, data, count);
     }
+}
+
+/// Exact structural equality, including tuple nesting and array shape.
+fn sameValue(x: Value, y: Value) bool {
+    if (x.tuple) |xs| {
+        const ys = y.tuple orelse return false;
+        if (xs.len != ys.len) return false;
+        for (xs, ys) |left, right| if (!sameValue(left, right)) return false;
+        return true;
+    }
+    return y.tuple == null and std.mem.eql(usize, x.shape, y.shape) and std.mem.eql(f64, x.data, y.data);
+}
+
+fn repeat(memory: *ReservedBumpAllocator, x: Value, y: Value, r: @FieldType(@import("parser.zig").Instruction, "repeat")) anyerror!Value {
+    var count: usize = 0;
+    if (!r.fixed) {
+        const value = r.count orelse y;
+        if (value.tuple != null or value.shape.len != 0 or value.data.len != 1) return error.InvalidInput;
+        const n = value.data[0];
+        if (!std.math.isFinite(n) or n < 0 or @floor(n) != n or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+        count = @intFromFloat(n);
+    }
+    const checkpoint = memory.checkpoint();
+    var left = x;
+    var right = y;
+    var i: usize = 0;
+    while (r.fixed or i < count) : (i += 1) {
+        const next_left = try evaluateScope(memory, &.{r.first.*}, left, if (r.second != null) right else left);
+        const next_right = if (r.second) |f| try evaluateScope(memory, &.{f.*}, left, right) else next_left;
+        const done = r.fixed and sameValue(left, next_left) and (r.second == null or sameValue(right, next_right));
+        // Preserve both outputs together before reclaiming the previous iteration.
+        const pair = try @import("memory.zig").ReturnImpl(memory, checkpoint, .{ .tuple = &.{ next_left, next_right } });
+        left = pair.tuple.?[0];
+        right = pair.tuple.?[1];
+        if (done) break;
+    }
+    if (r.second != null) return @import("primitives.zig").lookup("couple").?(memory.allocator(), left, right);
+    return left;
 }

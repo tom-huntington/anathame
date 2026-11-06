@@ -156,3 +156,15 @@ Function definitions must explicitly declare their arity: use `\` or parentheses
 for a monadic function, and `\\` or braces for a dyadic function. For example,
 `double = \ mul,2` and `combine = { add sq }`. Bare primitive aliases and
 unscoped compositions are rejected.
+
+`Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
+binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
+and `(Repeat,3 sq)` on `2` both produce `256`. A zero count returns the input.
+For dyadic updates, `Repeat,n f g` takes two values and simultaneously updates
+both using the previous pair: `{ Repeat,2 mul sub }` on `2 3` produces `[-6 7]`.
+The final pair is combined with `couple`, which requires matching shapes.
+`Fix f` repeatedly applies a monadic function until consecutive results have
+exactly equal shapes and elements (including tuple structure). `Fix f g` uses
+the same simultaneous pair updates and stops when both values are unchanged.
+Fix always applies its functions at least once; nonconverging functions do not
+terminate. NaN elements do not compare equal.
