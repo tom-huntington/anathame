@@ -100,6 +100,9 @@ Named constants can be literal values or evaluated pipelines: `a = 2 |> sq`
 binds `a` to `4`. For example, `ker = [3 3] 1 |> fill` constructs a constant
 array. Constants can reference earlier definitions and be used as partial
 application arguments, such as `convolve.same,ker`.
+Array-producing pipelines can also be inlined inside brackets, such as
+`convolve.same,[[3 3] 1 |> fill]`. The pipeline is evaluated when parsed,
+and its array result is used directly without adding an extra dimension.
 
 Partial applications accept literal choices separated by `*`. A scope runs
 every combination of choices on the same input and stacks the results into

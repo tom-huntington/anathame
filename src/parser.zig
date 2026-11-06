@@ -110,7 +110,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             application.scope.default_arguments = arguments;
             return a.dupe(Instruction, &.{application});
         }
-        if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
+        if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "]")) {
             if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
             if (implicit) lexer.offset -= token.len;
             return bindFunctions(a, result.items, !root);
@@ -331,6 +331,23 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
 }
 
 fn array(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!Value {
+    var lookahead = lexer.*;
+    var depth: usize = 0;
+    while (try lookahead.next()) |token| {
+        if (std.mem.eql(u8, token, "]") and depth == 0) break;
+        if (depth == 0 and std.mem.eql(u8, token, "|>")) {
+            const body = try sequence(a, lexer, "]", false, true, names);
+            if (body.len != 1) return error.InvalidSyntax;
+            const value = try @import("runtime.zig").evaluateConstant(a, body[0]);
+            if (value.tuple != null) return error.ExpectedArray;
+            return value;
+        }
+        if (std.mem.eql(u8, token, "[") or std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "{")) depth += 1;
+        if (std.mem.eql(u8, token, "]") or std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}")) {
+            if (depth == 0) return error.InvalidSyntax;
+            depth -= 1;
+        }
+    }
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 0;
     var child_shape: ?[]const usize = null;
