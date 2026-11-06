@@ -1,6 +1,13 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Return the first tuple element. Array support is not implemented yet.
+pub fn first(_: std.mem.Allocator, x: Value, _: Value) !Value {
+    const tuple = x.tuple orelse return error.UnimplementedPrimitive;
+    if (tuple.len == 0) return error.InvalidInput;
+    return tuple[0];
+}
+
 /// Uiua deshape: collect all elements into a single vector in storage order.
 pub fn flatten(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
@@ -89,15 +96,15 @@ fn integerRange(a: std.mem.Allocator, start: Value, sentinel: Value, inclusive: 
     if (start.tuple != null or sentinel.tuple != null or
         start.shape.len != 0 or sentinel.shape.len != 0 or
         start.data.len != 1 or sentinel.data.len != 1) return error.InvalidInput;
-    const first = start.data[0];
+    const begin = start.data[0];
     const end = sentinel.data[0];
-    if (!std.math.isFinite(first) or !std.math.isFinite(end) or
-        @trunc(first) != first or @trunc(end) != end) return error.InvalidInput;
-    const range_length = if (end < first) 0 else end - first + @as(f64, if (inclusive) 1 else 0);
+    if (!std.math.isFinite(begin) or !std.math.isFinite(end) or
+        @trunc(begin) != begin or @trunc(end) != end) return error.InvalidInput;
+    const range_length = if (end < begin) 0 else end - begin + @as(f64, if (inclusive) 1 else 0);
     if (range_length >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
     const size: usize = @intFromFloat(range_length);
     const data = try a.alloc(f64, size);
-    for (data, 0..) |*item, i| item.* = first + @as(f64, @floatFromInt(i));
+    for (data, 0..) |*item, i| item.* = begin + @as(f64, @floatFromInt(i));
     return .{ .data = data, .shape = try a.dupe(usize, &.{size}) };
 }
 
