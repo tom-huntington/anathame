@@ -57,7 +57,10 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
         const declaration = (try body_lexer.next()) orelse return error.InvalidSyntax;
         const is_function = std.mem.eql(u8, declaration, "(") or std.mem.eql(u8, declaration, "{") or
             std.mem.eql(u8, declaration, "\\") or std.mem.eql(u8, declaration, "\\\\");
-        if (!is_function and (try strand(a, &body_lexer, declaration, &names)) == null) return error.InvalidSyntax;
+        if (!is_function and (try strand(a, &body_lexer, declaration, &names)) == null) {
+            std.debug.print("Invalid declaration for '{s}': expected a constant or a function with an explicit arity.\nTo declare a unary function, write: {s} =\\ {s} ...\n", .{ name, name, declaration });
+            return error.InvalidSyntax;
+        }
         body_lexer.offset = 0;
         const body = try sequence(a, &body_lexer, null, false, true, &names);
         if (body.len != 1) return error.InvalidSyntax;
