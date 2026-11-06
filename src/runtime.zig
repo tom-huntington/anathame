@@ -174,6 +174,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .map_accum) {
+            const temporary = try mapAccum(memory, first_argument, second_argument, instruction.map_accum);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .repeat) {
             const temporary = try repeat(memory, first_argument, second_argument, instruction.repeat);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -271,7 +278,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
-        .partition, .table, .flip => 2,
+        .partition, .table, .flip, .map_accum => 2,
         .scan, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
@@ -377,6 +384,28 @@ fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function:
     shape[1] = group_len;
     @memcpy(shape[2..], output_shape.?[1..]);
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
+/// Map each row with the current accumulator, then update it for the next row.
+fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functions: @FieldType(@import("parser.zig").Instruction, "map_accum")) anyerror!Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const a = memory.allocator();
+    const count = if (x.shape.len == 0) 1 else x.shape[0];
+    var accumulator = initial;
+    var data: std.ArrayList(f64) = .empty;
+    var output_shape: ?[]const usize = null;
+    for (0..@max(count, 1)) |i| {
+        const row = try rowArgument(a, x, i);
+        const mapped = try evaluateScope(memory, &.{functions.map.*}, row, accumulator);
+        if (mapped.tuple != null) return error.ExpectedArray;
+        if (output_shape) |shape| {
+            if (!std.mem.eql(usize, shape, mapped.shape)) return error.ShapeMismatch;
+        } else output_shape = try a.dupe(usize, mapped.shape);
+        if (count != 0) try data.appendSlice(a, mapped.data);
+        if (i + 1 < count) accumulator = try evaluateScope(memory, &.{functions.update.*}, row, accumulator);
+    }
+    const axes: []const usize = if (x.shape.len == 0) &.{} else &.{count};
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ axes, output_shape.? }) };
 }
 
 /// Map a function over leading-axis rows, repeating single-row arguments.

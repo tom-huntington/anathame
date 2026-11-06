@@ -12,6 +12,7 @@ pub const Instruction = union(enum) {
     flip: *const Instruction,
     unc: *const Instruction,
     reduce: *const Instruction,
+    map_accum: struct { map: *const Instruction, update: *const Instruction },
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
@@ -325,6 +326,21 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .unc = function });
+        } else if (std.mem.eql(u8, name, "MapAccum")) {
+            const map = result.pop() orelse return error.ExpectedFunction;
+            const update = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(map) != 2 or @import("runtime.zig").functionArity(update) != 2) return error.WrongNumberOfArguments;
+            const map_ptr = try a.create(Instruction);
+            map_ptr.* = map;
+            const update_ptr = try a.create(Instruction);
+            update_ptr.* = update;
+            var bound: Instruction = .{ .map_accum = .{ .map = map_ptr, .update = update_ptr } };
+            if (instruction == .partial) {
+                const function = try a.create(Instruction);
+                function.* = bound;
+                bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
         } else if (std.mem.eql(u8, name, "Repeat") or std.mem.eql(u8, name, "Fix")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;

@@ -168,6 +168,12 @@ for a monadic function, and `\\` or braces for a dyadic function. For example,
 `double = \ mul,2` and `combine = { add sq }`. Bare primitive aliases and
 unscoped compositions are rejected.
 
+`MapAccum f g` takes an array and an initial accumulator. For each leading-axis
+row, it collects `f row accumulator`, then uses `g row accumulator` as the
+accumulator for the next row. For example, `{ MapAccum couple mul }` on
+`[2 3 5] 7` produces `[2_7 3_14 5_42]`. `MapAccum,7 f g` binds the initial
+accumulator.
+
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
 binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
 and `(Repeat,3 sq)` on `2` both produce `256`. A zero count returns the input.
