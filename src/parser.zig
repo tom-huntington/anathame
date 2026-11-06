@@ -9,6 +9,7 @@ pub const Instruction = union(enum) {
     scan: *const Instruction,
     rows: *const Instruction,
     table: *const Instruction,
+    flip: *const Instruction,
     unc: *const Instruction,
     reduce: *const Instruction,
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
@@ -303,7 +304,18 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             .partial => |partial| partial.name,
             else => "",
         };
-        if (std.mem.eql(u8, name, "Unc")) {
+        if (std.mem.eql(u8, name, "Flip")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            const bound: Instruction = .{ .flip = function };
+            if (instruction == .partial) {
+                const flipped = try a.create(Instruction);
+                flipped.* = bound;
+                try result.append(a, .{ .applied = .{ .function = flipped, .argument = instruction.partial.argument } });
+            } else try result.append(a, bound);
+        } else if (std.mem.eql(u8, name, "Unc")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
