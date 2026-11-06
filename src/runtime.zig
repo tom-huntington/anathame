@@ -191,9 +191,11 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
-        if (instruction == .scan or instruction == .rows) {
+        if (instruction == .scan or instruction == .rows or instruction == .table) {
             const temporary = if (instruction == .rows)
                 try rows(memory, first_argument, second_argument, instruction.rows)
+            else if (instruction == .table)
+                try tableRows(memory, first_argument, second_argument, instruction.table)
             else
                 try scan(memory, first_argument, instruction.scan);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -262,7 +264,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
-        .partition => 2,
+        .partition, .table => 2,
         .scan, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
@@ -396,6 +398,41 @@ fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @im
         if (count != 0) try data.appendSlice(a, result.data);
     }
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
+}
+
+/// Apply a dyadic function to every pair of leading-axis rows, as in Uiua.
+fn tableRows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+    if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+    if (x.tuple != null or y.tuple != null) return error.ExpectedArray;
+    const nx = if (x.shape.len == 0) 1 else x.shape[0];
+    const ny = if (y.shape.len == 0) 1 else y.shape[0];
+    const count = try std.math.mul(usize, nx, ny);
+    const a = memory.allocator();
+    var data: std.ArrayList(f64) = .empty;
+    var output_shape: ?[]const usize = null;
+    for (0..@max(count, 1)) |i| {
+        const first = try rowArgument(a, x, if (count == 0) 0 else i / ny);
+        const second = try rowArgument(a, y, if (count == 0) 0 else i % ny);
+        const result = try evaluateScope(memory, &.{function.*}, first, second);
+        if (result.tuple != null) return error.ExpectedArray;
+        if (output_shape) |shape| {
+            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+        } else {
+            output_shape = try a.dupe(usize, result.shape);
+        }
+        if (count != 0) try data.appendSlice(a, result.data);
+    }
+    var axes: [2]usize = undefined;
+    var rank: usize = 0;
+    if (x.shape.len != 0) {
+        axes[rank] = nx;
+        rank += 1;
+    }
+    if (y.shape.len != 0) {
+        axes[rank] = ny;
+        rank += 1;
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ axes[0..rank], output_shape.? }) };
 }
 
 fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {

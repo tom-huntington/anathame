@@ -179,3 +179,8 @@ exactly equal shapes and elements (including tuple structure). `Fix f g` uses
 the same simultaneous pair updates and stops when both values are unchanged.
 Fix always applies its functions at least once; nonconverging functions do not
 terminate. NaN elements do not compare equal.
+
+`Table` takes a dyadic function and produces a dyadic function that applies it
+to every pair of leading-axis rows. `\\ Table add` on `[1 2]` and `[10 20 30]`
+returns `[[11 21 31] [12 22 32]]`. The first argument supplies the outer axis;
+scalar arguments add no axis. Result cells must have matching shapes.
