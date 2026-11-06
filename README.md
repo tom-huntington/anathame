@@ -58,7 +58,11 @@ functions. Values can be numbers, rectangular arrays, characters (`@a`), or
 quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
 are vectors of code points. Literals support escapes such as `\n`, `\t`,
 `\\`, `\"`, and `\u{1F600}`. `id` returns its argument unchanged.
-`log` prints its argument to stderr followed by a newline and returns it unchanged.
+`log` prints its argument to stdout followed by a newline and returns it unchanged.
+`log.str` does the same, interpreting numbers as Unicode code points: vectors
+print as quoted strings, scalars as `@` characters, and higher-rank arrays as
+grids of quoted rows, like Uiua character arrays. Tuples are formatted recursively.
+Invalid Unicode scalar values are rejected.
 Separate input values with whitespace or semicolons outside literals.
 
 `(re.Matches "^\d+$")` returns `1` when the input string matches and `0`
