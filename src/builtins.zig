@@ -144,55 +144,51 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
 
 /// Extract contiguous runs of ASCII digits as a vector of numbers.
 pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
-    var numbers: std.ArrayList(f64) = .empty;
-    defer numbers.deinit(a);
-    var number: f64 = 0;
-    var in_digits = false;
-    for (x.data) |character| {
-        if (!std.math.isFinite(character) or character < 0 or character > 0x10ffff or
-            @trunc(character) != character or (character >= 0xd800 and character <= 0xdfff))
-            return error.InvalidInput;
-        if (character >= '0' and character <= '9') {
-            number = number * 10 + character - '0';
-            in_digits = true;
-        } else if (in_digits) {
-            try numbers.append(a, number);
-            number = 0;
-            in_digits = false;
-        }
-    }
-    if (in_digits) try numbers.append(a, number);
-    const shape = try a.dupe(usize, &.{numbers.items.len});
-    errdefer a.free(shape);
-    return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
+    return extractNumbers(a, x, false, true);
+}
+
+/// Extract integer-bearing lines as equally sized rows of a matrix.
+pub fn ints2d(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return extractNumbers(a, x, true, true);
 }
 
 /// Extract individual ASCII digits as a vector.
 pub fn digits(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    return extractDigits(a, x, false);
+    return extractNumbers(a, x, false, false);
 }
 
 /// Extract digit-bearing lines as equally sized rows of a matrix.
 pub fn digits2d(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    return extractDigits(a, x, true);
+    return extractNumbers(a, x, true, false);
 }
 
-fn extractDigits(a: std.mem.Allocator, x: Value, matrix: bool) !Value {
+fn extractNumbers(a: std.mem.Allocator, x: Value, matrix: bool, integers: bool) !Value {
     if (x.tuple != null or x.shape.len > 1) return error.InvalidInput;
     var numbers: std.ArrayList(f64) = .empty;
     defer numbers.deinit(a);
     var width: ?usize = null;
     var row_start: usize = 0;
     var rows: usize = 0;
+    var number: f64 = 0;
+    var in_digits = false;
     for (0..x.data.len + 1) |i| {
         const character = if (i < x.data.len) x.data[i] else '\n';
         if (!std.math.isFinite(character) or character < 0 or character > 0x10ffff or
             @trunc(character) != character or (character >= 0xd800 and character <= 0xdfff))
             return error.InvalidInput;
         if (character >= '0' and character <= '9') {
-            try numbers.append(a, character - '0');
-        } else if (matrix and character == '\n' and numbers.items.len > row_start) {
+            if (integers) {
+                number = number * 10 + character - '0';
+                in_digits = true;
+            } else {
+                try numbers.append(a, character - '0');
+            }
+        } else if (in_digits) {
+            try numbers.append(a, number);
+            number = 0;
+            in_digits = false;
+        }
+        if (matrix and character == '\n' and numbers.items.len > row_start) {
             const row_width = numbers.items.len - row_start;
             if (width) |expected| {
                 if (row_width != expected) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ .{ .data = numbers.items[0..expected], .shape = &.{expected} }, .{ .data = numbers.items[row_start..], .shape = &.{row_width} } });
