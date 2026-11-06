@@ -118,6 +118,17 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
         }
+        if (std.mem.eql(u8, token, "^")) {
+            if (result.items.len == 0) return error.ExpectedFunction;
+            const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
+            const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
+            const previous = &result.items[result.items.len - 1];
+            const functions = try bindFunctions(a, &.{previous.*}, false);
+            if (functions.len != 1) return error.ExpectedFunction;
+            const constant = try @import("runtime.zig").evaluateConstant(a, functions[0], value);
+            previous.* = .{ .literal = constant };
+            continue;
+        }
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];

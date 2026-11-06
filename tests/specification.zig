@@ -210,3 +210,11 @@ test "tuples" {
     try expect_output("\\\\ Tuples less", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
     try test_aliases(&.{ "combinations", "Tuples,2 less", "{Tuples less},2" });
 }
+
+test "fill and full" {
+    // same as uiua reshape
+    try expect_output("\\\\ fill", .{ "[2 2]", "0" }, "[0_0 0_0]");
+    try literal_eval("fill,0^[2 2]", "[0_0 0_0]");
+    try expect_output("\\\\ fill", .{ "0", "[2 2]" }, "[0_0 0_0]");
+    try literal_eval("full,[2 2]^0", "[0_0 0_0]"); // arguments reversed
+}

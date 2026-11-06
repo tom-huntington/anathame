@@ -1,6 +1,28 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Repeat data cyclically to fill the requested shape.
+pub fn fill(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    if (x.shape.len == 0 and y.shape.len != 0) return full(a, x, y);
+    return full(a, y, x);
+}
+
+/// Like fill, with the shape bound as the second argument.
+pub fn full(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
+    if (value.tuple != null or dimensions.tuple != null or dimensions.shape.len > 1) return error.InvalidInput;
+    const shape = try a.alloc(usize, dimensions.data.len);
+    var count: usize = 1;
+    for (dimensions.data, shape) |n, *dimension| {
+        if (!std.math.isFinite(n) or n < 0 or @trunc(n) != n or n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+        dimension.* = @intFromFloat(n);
+        count = try std.math.mul(usize, count, dimension.*);
+    }
+    if (count != 0 and value.data.len == 0) return error.ShapeMismatch;
+    const data = try a.alloc(f64, count);
+    for (data, 0..) |*item, i| item.* = value.data[i % value.data.len];
+    return .{ .data = data, .shape = shape };
+}
+
 /// Uiua keep on the trailing axis. Counts cycle when short and truncate when long.
 /// Real scalar counts resample the axis; negative scalars also reverse it.
 pub fn keep(a: std.mem.Allocator, x: Value, counts: Value) !Value {

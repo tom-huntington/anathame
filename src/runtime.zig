@@ -231,6 +231,22 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     return result;
 }
 
+pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig").Instruction, argument: Value) !Value {
+    if (functionArity(instruction) != 1) return error.WrongNumberOfArguments;
+    var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
+    defer memory.deinit();
+    return cloneValue(a, try evaluateScope(&memory, &.{instruction}, argument, argument));
+}
+
+fn cloneValue(a: std.mem.Allocator, value: Value) anyerror!Value {
+    if (value.tuple) |tuple| {
+        const items = try a.alloc(Value, tuple.len);
+        for (items, tuple) |*item, original| item.* = try cloneValue(a, original);
+        return .{ .tuple = items };
+    }
+    return .{ .data = try a.dupe(f64, value.data), .shape = try a.dupe(usize, value.shape) };
+}
+
 fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .primitive => |name| @import("primitives.zig").arity(name),

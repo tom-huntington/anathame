@@ -94,6 +94,11 @@ and empty arrays keep their shape.
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
 the row's shape must match the array's trailing dimensions.
 
+`^` evaluates a unary function or partial application with the following literal
+and produces a constant instead of a function. For example, `mul,2^3` is the
+literal `6`, and `fill,0^[2 2]` is `[0_0 0_0]`. `full` takes the value first
+and shape second, so `full,[2 2]^0` produces the same array.
+
 Partial applications accept literal choices separated by `*`. A scope runs
 every combination of choices on the same input and stacks the results into
 a Cartesian array. The first choice varies fastest; later choices add outer
