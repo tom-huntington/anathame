@@ -1,6 +1,37 @@
 const std = @import("std");
 const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
 pub const Value = struct { data: []const f64 = &.{}, shape: []const usize = &.{}, tuple: ?[]const Value = null };
+/// Report the values at the point a shape constraint fails.
+pub fn shapeMismatch(context: []const u8, values: []const Value) error{ShapeMismatch} {
+    std.debug.print("ShapeMismatch in {s}\n", .{context});
+    for (values, 0..) |value, i| {
+        std.debug.print("  value {d}: ", .{i + 1});
+        printDiagnosticValue(value);
+        std.debug.print("\n", .{});
+    }
+    return error.ShapeMismatch;
+}
+
+fn printDiagnosticValue(value: Value) void {
+    if (value.tuple) |items| {
+        std.debug.print("tuple (", .{});
+        for (items, 0..) |item, i| {
+            if (i != 0) std.debug.print(", ", .{});
+            printDiagnosticValue(item);
+        }
+        std.debug.print(")", .{});
+    } else {
+        std.debug.print("shape {any}, data {any}", .{ value.shape, value.data });
+    }
+}
+
+/// The first assembled result is the reference for subsequent result shapes.
+fn firstResult(data: []const f64, shape: []const usize) Value {
+    var width: usize = 1;
+    for (shape) |dimension| width *= dimension;
+    return .{ .data = data[0..@min(width, data.len)], .shape = shape };
+}
+
 pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, expected: anytype) !void {
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
@@ -324,7 +355,7 @@ fn product(memory: *ReservedBumpAllocator, p: @FieldType(@import("parser.zig").I
         const result = try evaluateScope(memory, branch, x, y);
         if (result.tuple != null) return error.ExpectedArray;
         if (result_shape) |shape| {
-            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
         } else result_shape = result.shape;
         try data.appendSlice(a, result.data);
     }
@@ -357,7 +388,7 @@ fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function:
     const a = memory.allocator();
     if (x.tuple != null or markers.tuple != null) return error.InvalidInput;
     if (markers.shape.len != 1) return error.InvalidInput;
-    if (x.shape.len == 0 or x.shape[0] != markers.data.len) return error.ShapeMismatch;
+    if (x.shape.len == 0 or x.shape[0] != markers.data.len) return shapeMismatch(@src().fn_name, &.{ x, markers });
     for (markers.data) |marker| {
         if (!std.math.isFinite(marker) or @trunc(marker) != marker or marker < -9223372036854775808.0 or marker >= 9223372036854775808.0) return error.InvalidInput;
     }
@@ -384,8 +415,8 @@ fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function:
         if (mapped.tuple != null) return error.ExpectedArray;
         const mapped_shape: []const usize = if (mapped.shape.len == 0) &.{1} else mapped.shape;
         if (output_shape) |previous| {
-            if (scalar_output != (mapped.shape.len == 0)) return error.ShapeMismatch;
-            if (!std.mem.eql(usize, previous[1..], mapped_shape[1..])) return error.ShapeMismatch;
+            if (scalar_output != (mapped.shape.len == 0)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, if (scalar_output) &.{} else previous), mapped });
+            if (!std.mem.eql(usize, previous[1..], mapped_shape[1..])) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, previous), mapped });
             if (group_len != mapped_shape[0]) jagged = true;
         } else {
             output_shape = mapped_shape;
@@ -427,7 +458,7 @@ fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functions:
         const mapped = try evaluateScope(memory, &.{functions.map.*}, row, accumulator);
         if (mapped.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
-            if (!std.mem.eql(usize, shape, mapped.shape)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, shape, mapped.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), mapped });
         } else output_shape = try a.dupe(usize, mapped.shape);
         if (count != 0) try data.appendSlice(a, mapped.data);
         if (i + 1 < count) accumulator = try evaluateScope(memory, &.{functions.update.*}, row, accumulator);
@@ -446,7 +477,7 @@ fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @im
         return evaluateScope(memory, &.{function.*}, x, right);
     const nx = if (x.shape.len == 0) 1 else x.shape[0];
     const ny = if (right.shape.len == 0) 1 else right.shape[0];
-    if (nx != ny and nx != 1 and ny != 1) return error.ShapeMismatch;
+    if (nx != ny and nx != 1 and ny != 1) return shapeMismatch(@src().fn_name, &.{ x, right });
     const count = if (nx == 1) ny else nx;
     const a = memory.allocator();
     var data: std.ArrayList(f64) = .empty;
@@ -457,7 +488,7 @@ fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @im
         const result = try evaluateScope(memory, &.{function.*}, first, second);
         if (result.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
-            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
         } else output_shape = try a.dupe(usize, result.shape);
         if (count != 0) try data.appendSlice(a, result.data);
     }
@@ -480,7 +511,7 @@ fn tableRows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *cons
         const result = try evaluateScope(memory, &.{function.*}, first, second);
         if (result.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
-            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
         } else {
             output_shape = try a.dupe(usize, result.shape);
         }
@@ -529,7 +560,7 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pars
             const acc: Value = .{ .data = data[start + column - 1 ..][0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
             const result = try evaluateScope(memory, &.{function.*}, acc, next);
-            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ShapeMismatch;
+            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });
             data[start + column] = result.data[0];
             memory.restore(checkpoint);
         }
@@ -570,7 +601,7 @@ fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pa
             const acc: Value = .{ .data = data[row..][0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
             const result = try evaluateScope(memory, &.{function.*}, acc, next);
-            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ShapeMismatch;
+            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });
             data[row] = result.data[0];
             memory.restore(checkpoint);
         }
@@ -610,7 +641,7 @@ fn stencil(memory: *ReservedBumpAllocator, x: Value, y: Value, st: @FieldType(@i
         const result = try evaluateScope(memory, &.{st.function.*}, first, second);
         if (result.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
-            if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
         }
         if (output_shape == null) output_shape = try a.dupe(usize, result.shape);
         try data.appendSlice(a, result.data);
@@ -645,7 +676,7 @@ fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import(
             const row = try rowArgument(a, x, i);
             const result = try tuples(memory, row, y, f);
             if (output_shape) |shape| {
-                if (!std.mem.eql(usize, shape, result.shape)) return error.ShapeMismatch;
+                if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
             } else output_shape = try a.dupe(usize, result.shape);
             if (count != 0) try data.appendSlice(a, result.data);
         }
@@ -677,7 +708,7 @@ fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import(
                 const mapped = try evaluateScope(memory, &.{f.*}, subset, subset);
                 if (mapped.tuple != null) return error.ExpectedArray;
                 if (output_shape) |previous| {
-                    if (!std.mem.eql(usize, previous, mapped.shape)) return error.ShapeMismatch;
+                    if (!std.mem.eql(usize, previous, mapped.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, previous), mapped });
                 }
                 // Preserve results before reclaiming temporary subset allocations.
                 const saved = try @import("memory.zig").ReturnImpl(memory, checkpoint, mapped);
@@ -800,8 +831,11 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
             try memory.bindings.put(std.heap.page_allocator, name, copy);
         },
         .items => |items| {
-            const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else return error.ShapeMismatch;
-            if (count != items.len) return error.ShapeMismatch;
+            const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else return shapeMismatch("array or tuple required for pattern", &.{value});
+            if (count != items.len) {
+                std.debug.print("Pattern expects {d} items, received {d}\n", .{ items.len, count });
+                return shapeMismatch(@src().fn_name, &.{value});
+            }
             for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try rowArgument(a, value, i), bound);
         },
     }

@@ -195,7 +195,7 @@ fn extractDigits(a: std.mem.Allocator, x: Value, matrix: bool) !Value {
         } else if (matrix and character == '\n' and numbers.items.len > row_start) {
             const row_width = numbers.items.len - row_start;
             if (width) |expected| {
-                if (row_width != expected) return error.ShapeMismatch;
+                if (row_width != expected) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ .{ .data = numbers.items[0..expected], .shape = &.{expected} }, .{ .data = numbers.items[row_start..], .shape = &.{row_width} } });
             } else width = row_width;
             rows += 1;
             row_start = numbers.items.len;
@@ -219,7 +219,10 @@ pub fn to_string(a: std.mem.Allocator, x: Value, _: Value) !Value {
         const start = text.written().len;
         try text.writer.print("{d}", .{number});
         const length_ = text.written().len - start;
-        if (i == 0) width = length_ else if (length_ != width) return error.ShapeMismatch;
+        if (i == 0) width = length_ else if (length_ != width) {
+            std.debug.print("Formatted widths differ: {d} and {d}\n", .{ width, length_ });
+            return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ .{ .data = x.data[0..1] }, .{ .data = x.data[i..][0..1] } });
+        }
     }
     const bytes = text.written();
     const data = try a.alloc(f64, bytes.len);
@@ -240,7 +243,7 @@ fn splitRowsAt(a: std.mem.Allocator, x: Value, index: Value) !Value {
         index.shape.len != 0 or index.data.len != 1) return error.InvalidInput;
     const row_count = index.data[0];
     if (!std.math.isFinite(row_count) or @trunc(row_count) != row_count) return error.InvalidInput;
-    if (@abs(row_count) > @as(f64, @floatFromInt(x.shape[0]))) return error.ShapeMismatch;
+    if (@abs(row_count) > @as(f64, @floatFromInt(x.shape[0]))) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, index });
     const amount: usize = @intFromFloat(@abs(row_count));
     const split = if (row_count < 0) x.shape[0] - amount else amount;
     var row_size: usize = 1;
@@ -278,7 +281,7 @@ pub fn drop(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
 /// Prepend a row y to the leading axis of array x.
 pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.tuple != null or y.tuple != null) return error.ExpectedArray;
-    if (x.shape.len == 0 or !std.mem.eql(usize, x.shape[1..], y.shape)) return error.ShapeMismatch;
+    if (x.shape.len == 0 or !std.mem.eql(usize, x.shape[1..], y.shape)) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     const shape = try a.dupe(usize, x.shape);
     shape[0] = try std.math.add(usize, shape[0], 1);
     const data = try a.alloc(f64, try std.math.add(usize, x.data.len, y.data.len));

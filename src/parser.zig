@@ -196,7 +196,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const open = (try lexer.next()) orelse return error.ExpectedLiteral;
             if (!std.mem.eql(u8, open, "[")) return error.ExpectedArray;
             const table = try array(a, lexer, names);
-            if (table.shape.len != 2 or table.shape[1] != 2) return error.ShapeMismatch;
+            if (table.shape.len != 2 or table.shape[1] != 2) return @import("runtime.zig").shapeMismatch("Cases requires a two-column table", &.{table});
             try result.append(a, .{ .cases = table });
             continue;
         }

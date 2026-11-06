@@ -32,7 +32,7 @@ pub fn reshape(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
         shape[i] = value.data.len / count;
         count = try std.math.mul(usize, count, shape[i]);
     }
-    if (count > 0 and value.data.len == 0) return error.ShapeMismatch;
+    if (count > 0 and value.data.len == 0) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ value, dimensions });
     const source = if (scalar and dimensions.data[0] < 0) try reverseReshapeRows(a, value) else value;
     const data = try a.alloc(f64, count);
     for (data, 0..) |*item, i| {
@@ -81,7 +81,7 @@ pub fn full(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
         dimension.* = @intFromFloat(n);
         count = try std.math.mul(usize, count, dimension.*);
     }
-    if (count != 0 and value.data.len == 0) return error.ShapeMismatch;
+    if (count != 0 and value.data.len == 0) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ value, dimensions });
     const data = try a.alloc(f64, count);
     for (data, 0..) |*item, i| item.* = value.data[i % value.data.len];
     return .{ .data = data, .shape = shape };
@@ -94,7 +94,7 @@ pub fn keep(a: std.mem.Allocator, x: Value, counts: Value) !Value {
     const scalar = counts.shape.len == 0;
     const source_shape: []const usize = if (x.shape.len == 0) &.{1} else x.shape;
     const width = source_shape[source_shape.len - 1];
-    if (!scalar and width > 0 and counts.data.len == 0) return error.ShapeMismatch;
+    if (!scalar and width > 0 and counts.data.len == 0) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, counts });
     for (counts.data) |n| {
         if (!std.math.isFinite(n) or (!scalar and @trunc(n) != n)) return error.InvalidInput;
     }
@@ -339,7 +339,7 @@ pub fn max(a: std.mem.Allocator, x: Value, y: Value) !Value {
 fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, boolean_and, boolean_or }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
-    if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
+    if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     const big = if (x.shape.len >= y.shape.len) x else y;
     const data = try a.alloc(f64, big.data.len);
     for (data, 0..) |*d, i| {
@@ -364,7 +364,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
 }
 pub fn couple(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
-    if (!std.mem.eql(usize, x.shape, y.shape)) return error.ShapeMismatch;
+    if (!std.mem.eql(usize, x.shape, y.shape)) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     const shape = try a.alloc(usize, x.shape.len + 1);
     shape[0] = 2;
     @memcpy(shape[1..], x.shape);
@@ -383,13 +383,13 @@ pub fn id(_: std.mem.Allocator, x: Value, _: Value) !Value {
 pub fn take(a: std.mem.Allocator, x: Value, counts: Value) !Value {
     if (x.tuple != null or counts.tuple != null or counts.shape.len > 1) return error.InvalidInput;
     const source_shape: []const usize = if (x.shape.len == 0) &.{1} else x.shape;
-    if (counts.data.len > source_shape.len) return error.ShapeMismatch;
+    if (counts.data.len > source_shape.len) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, counts });
     const shape = try a.dupe(usize, source_shape);
     const starts = try a.alloc(usize, shape.len);
     @memset(starts, 0);
     for (counts.data, 0..) |count, axis| {
         if (!std.math.isFinite(count) or @trunc(count) != count) return error.InvalidInput;
-        if (@abs(count) > @as(f64, @floatFromInt(source_shape[axis]))) return error.ShapeMismatch;
+        if (@abs(count) > @as(f64, @floatFromInt(source_shape[axis]))) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{ x, counts });
         const amount: usize = @intFromFloat(@abs(count));
         shape[axis] = amount;
         if (count < 0) starts[axis] = source_shape[axis] - amount;
