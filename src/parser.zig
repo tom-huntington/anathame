@@ -4,6 +4,7 @@ const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
     literal: Value,
     variable: []const u8,
+    aggregate: struct { items: []const Instruction, tuple: bool = false },
     expression: struct { arguments: []const Instruction, body: []const Instruction },
     dynamic_applied: struct { function: *const Instruction, argument: *const Instruction },
     cases: Value,
@@ -110,10 +111,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, "|>")) {
             if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
             const dynamic = for (result.items) |item| {
-                if (item == .variable) break true;
+                if (item != .literal) break true;
             } else false;
             if (dynamic) {
-                for (result.items) |item| if (item != .variable and item != .literal) return error.ExpectedLiteral;
+                for (result.items) |item| if (!isValue(item)) return error.ExpectedLiteral;
                 const body = try sequence(a, lexer, close, implicit, root, names);
                 if (body.len == 0) return error.ExpectedFunction;
                 return a.dupe(Instruction, &.{.{ .expression = .{ .arguments = try result.toOwnedSlice(a), .body = body } }});
@@ -166,21 +167,20 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const function = try a.create(Instruction);
             function.* = previous.*;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
-            if (names.get(argument)) |definition| {
-                if (definition == .variable) {
-                    const arg = try a.create(Instruction);
-                    arg.* = definition;
-                    previous.* = .{ .dynamic_applied = .{ .function = function, .argument = arg } };
-                    continue;
-                }
+            const parsed_argument = (try valueExpression(a, lexer, argument, names, 0)) orelse return error.ExpectedLiteral;
+            if (parsed_argument != .literal) {
+                const arg = try a.create(Instruction);
+                arg.* = parsed_argument;
+                previous.* = .{ .dynamic_applied = .{ .function = function, .argument = arg } };
+                continue;
             }
-            const value = (try strand(a, lexer, argument, names)) orelse return error.ExpectedLiteral;
+            const value = parsed_argument.literal;
             var choices: std.ArrayList(Instruction) = .empty;
             try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = value } } else .{ .applied = .{ .function = function, .argument = value } });
             while (true) {
                 const offset = lexer.offset;
                 const separator = try lexer.next();
-                if (separator == null or !std.mem.eql(u8, separator.?, "*")) {
+                if (separator == null or !std.mem.eql(u8, separator.?, "***")) {
                     lexer.offset = offset;
                     break;
                 }
@@ -204,6 +204,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
+        if (try valueExpression(a, lexer, token, names, 0)) |value| {
+            try result.append(a, value);
+            continue;
+        }
         if (names.get(token)) |function| {
             try result.append(a, function);
             continue;
@@ -355,7 +359,9 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     var i = instructions.len;
     while (i > 0) {
         i -= 1;
-        const instruction = instructions[i];
+        var instruction = instructions[i];
+        const dynamic = if (instruction == .dynamic_applied and instruction.dynamic_applied.function.* == .primitive) instruction.dynamic_applied else null;
+        if (dynamic) |application| instruction = .{ .partial = .{ .name = application.function.primitive, .argument = .{ .data = &.{0} } } };
         const name = switch (instruction) {
             .primitive => |name| name,
             .partial => |partial| partial.name,
@@ -449,6 +455,17 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             }
             try result.append(a, bound);
         } else try result.append(a, instruction);
+        if (dynamic) |application| {
+            const bound = &result.items[result.items.len - 1];
+            const function = try a.create(Instruction);
+            function.* = switch (bound.*) {
+                .partial => |partial| .{ .primitive = partial.name },
+                .applied => |applied| applied.function.*,
+                .repeat => |repeat| .{ .repeat = .{ .first = repeat.first, .second = repeat.second, .fixed = repeat.fixed } },
+                else => return error.ExpectedFunction,
+            };
+            bound.* = .{ .dynamic_applied = .{ .function = function, .argument = application.argument } };
+        }
     }
     std.mem.reverse(Instruction, result.items);
     return result.toOwnedSlice(a);
@@ -511,30 +528,109 @@ fn tuple(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnm
 }
 
 // Strands stack equally shaped literals along a new leading axis.
-fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!?Value {
-    const first = if (std.mem.eql(u8, token, "tup")) try tuple(a, lexer, names) else if (std.mem.eql(u8, token, "[")) try array(a, lexer, names) else (try namedLiteral(a, token, names)) orelse return null;
-    var data: std.ArrayList(f64) = .empty;
-    var count: usize = 1;
+fn isValue(value: Instruction) bool {
+    return value == .literal or value == .variable or value == .expression or value == .aggregate;
+}
+
+fn foldValue(a: std.mem.Allocator, value: Instruction) anyerror!Instruction {
+    const constant = switch (value) {
+        .literal => return value,
+        .expression => |e| for (e.arguments) |arg| {
+            if (arg != .literal) break false;
+        } else true,
+        .aggregate => |e| for (e.items) |arg| {
+            if (arg != .literal) break false;
+        } else true,
+        else => false,
+    };
+    return if (constant) .{ .literal = try @import("runtime.zig").evaluateConstant(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{value}), .default_arguments = try a.dupe(Value, &.{.{ .data = &.{0} }}) } }) } else value;
+}
+
+fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction), minimum: u8) anyerror!?Instruction {
+    var left: Instruction = blk: {
+        if (std.mem.eql(u8, token, "[") or std.mem.eql(u8, token, "tup")) {
+            const is_tuple = std.mem.eql(u8, token, "tup");
+            if (is_tuple) {
+                const open = (try lexer.next()) orelse return error.InvalidSyntax;
+                if (!std.mem.eql(u8, open, "(")) return error.InvalidSyntax;
+            } else {
+                // Preserve the existing array pipeline syntax.
+                var look = lexer.*;
+                var depth: usize = 0;
+                while (try look.next()) |t| {
+                    if (depth == 0 and std.mem.eql(u8, t, "]")) break;
+                    if (depth == 0 and std.mem.eql(u8, t, "|>")) {
+                        const body = try sequence(a, lexer, "]", false, true, names);
+                        if (body.len != 1) return error.InvalidSyntax;
+                        break :blk if (body[0] == .scope) .{ .literal = try @import("runtime.zig").evaluateConstant(a, body[0]) } else body[0];
+                    }
+                    if (std.mem.eql(u8, t, "[")) depth += 1;
+                    if (std.mem.eql(u8, t, "]")) depth -= 1;
+                }
+            }
+            var items: std.ArrayList(Instruction) = .empty;
+            const close = if (is_tuple) ")" else "]";
+            while (true) {
+                const next = (try lexer.next()) orelse return error.UnclosedArray;
+                if (std.mem.eql(u8, next, close)) break;
+                if (is_tuple and items.items.len > 0) {
+                    if (!std.mem.eql(u8, next, ",")) return error.InvalidSyntax;
+                    const child = (try lexer.next()) orelse return error.ExpectedLiteral;
+                    try items.append(a, (try valueExpression(a, lexer, child, names, 0)) orelse return error.ExpectedLiteral);
+                } else try items.append(a, (try valueExpression(a, lexer, next, names, 0)) orelse return error.ExpectedLiteral);
+            }
+            break :blk try foldValue(a, .{ .aggregate = .{ .items = try items.toOwnedSlice(a), .tuple = is_tuple } });
+        }
+        if (names.get(token)) |v| {
+            if (!isValue(v)) return null;
+            break :blk v;
+        }
+        break :blk .{ .literal = (try literal(a, token)) orelse return null };
+    };
     while (true) {
         const offset = lexer.offset;
-        const separator = try lexer.next();
-        if (separator == null or !std.mem.eql(u8, separator.?, "_")) {
+        const op = (try lexer.next()) orelse break;
+        const adjacent = lexer.offset - op.len == offset;
+        const precedence: u8 = if (std.mem.eql(u8, op, "_")) 1 else if (std.mem.eql(u8, op, "+") or std.mem.eql(u8, op, "-")) 2 else if (std.mem.eql(u8, op, "/") or std.mem.eql(u8, op, "*")) 3 else 0;
+        // A signed numeric token immediately following an atom is subtraction.
+        const signed = adjacent and op.len > 1 and op[0] == '-' and op[1] != '>';
+        const rank: u8 = if (signed) 2 else precedence;
+        if (rank == 0 or rank < minimum) {
             lexer.offset = offset;
             break;
         }
-        if (first.tuple != null) return error.ExpectedArray;
-        if (count == 1) try data.appendSlice(a, first.data);
-        const next = (try lexer.next()) orelse return error.ExpectedLiteral;
-        const child = if (std.mem.eql(u8, next, "[")) try array(a, lexer, names) else (try namedLiteral(a, next, names)) orelse return error.ExpectedLiteral;
-        if (!std.mem.eql(usize, first.shape, child.shape)) return error.RaggedArray;
-        try data.appendSlice(a, child.data);
-        count += 1;
+        const next = if (signed) op[1..] else (try lexer.next()) orelse return error.ExpectedLiteral;
+        const right = (try valueExpression(a, lexer, next, names, rank + 1)) orelse return error.ExpectedLiteral;
+        if (precedence == 1) {
+            var items: std.ArrayList(Instruction) = .empty;
+            try items.appendSlice(a, &.{ left, right });
+            while (true) {
+                const before = lexer.offset;
+                const separator = try lexer.next();
+                if (separator == null or !std.mem.eql(u8, separator.?, "_")) {
+                    lexer.offset = before;
+                    break;
+                }
+                const child = (try lexer.next()) orelse return error.ExpectedLiteral;
+                try items.append(a, (try valueExpression(a, lexer, child, names, 2)) orelse return error.ExpectedLiteral);
+            }
+            left = try foldValue(a, .{ .aggregate = .{ .items = try items.toOwnedSlice(a) } });
+        } else {
+            const name: []const u8 = if (signed or op[0] == '-') "sub" else switch (op[0]) {
+                '+' => "add",
+                '*' => "mul",
+                '/' => "div",
+                else => unreachable,
+            };
+            left = try foldValue(a, .{ .expression = .{ .arguments = try a.dupe(Instruction, &.{ left, right }), .body = try a.dupe(Instruction, &.{.{ .primitive = name }}) } });
+        }
     }
-    if (count == 1) return first;
-    const shape = try a.alloc(usize, first.shape.len + 1);
-    shape[0] = count;
-    @memcpy(shape[1..], first.shape);
-    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+    return left;
+}
+
+fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!?Value {
+    const value = (try valueExpression(a, lexer, token, names, 0)) orelse return null;
+    return if (value == .literal) value.literal else null;
 }
 
 fn namedLiteral(a: std.mem.Allocator, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction)) !?Value {

@@ -78,6 +78,7 @@ test "strings" {
 
 test "Partial application" {
     try expect_output("\\ mul,2", .{"3"}, "6");
+    try expect_output("\\ mul,2*5", .{"3"}, "30");
     try expect_output("\\ sub,2", .{"3"}, "1"); // partial application binds second argument
 }
 
@@ -145,10 +146,10 @@ test "builtins" {
 test "Phi combinator" {
     // phi combinator 112.1 (f,g,h) = x -> h(f(x),g(x))
     try expect_output("\\ take,2 |phi drop,2 mul", .{"[1 2 3 4]"}, .{"[3 8]"});
-    // if instead first argument returns 2-tuple (denoted 1²) we have
-    // phi combinator 1²2.1 (f,g) = x -> g(*f(x))
+    // if instead first argument returns 2-tuple (denoted 1Â²) we have
+    // phi combinator 1Â²2.1 (f,g) = x -> g(*f(x))
     try expect_output("\\ id |phi mul", .{"tup([1 2], [3 4])"}, .{"[3 8]"});
-    // phi combinator 1²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
+    // phi combinator 1Â²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
     try expect_output("\\ id |phi add,1 sq couple", .{"tup([1 2], [3 4])"}, .{"[2_3 9_16]"});
 }
 
@@ -159,9 +160,9 @@ test "Keywords" {
 
 test "Literal alternatives macro" {
     //  Cartesian array of compositions
-    // * separates alternative literals for inlining.
+    // *** separates alternative literals for inlining.
     // Run every composition on the same input
-    try expect_output("\\ mul,2*3 mul,5*7", .{"1"}, .{"[10_15 14_21]"});
+    try expect_output("\\ mul,2***3 mul,5***7", .{"1"}, .{"[10_15 14_21]"});
 
     // ** does the same but with functions
     try expect_output("\\ (sq ** mul,3) |b (mul,5 ** mul,7)", .{"2"}, .{"[20_28 30_42]"});
@@ -248,4 +249,6 @@ test "lambdas" {
     try expect_output("{[a b], c -> a c |> couple tuple,b }", .{ "[1 2]", "3" }, .{ "[1 3]", "2" });
     try expect_output("\\\\[a b], c -> a c |> couple tuple,b ", .{ "[1 2]", "3" }, .{ "[1 3]", "2" });
     try expect_output("([a b] -> b a |> couple )", "[2 1]", "[1 2]");
+    try expect_output("([a b] -> b*5 a |> couple )", "[2 3]", "[15 2]");
+    try expect_output("([a b] -> a |> sq mul,b*5 )", "[2 3]", "60");
 }

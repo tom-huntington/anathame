@@ -115,11 +115,11 @@ Array-producing pipelines can also be inlined inside brackets, such as
 `convolve.same,[[3 3] 1 |> fill]`. The pipeline is evaluated when parsed,
 and its array result is used directly without adding an extra dimension.
 
-Partial applications accept literal choices separated by `*`. A scope runs
+Partial applications accept literal choices separated by `***`. A scope runs
 every combination of choices on the same input and stacks the results into
 a Cartesian array. The first choice varies fastest; later choices add outer
 axes, followed by the result's own dimensions. For example,
-`\ mul,2*3 mul,5*7` on `1` produces `[10_15 14_21]`: the four
+`\ mul,2***3 mul,5***7` on `1` produces `[10_15 14_21]`: the four
 compositions multiply by (2,5), (3,5), (2,7), and (3,7).
 Each alternative may be a scalar, strand, or array literal. Branch results
 must be arrays with matching shapes.
@@ -209,3 +209,9 @@ Nested calls can reference active outer arguments. Reusing an active name,
 a declared name, or a primitive name fails with `shadowed names not allowed`.
 Variable arguments to `|>` and partial applications such as `add,x` are resolved
 when the lambda runs.
+
+Value expressions support `+`, `-`, `*`, and `/` with named lambda variables
+and constants wherever a value is accepted, including partial arguments,
+arrays, tuples, and strands. Multiplication and division bind before addition
+and subtraction; equal precedence associates left to right. Use `*` for multiplication (`a*5` or `a * 5`); `***` separates literal choices.
+For example, `([a b] -> b*5 a+1 |> couple)` on `[2 3]` returns `[15 3]`.

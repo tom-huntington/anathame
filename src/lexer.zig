@@ -63,6 +63,10 @@ pub const Lexer = struct {
             }
             return error.UnclosedLiteral;
         }
+        if (c == '*' and std.mem.startsWith(u8, self.source[start..], "***")) {
+            self.offset = start + 3;
+            return self.source[start..self.offset];
+        }
         if (c == '*' and self.offset < self.source.len and self.source[self.offset] == '*') {
             self.offset += 1;
             return self.source[start..self.offset];
@@ -71,9 +75,16 @@ pub const Lexer = struct {
             if (self.offset < self.source.len and self.source[self.offset] == '\\') self.offset += 1;
             return self.source[start..self.offset];
         }
+        if (c == '-' and self.offset < self.source.len and self.source[self.offset] == '>') {
+            self.offset += 1;
+            return self.source[start..self.offset];
+        }
+        if (c == '+' or c == '/' or (c == '-' and (self.offset == self.source.len or (!std.ascii.isDigit(self.source[self.offset]) and self.source[self.offset] != '.' and !std.mem.startsWith(u8, self.source[self.offset..], "inf"))))) return self.source[start..self.offset];
         if (std.mem.indexOfScalar(u8, "[],(){}_*=", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
+            if ((b == '+' or b == '-') and self.offset > start and (self.source[self.offset - 1] == 'e' or self.source[self.offset - 1] == 'E') and (std.ascii.isDigit(c) or c == '-')) continue;
+            if (b == '+' or b == '-' or b == '/') break;
             if (b == '_' and (std.ascii.isAlphabetic(c) or c == '&')) continue;
             if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=\\\"@$", b) != null or
                 b == '|') break;

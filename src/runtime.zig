@@ -179,8 +179,25 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         const second_argument = if (first_function or retain_y) y else if (reverse_arguments) result else if (retain_x) x else result;
         reverse_arguments = false;
         retain_y = false;
-        if (instruction == .literal or instruction == .variable or instruction == .expression or instruction == .dynamic_applied) {
+        if (instruction == .aggregate or instruction == .literal or instruction == .variable or instruction == .expression or instruction == .dynamic_applied) {
             const temporary = switch (instruction) {
+                .aggregate => |aggregate| blk: {
+                    const a = memory.allocator();
+                    const values = try a.alloc(Value, aggregate.items.len);
+                    for (aggregate.items, values) |item, *value| value.* = try evaluateScope(memory, &.{item}, first_argument, second_argument);
+                    if (aggregate.tuple) break :blk Value{ .tuple = values };
+                    var data: std.ArrayList(f64) = .empty;
+                    const child_shape: []const usize = if (values.len == 0) &.{} else values[0].shape;
+                    for (values) |value| {
+                        if (value.tuple != null) return error.ExpectedArray;
+                        if (!std.mem.eql(usize, child_shape, value.shape)) return error.RaggedArray;
+                        try data.appendSlice(a, value.data);
+                    }
+                    const shape = try a.alloc(usize, child_shape.len + 1);
+                    shape[0] = values.len;
+                    @memcpy(shape[1..], child_shape);
+                    break :blk Value{ .data = try data.toOwnedSlice(a), .shape = shape };
+                },
                 .literal => |value| value,
                 .variable => |name| memory.bindings.get(name) orelse return error.UnboundVariable,
                 .expression => |expression| blk: {
