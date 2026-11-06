@@ -80,3 +80,18 @@ test "day 5" {
         \\ \ part1 ** part2
     , "[3 14]", @src());
 }
+
+test "day 6" {
+    try expected_unary(
+        \\$ 123 328  51 64 
+        \\$  45 64  387 23 
+        \\$   6 98  215 314
+        \\$ *   +   *   +  
+    ,
+        \\ parseops =\ (split,@\n lastrow \ not_eq,@ |sig Partition eq,@* flatten )
+        \\ part1 =\ ints2d |phi parseops Switch (Reduce mul) (Reduce add) sum
+        \\ parsep2 =\ split,@\n transpose \ eq,32 Reduce and not |sig Partition id \ ints squeeze
+        \\ part2 =\ parsep2 |phi parseops Switch (Reduce mul) (Reduce add) sum
+        \\ \ part2
+    , null, @src());
+}
