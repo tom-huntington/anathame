@@ -14,6 +14,7 @@ pub const Instruction = union(enum) {
     rows: *const Instruction,
     table: *const Instruction,
     flip: *const Instruction,
+    switch_fn: struct { yes: *const Instruction, no: *const Instruction },
     unc: *const Instruction,
     log: *const Instruction,
     reduce: *const Instruction,
@@ -367,7 +368,22 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             .partial => |partial| partial.name,
             else => "",
         };
-        if (std.mem.eql(u8, name, "Flip")) {
+        if (std.mem.eql(u8, name, "Switch")) {
+            const yes = result.pop() orelse return error.ExpectedFunction;
+            const no = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(yes) != 1 or @import("runtime.zig").functionArity(no) != 1) return error.WrongNumberOfArguments;
+            const yes_ptr = try a.create(Instruction);
+            yes_ptr.* = yes;
+            const no_ptr = try a.create(Instruction);
+            no_ptr.* = no;
+            var bound: Instruction = .{ .switch_fn = .{ .yes = yes_ptr, .no = no_ptr } };
+            if (instruction == .partial) {
+                const function = try a.create(Instruction);
+                function.* = bound;
+                bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
+        } else if (std.mem.eql(u8, name, "Flip")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
