@@ -160,9 +160,9 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
         defer a.free(row.data);
         defer a.free(row.shape);
         if (width) |expected| {
-            if (row.data.len != expected) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{
+            if (row.data.len != expected) return @import("runtime.zig").shapeMismatchIndexed(@src().fn_name, &.{
                 .{ .data = numbers.items[0..expected], .shape = &.{expected} }, row,
-            });
+            }, &.{ 0, i });
         } else width = row.data.len;
         try numbers.appendSlice(a, row.data);
     }

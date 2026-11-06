@@ -3,9 +3,14 @@ const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBum
 pub const Value = struct { data: []const f64 = &.{}, shape: []const usize = &.{}, tuple: ?[]const Value = null };
 /// Report the values at the point a shape constraint fails.
 pub fn shapeMismatch(context: []const u8, values: []const Value) error{ShapeMismatch} {
+    return shapeMismatchIndexed(context, values, null);
+}
+
+/// Report original value indices when comparing selected rows or results.
+pub fn shapeMismatchIndexed(context: []const u8, values: []const Value, indices: ?[]const usize) error{ShapeMismatch} {
     std.debug.print("ShapeMismatch in {s}\n", .{context});
     for (values, 0..) |value, i| {
-        std.debug.print("  value {d}: ", .{i + 1});
+        std.debug.print("  value {d}: ", .{if (indices) |items| items[i] else i});
         printDiagnosticValue(value);
         std.debug.print("\n", .{});
     }
