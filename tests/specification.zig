@@ -42,7 +42,8 @@ test "Combinators" {
 }
 
 test "character" {
-    try expect_output("\\ id", .{"@a"}, "97");
+    try literal_eval("@a", "97");
+    try literal_eval("@ ", "32");
 }
 
 test "strings" {

@@ -5,7 +5,7 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "not")) return 1;
     if (std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
-    if (std.mem.eql(u8, name, "transpose")) return 1;
+    if (std.mem.eql(u8, name, "transpose") or std.mem.eql(u8, name, "lastrow")) return 1;
     if (std.mem.eql(u8, name, "tuple.blankline")) return 1;
     if (std.mem.eql(u8, name, "reverse") or std.mem.eql(u8, name, "flatten")) return 1;
     if (std.mem.eql(u8, name, "base10") or std.mem.eql(u8, name, "radix10")) return 1;

@@ -8,6 +8,29 @@ pub fn first(_: std.mem.Allocator, x: Value, _: Value) !Value {
     return items[0];
 }
 
+/// Select the last row along axis -2 in each outer cell, removing that axis.
+/// Scalars and vectors have no row axis and are returned unchanged.
+pub fn lastrow(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (x.shape.len < 2) return x;
+    const axis = x.shape.len - 2;
+    const rows = x.shape[axis];
+    if (rows == 0) return error.InvalidInput;
+    const width = x.shape[axis + 1];
+    var cells: usize = 1;
+    for (x.shape[0..axis]) |dim| cells = try std.math.mul(usize, cells, dim);
+    const shape = try a.alloc(usize, x.shape.len - 1);
+    errdefer a.free(shape);
+    @memcpy(shape[0..axis], x.shape[0..axis]);
+    shape[axis] = width;
+    const data = try a.alloc(f64, try std.math.mul(usize, cells, width));
+    for (0..cells) |cell| {
+        const start = (cell * rows + rows - 1) * width;
+        @memcpy(data[cell * width ..][0..width], x.data[start..][0..width]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Uiua deshape: collect all elements into a single vector in storage order.
 pub fn flatten(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
