@@ -310,13 +310,15 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
-        if (instruction == .scan or instruction == .rows or instruction == .table) {
+        if (instruction == .scan or instruction == .partials or instruction == .rows or instruction == .table) {
             const temporary = if (instruction == .rows)
                 try rows(memory, first_argument, second_argument, instruction.rows)
             else if (instruction == .table)
                 try tableRows(memory, first_argument, second_argument, instruction.table)
+            else if (instruction == .partials)
+                try scan(memory, first_argument, null, instruction.partials)
             else
-                try scan(memory, first_argument, instruction.scan);
+                try scan(memory, first_argument, second_argument, instruction.scan);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -387,8 +389,8 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .tuples, .log => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
-        .partition, .table, .flip, .map_accum, .switch_fn => 2,
-        .scan, .reduce, .unc => 1,
+        .partition, .table, .flip, .map_accum, .switch_fn, .scan => 2,
+        .partials, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
@@ -620,10 +622,13 @@ fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
     return .{ .data = value.data[start..][0..width], .shape = shape };
 }
 
-/// Inclusive left scan, independently along each innermost vector.
-fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+/// Left prefixes along each innermost vector, optionally starting from a seed.
+fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
+    if (seed) |initial| {
+        if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
+    } else if (x.data.len == 0) return error.EmptyArray;
     const a = memory.allocator();
     const data = try a.dupe(f64, x.data);
     const shape = try a.dupe(usize, x.shape);
@@ -631,9 +636,9 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pars
     if (width == 0) return .{ .data = data, .shape = shape };
     for (0..data.len / width) |row| {
         const start = row * width;
-        for (1..width) |column| {
+        for (if (seed != null) @as(usize, 0) else 1..width) |column| {
             const checkpoint = memory.checkpoint();
-            const acc: Value = .{ .data = data[start + column - 1 ..][0..1] };
+            const acc: Value = if (column == 0) seed.? else .{ .data = data[start + column - 1 ..][0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
             const result = try evaluateScope(memory, &.{function.*}, acc, next);
             if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });

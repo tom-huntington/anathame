@@ -103,11 +103,14 @@ and copy back only the result. This prioritizes simple lifetime rules over
 copy avoidance. No input mutation or ownership flags are used.
 
 Higher-order functions start with capitals: `Partition id` groups positive
-marker runs and applies `id` to each group. `Scan add` computes inclusive
+marker runs and applies `id` to each group. `Partials add` computes inclusive
 prefix sums along the innermost dimension independently: `[[1 2 3] [4 5 6]]`
-becomes `[[1 3 6] [4 9 15]]`. Scan passes the accumulator first and the next
+becomes `[[1 3 6] [4 9 15]]`. Partials passes the accumulator first and the next
 scalar second to its binary function, which must return a scalar. Scalars
-and empty arrays keep their shape.
+keep their shape; Partials requires non-empty input.
+`Scan add` takes an array and a scalar seed: `[1 2 3]` with seed `10`
+produces `[11 13 16]`. It preserves the input shape, including empty arrays,
+and starts each innermost vector from the seed.
 
 `prepend` takes an array first and a row second, adding that row at the front.
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
@@ -161,7 +164,7 @@ Named functions are defined before the main scope with `name = body`:
 ```text
 part1 = \ mod,100 count,0
 part2 = \ sub,1 |s {(div,100 floor Pairwise sub abs sum) |psi add} |b div,2
-\ prepend,50 Scan add part1 ** part2
+\ prepend,50 Partials add part1 ** part2
 ```
 
 Definitions end at a newline outside parentheses, braces, and arrays. Names

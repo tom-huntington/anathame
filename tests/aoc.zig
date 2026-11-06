@@ -15,7 +15,7 @@ test "day 1" {
     ,
         \\part1 =\ mod,100 count,0
         \\part2 =\ sub,1 |s {div,100 floor Pairwise sub abs sum |psi add} |b div,2
-        \\ \ not_eq,@\n |sig Partition (uncons |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Scan add part1 ** part2
+        \\ \ not_eq,@\n |sig Partition (uncons |phi Cases [@L_-1 @R_1] parse mul) |b prepend,50 Partials add part1 ** part2
     , "[3 6]", @src());
 }
 
