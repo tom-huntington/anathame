@@ -123,7 +123,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // A run step that will run the test executable.
-    const run_mod_tests = b.addRunArtifact(mod_tests);
+    const run_mod_tests = runTests(b, mod_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -133,7 +133,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // A run step that will run the second test executable.
-    const run_exe_tests = b.addRunArtifact(exe_tests);
+    const run_exe_tests = runTests(b, exe_tests);
 
     // A top level step for running all tests. dependOn can be called multiple
     // times and since the two run steps do not depend on one another, this will
@@ -149,7 +149,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "anathame", .module = mod }},
         }),
     });
-    test_step.dependOn(&b.addRunArtifact(combinator_tests).step);
+    test_step.dependOn(&runTests(b, combinator_tests).step);
     const aoc_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("tests/aoc.zig"),
@@ -158,7 +158,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "anathame", .module = mod }},
         }),
     });
-    test_step.dependOn(&b.addRunArtifact(aoc_tests).step);
+    test_step.dependOn(&runTests(b, aoc_tests).step);
     // Run without the build runner's test protocol so printed results go directly
     // to the terminal, and execute every time the aoc step is requested.
     const run_aoc = std.Build.Step.Run.create(b, "run aoc");
@@ -198,4 +198,12 @@ pub fn build(b: *std.Build) void {
     //
     // Lastly, the Zig build system is relatively simple and self-contained,
     // and reading its source code will allow you to master it.
+}
+
+// Human-readable output must not share stdout with Zig's test protocol.
+fn runTests(b: *std.Build, artifact: *std.Build.Step.Compile) *std.Build.Step.Run {
+    const run = std.Build.Step.Run.create(b, "run tests");
+    run.addArtifactArg(artifact);
+    run.stdio = .inherit;
+    return run;
 }
