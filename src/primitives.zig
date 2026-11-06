@@ -223,6 +223,7 @@ pub const names = [_][]const u8{
     "Scan",
     "Reduce",
     "MapAccum",
+    "Log",
     "Repeat",
     "Fix",
     "Stencil",

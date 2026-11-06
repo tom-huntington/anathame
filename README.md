@@ -168,6 +168,11 @@ for a monadic function, and `\\` or braces for a dyadic function. For example,
 `double = \ mul,2` and `combine = { add sq }`. Bare primitive aliases and
 unscoped compositions are rejected.
 
+`Log f` preserves the arity and behavior of `f`, printing its arguments to
+stdout before each call. For example, `Log add` prints both arguments and
+returns their sum; `Log sq` prints one argument and returns its square.
+`Log,7 add` binds the second argument to `7` and logs both arguments.
+
 `MapAccum f g` takes an array and an initial accumulator. For each leading-axis
 row, it collects `f row accumulator`, then uses `g row accumulator` as the
 accumulator for the next row. For example, `{ MapAccum couple mul }` on

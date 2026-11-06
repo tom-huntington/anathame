@@ -14,6 +14,7 @@ pub const Instruction = union(enum) {
     table: *const Instruction,
     flip: *const Instruction,
     unc: *const Instruction,
+    log: *const Instruction,
     reduce: *const Instruction,
     map_accum: struct { map: *const Instruction, update: *const Instruction },
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
@@ -348,6 +349,19 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 flipped.* = bound;
                 try result.append(a, .{ .applied = .{ .function = flipped, .argument = instruction.partial.argument } });
             } else try result.append(a, bound);
+        } else if (std.mem.eql(u8, name, "Log")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;
+            if (instruction == .partial and arity != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            var bound: Instruction = .{ .log = function };
+            if (instruction == .partial) {
+                const logged = try a.create(Instruction);
+                logged.* = bound;
+                bound = .{ .applied = .{ .function = logged, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
         } else if (std.mem.eql(u8, name, "Unc")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
