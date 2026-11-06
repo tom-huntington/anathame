@@ -2,6 +2,11 @@
 
 Requires Zig 0.17 and (for differential tests) Uiua on PATH.
 
+`tuple.blankline` splits a Unicode character vector at the first blank line
+(`\n\n` or `\r\n\r\n`) into a tuple of two character vectors, removing the
+separator. Later blank lines are preserved. Without a blank line, the tuple
+contains the original vector and an empty vector.
+
 - `zig build test`: Zig unit tests and combinator conformance tests.
 - `zig build test-uiua`: generated Zig differential tests against Uiua (seed 1729, 30 cases per primitive).
 - `zig build test-uiua -- 42 100`: reproduce or expand coverage with a seed and case count.
