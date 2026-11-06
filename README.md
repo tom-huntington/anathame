@@ -38,6 +38,8 @@ For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 `[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
 `flatten` (Uiua's `deshape`) turns any array into a vector in storage order:
 `[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
+`squeeze` removes all length-one dimensions, preserving the data and other axes.
+For example, shape `[1 2 1 3 1]` becomes `[2 3]`, and `[7]` becomes scalar `7`.
 `reshape` takes data first and a shape second. A scalar shape repeats the whole
 array along a new leading axis; a shape list cycles or truncates the flat data.
 For example, `reshape,[2 3]` on `[1 2 3]` gives `[1_2_3 1_2_3]`.

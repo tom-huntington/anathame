@@ -37,6 +37,25 @@ pub fn flatten(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = x.data, .shape = try a.dupe(usize, &.{x.data.len}) };
 }
 
+/// Remove every length-one axis without changing the array's data.
+pub fn squeeze(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    var rank: usize = 0;
+    for (x.shape) |dimension| {
+        if (dimension != 1) rank += 1;
+    }
+    if (rank == x.shape.len) return x;
+    const shape = try a.alloc(usize, rank);
+    var axis: usize = 0;
+    for (x.shape) |dimension| {
+        if (dimension != 1) {
+            shape[axis] = dimension;
+            axis += 1;
+        }
+    }
+    return .{ .data = x.data, .shape = shape };
+}
+
 /// Reverse the trailing axis, preserving the order of all outer axes.
 pub fn reverse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
