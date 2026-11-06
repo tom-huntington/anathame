@@ -31,6 +31,8 @@ overlaps with zero padding. Empty input axes remain empty in all modes.
 For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 `reverse` reverses the trailing axis: `[1_2_3 4_5_6]` becomes
 `[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
+`flatten` (Uiua's `deshape`) turns any array into a vector in storage order:
+`[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
 `base` converts numbers to digits with the least significant digit first;
 the value is the first argument and the scalar base or mixed-radix list is second.
 It adds a trailing digit axis and pads shorter results with zeros.

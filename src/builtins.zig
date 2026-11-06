@@ -1,6 +1,12 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Uiua deshape: collect all elements into a single vector in storage order.
+pub fn flatten(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    return .{ .data = x.data, .shape = try a.dupe(usize, &.{x.data.len}) };
+}
+
 /// Reverse the trailing axis, preserving the order of all outer axes.
 pub fn reverse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;

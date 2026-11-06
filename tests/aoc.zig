@@ -55,6 +55,7 @@ test "day 4" {
         \\$ .@@@@@@@@.
         \\$ @.@.@@@.@.
     ,
-        \\ \ split,@\n
-    , null, @src());
+        \\ker = [3 3] 1 |> fill
+        \\ \ split,@\n eq,@@ \ convolve.same,ker greater,4 |s and |sig sub \ flatten sum
+    , "13", @src());
 }
