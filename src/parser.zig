@@ -54,12 +54,20 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
         }
         var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset] };
         const declaration = (try body_lexer.next()) orelse return error.InvalidSyntax;
-        if (!std.mem.eql(u8, declaration, "(") and !std.mem.eql(u8, declaration, "{") and
-            !std.mem.eql(u8, declaration, "\\") and !std.mem.eql(u8, declaration, "\\\\")) return error.InvalidSyntax;
+        const is_function = std.mem.eql(u8, declaration, "(") or std.mem.eql(u8, declaration, "{") or
+            std.mem.eql(u8, declaration, "\\") or std.mem.eql(u8, declaration, "\\\\");
+        if (!is_function and (try strand(a, &body_lexer, declaration, &names)) == null) return error.InvalidSyntax;
         body_lexer.offset = 0;
         const body = try sequence(a, &body_lexer, null, false, true, &names);
-        if (body.len != 1 or body[0] != .scope) return error.InvalidSyntax;
-        try names.put(a, name, body[0]);
+        if (body.len != 1) return error.InvalidSyntax;
+        const definition: Instruction = if (is_function) blk: {
+            if (body[0] != .scope) return error.InvalidSyntax;
+            break :blk body[0];
+        } else if (body[0] == .literal) body[0] else blk: {
+            if (body[0] != .scope or body[0].scope.default_arguments == null) return error.InvalidSyntax;
+            break :blk .{ .literal = try @import("runtime.zig").evaluateConstant(a, body[0]) };
+        };
+        try names.put(a, name, definition);
     }
     return sequence(a, &lexer, null, false, true, &names);
 }
@@ -96,8 +104,8 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 };
             }
             const body = try sequence(a, lexer, close, implicit, root, names);
-            if (body.len != 1 or body[0] != .scope) return error.ExpectedFunction;
-            var application = body[0];
+            if (body.len == 0) return error.ExpectedFunction;
+            var application: Instruction = if (body.len == 1 and body[0] == .scope) body[0] else .{ .scope = .{ .arity = arguments.len, .instructions = body } };
             application.scope.arity = arguments.len;
             application.scope.default_arguments = arguments;
             return a.dupe(Instruction, &.{application});
@@ -118,17 +126,6 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
         }
-        if (std.mem.eql(u8, token, "^")) {
-            if (result.items.len == 0) return error.ExpectedFunction;
-            const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
-            const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
-            const previous = &result.items[result.items.len - 1];
-            const functions = try bindFunctions(a, &.{previous.*}, false);
-            if (functions.len != 1) return error.ExpectedFunction;
-            const constant = try @import("runtime.zig").evaluateConstant(a, functions[0], value);
-            previous.* = .{ .literal = constant };
-            continue;
-        }
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
@@ -139,7 +136,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const function = try a.create(Instruction);
             function.* = previous.*;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
-            const value = (try strand(a, lexer, argument)) orelse return error.ExpectedLiteral;
+            const value = (try strand(a, lexer, argument, names)) orelse return error.ExpectedLiteral;
             var choices: std.ArrayList(Instruction) = .empty;
             try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = value } } else .{ .applied = .{ .function = function, .argument = value } });
             while (true) {
@@ -150,7 +147,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     break;
                 }
                 const next = (try lexer.next()) orelse return error.ExpectedLiteral;
-                const choice = (try strand(a, lexer, next)) orelse return error.ExpectedLiteral;
+                const choice = (try strand(a, lexer, next, names)) orelse return error.ExpectedLiteral;
                 try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = choice } } else .{ .applied = .{ .function = function, .argument = choice } });
             }
             previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
@@ -163,7 +160,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, "Cases")) {
             const open = (try lexer.next()) orelse return error.ExpectedLiteral;
             if (!std.mem.eql(u8, open, "[")) return error.ExpectedArray;
-            const table = try array(a, lexer);
+            const table = try array(a, lexer, names);
             if (table.shape.len != 2 or table.shape[1] != 2) return error.ShapeMismatch;
             try result.append(a, .{ .cases = table });
             continue;
@@ -194,11 +191,11 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             // Regex literals preserve backslashes for the regex parser.
             const escaped = if (pattern[0] == '"') try std.mem.replaceOwned(u8, a, pattern, "\\", "\\\\") else pattern;
             defer if (pattern[0] == '"') a.free(escaped);
-            const argument = (try strand(a, lexer, escaped)) orelse return error.ExpectedLiteral;
+            const argument = (try strand(a, lexer, escaped, names)) orelse return error.ExpectedLiteral;
             try result.append(a, .{ .partial = .{ .name = token, .argument = argument } });
             continue;
         }
-        if (try strand(a, lexer, token)) |value| {
+        if (try strand(a, lexer, token, names)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
             if (!@import("primitives.zig").known(token)) {
@@ -333,7 +330,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     return result.toOwnedSlice(a);
 }
 
-fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
+fn array(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!Value {
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 0;
     var child_shape: ?[]const usize = null;
@@ -344,7 +341,7 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
             if (child_shape) |s| @memcpy(shape[1..], s);
             return .{ .data = try data.toOwnedSlice(a), .shape = shape };
         }
-        const child = (try strand(a, lexer, token)) orelse return error.InvalidNumber;
+        const child = (try strand(a, lexer, token, names)) orelse return error.InvalidNumber;
         if (child.tuple != null) return error.ExpectedArray;
         if (child_shape) |s| {
             if (!std.mem.eql(usize, s, child.shape)) return error.RaggedArray;
@@ -356,14 +353,14 @@ fn array(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
 }
 
 // Tuple literals use a prefix to distinguish them from monadic scopes.
-fn tuple(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
+fn tuple(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!Value {
     const open = (try lexer.next()) orelse return error.InvalidSyntax;
     if (!std.mem.eql(u8, open, "(")) return error.InvalidSyntax;
     var items: std.ArrayList(Value) = .empty;
     var token = (try lexer.next()) orelse return error.InvalidSyntax;
     if (std.mem.eql(u8, token, ")")) return .{ .tuple = try items.toOwnedSlice(a) };
     while (true) {
-        const item = (try strand(a, lexer, token)) orelse return error.ExpectedLiteral;
+        const item = (try strand(a, lexer, token, names)) orelse return error.ExpectedLiteral;
         try items.append(a, item);
         const separator = (try lexer.next()) orelse return error.InvalidSyntax;
         if (std.mem.eql(u8, separator, ")")) return .{ .tuple = try items.toOwnedSlice(a) };
@@ -373,8 +370,8 @@ fn tuple(a: std.mem.Allocator, lexer: *Lexer) anyerror!Value {
 }
 
 // Strands stack equally shaped literals along a new leading axis.
-fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Value {
-    const first = if (std.mem.eql(u8, token, "tup")) try tuple(a, lexer) else if (std.mem.eql(u8, token, "[")) try array(a, lexer) else (try literal(a, token)) orelse return null;
+fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror!?Value {
+    const first = if (std.mem.eql(u8, token, "tup")) try tuple(a, lexer, names) else if (std.mem.eql(u8, token, "[")) try array(a, lexer, names) else (try namedLiteral(a, token, names)) orelse return null;
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 1;
     while (true) {
@@ -387,7 +384,7 @@ fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Valu
         if (first.tuple != null) return error.ExpectedArray;
         if (count == 1) try data.appendSlice(a, first.data);
         const next = (try lexer.next()) orelse return error.ExpectedLiteral;
-        const child = if (std.mem.eql(u8, next, "[")) try array(a, lexer) else (try literal(a, next)) orelse return error.ExpectedLiteral;
+        const child = if (std.mem.eql(u8, next, "[")) try array(a, lexer, names) else (try namedLiteral(a, next, names)) orelse return error.ExpectedLiteral;
         if (!std.mem.eql(usize, first.shape, child.shape)) return error.RaggedArray;
         try data.appendSlice(a, child.data);
         count += 1;
@@ -397,6 +394,14 @@ fn strand(a: std.mem.Allocator, lexer: *Lexer, token: []const u8) anyerror!?Valu
     shape[0] = count;
     @memcpy(shape[1..], first.shape);
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
+fn namedLiteral(a: std.mem.Allocator, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction)) !?Value {
+    if (names.get(token)) |definition| {
+        if (definition == .literal) return definition.literal;
+        return null;
+    }
+    return literal(a, token);
 }
 
 fn literal(a: std.mem.Allocator, token: []const u8) !?Value {

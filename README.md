@@ -94,10 +94,10 @@ and empty arrays keep their shape.
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
 the row's shape must match the array's trailing dimensions.
 
-`^` evaluates a unary function or partial application with the following literal
-and produces a constant instead of a function. For example, `mul,2^3` is the
-literal `6`, and `fill,0^[2 2]` is `[0_0 0_0]`. `full` takes the value first
-and shape second, so `full,[2 2]^0` produces the same array.
+Named constants can be literal values or evaluated pipelines: `a = 2 |> sq`
+binds `a` to `4`. For example, `ker = [3 3] 1 |> fill` constructs a constant
+array. Constants can reference earlier definitions and be used as partial
+application arguments, such as `convolve.same,ker`.
 
 Partial applications accept literal choices separated by `*`. A scope runs
 every combination of choices on the same input and stacks the results into
@@ -147,7 +147,7 @@ start with a letter and may contain letters, digits, and underscores. They
 can reference earlier definitions and be used in nested scopes, alternatives,
 and as higher-order operands. Primitive names cannot be redefined; duplicate
 names are rejected. Recursion and forward references are not supported.
-Every definition must explicitly declare its arity: use `\` or parentheses
+Function definitions must explicitly declare their arity: use `\` or parentheses
 for a monadic function, and `\\` or braces for a dyadic function. For example,
 `double = \ mul,2` and `combine = { add sq }`. Bare primitive aliases and
 unscoped compositions are rejected.

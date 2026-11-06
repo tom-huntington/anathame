@@ -214,7 +214,7 @@ test "tuples" {
 test "fill and full" {
     // same as uiua reshape
     try expect_output("\\\\ fill", .{ "[2 2]", "0" }, "[0_0 0_0]");
-    try literal_eval("fill,0^[2 2]", "[0_0 0_0]");
+    try literal_eval("zeros = [2 2] 0 |> fill\nzeros", "[0_0 0_0]");
     try expect_output("\\\\ fill", .{ "0", "[2 2]" }, "[0_0 0_0]");
-    try literal_eval("full,[2 2]^0", "[0_0 0_0]"); // arguments reversed
+    try literal_eval("zeros = 0 [2 2] |> full\nzeros", "[0_0 0_0]"); // arguments reversed
 }

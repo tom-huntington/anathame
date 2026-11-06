@@ -70,11 +70,11 @@ pub const Lexer = struct {
             if (self.offset < self.source.len and self.source[self.offset] == '\\') self.offset += 1;
             return self.source[start..self.offset];
         }
-        if (std.mem.indexOfScalar(u8, "[],(){}_*=^", c) != null) return self.source[start..self.offset];
+        if (std.mem.indexOfScalar(u8, "[],(){}_*=", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
             if (b == '_' and (std.ascii.isAlphabetic(c) or c == '&')) continue;
-            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=^\\\"@$", b) != null or
+            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=\\\"@$", b) != null or
                 b == '|') break;
         }
         return self.source[start..self.offset];

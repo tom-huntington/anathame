@@ -231,8 +231,9 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
     return result;
 }
 
-pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig").Instruction, argument: Value) !Value {
-    if (functionArity(instruction) != 1) return error.WrongNumberOfArguments;
+pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig").Instruction) !Value {
+    if (instruction != .scope or instruction.scope.default_arguments == null) return error.ExpectedLiteral;
+    const argument = instruction.scope.default_arguments.?[0];
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     return cloneValue(a, try evaluateScope(&memory, &.{instruction}, argument, argument));
