@@ -142,9 +142,34 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try a.dupe(f64, &.{number}) };
 }
 
-/// Extract contiguous runs of ASCII digits as a vector of numbers.
+/// Extract contiguous runs of ASCII digits along the trailing axis.
 pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    return extractNumbers(a, x, false, true);
+    if (x.tuple != null) return error.InvalidInput;
+    if (x.shape.len <= 1) return extractNumbers(a, x, false, true);
+    const cell_width = x.shape[x.shape.len - 1];
+    var cells: usize = 1;
+    for (x.shape[0 .. x.shape.len - 1]) |dim| cells = try std.math.mul(usize, cells, dim);
+    var numbers: std.ArrayList(f64) = .empty;
+    defer numbers.deinit(a);
+    var width: ?usize = null;
+    for (0..cells) |i| {
+        const row = try extractNumbers(a, .{
+            .data = x.data[i * cell_width ..][0..cell_width],
+            .shape = &.{cell_width},
+        }, false, true);
+        defer a.free(row.data);
+        defer a.free(row.shape);
+        if (width) |expected| {
+            if (row.data.len != expected) return @import("runtime.zig").shapeMismatch(@src().fn_name, &.{
+                .{ .data = numbers.items[0..expected], .shape = &.{expected} }, row,
+            });
+        } else width = row.data.len;
+        try numbers.appendSlice(a, row.data);
+    }
+    const shape = try a.dupe(usize, x.shape);
+    errdefer a.free(shape);
+    shape[shape.len - 1] = width orelse 0;
+    return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
 }
 
 /// Extract integer-bearing lines as equally sized rows of a matrix.
