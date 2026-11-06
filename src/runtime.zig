@@ -242,7 +242,10 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             .partial => |partial| partial.name,
             else => return error.ExpectedFunction,
         };
-        const function = @import("primitives.zig").lookup(name) orelse return error.UnimplementedPrimitive;
+        const function = @import("primitives.zig").lookup(name) orelse {
+            std.debug.print("Unimplemented primitive: {s}\n", .{name});
+            return error.UnimplementedPrimitive;
+        };
         const temporary = if (instruction == .partial)
             try function(memory.allocator(), first_argument, instruction.partial.argument)
         else
