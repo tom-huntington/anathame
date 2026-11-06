@@ -2,6 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
+    if (std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
     if (std.mem.eql(u8, name, "transpose")) return 1;
     if (std.mem.eql(u8, name, "tuple.blankline")) return 1;

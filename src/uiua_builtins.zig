@@ -1,6 +1,36 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Uiua sort: reorder leading-axis rows lexicographically, preserving their contents.
+pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    if (value.tuple != null) return error.InvalidInput;
+    if (value.shape.len == 0 or value.data.len == 0 or value.shape[0] < 2) return value;
+    const width = value.data.len / value.shape[0];
+    const indices = try a.alloc(usize, value.shape[0]);
+    defer a.free(indices);
+    for (indices, 0..) |*index, i| index.* = i;
+    const Context = struct {
+        data: []const f64,
+        width: usize,
+
+        fn lessThan(ctx: @This(), lhs: usize, rhs: usize) bool {
+            for (ctx.data[lhs * ctx.width ..][0..ctx.width], ctx.data[rhs * ctx.width ..][0..ctx.width]) |x, y| {
+                // Uiua orders NaNs after numbers and treats signed zeros as equal.
+                if (x < y) return true;
+                if (x > y) return false;
+                if (std.math.isNan(x) != std.math.isNan(y)) return std.math.isNan(y);
+            }
+            return false;
+        }
+    };
+    std.mem.sort(usize, indices, Context{ .data = value.data, .width = width }, Context.lessThan);
+    const data = try a.alloc(f64, value.data.len);
+    for (indices, 0..) |source, dest| {
+        @memcpy(data[dest * width ..][0..width], value.data[source * width ..][0..width]);
+    }
+    return .{ .data = data, .shape = value.shape };
+}
+
 /// Uiua reshape without fill: scalar repetition, cyclic lists, and inferred axes.
 pub fn reshape(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
     if (value.tuple != null or dimensions.tuple != null or dimensions.shape.len > 1 or dimensions.data.len >= 100) return error.InvalidInput;
