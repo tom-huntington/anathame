@@ -207,6 +207,11 @@ pub fn sub(a: std.mem.Allocator, x: Value, y: Value) !Value {
 }
 
 // Numeric pervasive operations adapted from Uiua's algorithm/pervade.rs.
+/// Uiua uses multiplication for pervasive AND, including on non-boolean numbers.
+pub fn @"and"(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .multiply);
+}
+
 pub fn div(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .divide);
 }
