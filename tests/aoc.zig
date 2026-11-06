@@ -60,3 +60,21 @@ test "day 4" {
         \\ \ split,@\n eq,@@ \ part1**part2 |sig sub \ flatten sum
     , "[13 43]", @src());
 }
+
+test "day 5" {
+    try expected_unary(
+        \\$ 3-5
+        \\$ 10-14
+        \\$ 16-20
+        \\$ 12-18
+        \\$ 
+        \\$ 1
+        \\$ 5
+        \\$ 8
+        \\$ 11
+        \\$ 17
+        \\$ 32
+    ,
+        \\ \ tuple.blankline |phi (ints reshape,[inf 2] ) ints Table Flip in.closed total
+    , null, @src());
+}

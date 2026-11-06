@@ -136,6 +136,7 @@ test "builtins" {
 
     // inclusive range
     try expect_output("\\\\ range_inclusive", .{ "1", "3" }, "[1 2 3]");
+    try expect_output("\\\\ in.closed", .{ "[0 1 2 3 4 5]", "[1 3]" }, "[0 1 1 1 0 0]");
 }
 
 test "Phi combinator" {
@@ -168,6 +169,7 @@ test "Aliases" {
     try test_alias("Pairwise add", "Stencil,2 add");
     // partial application to hof is done to hof result
     try test_alias("Stencil,2 add", "{Stencil add},2");
+    try test_alias("total", "(flatten sum)");
 }
 
 test "Regex" {
@@ -216,6 +218,9 @@ test "High order functions (hofs)" {
     try expect_output(
         \\\\ Repeat,2 mul sub
     , .{ "2", "3" }, "[-6 7]");
+
+    try expect_output("\\\\ sub", .{ "1", "2" }, "-1");
+    try expect_output("\\\\ Flip sub", .{ "1", "2" }, "1");
 }
 
 test "tuples" {
