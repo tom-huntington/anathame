@@ -1,6 +1,73 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Uiua indexin: find each needle row in the haystack (the first argument).
+/// Missing rows return the haystack's row count; duplicate rows use the first index.
+pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+    if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
+    const hay_rows = if (haystack.shape.len == 0) 1 else haystack.shape[0];
+    const needle_rows = if (needle.shape.len == 0) 1 else needle.shape[0];
+    if (needle.shape.len == haystack.shape.len or needle.shape.len + 1 == haystack.shape.len) {
+        const same_rank = needle.shape.len == haystack.shape.len;
+        const shape = if (same_rank) needle.shape[0..@min(1, needle.shape.len)] else &.{};
+        const data = try a.alloc(f64, if (same_rank) needle_rows else 1);
+        const hay_width = rowWidth(haystack);
+        const needle_width = if (same_rank) rowWidth(needle) else needle.data.len;
+        for (data, 0..) |*result, i| {
+            result.* = @floatFromInt(hay_rows);
+            if (!same_rank and !std.mem.endsWith(usize, haystack.shape, needle.shape)) continue;
+            const wanted = needle.data[i * needle_width ..][0..needle_width];
+            for (0..hay_rows) |j| {
+                const candidate = haystack.data[j * hay_width ..][0..hay_width];
+                if (candidate.len != wanted.len) continue;
+                for (candidate, wanted) |x, y| {
+                    if (x != y and !(std.math.isNan(x) and std.math.isNan(y))) break;
+                } else {
+                    result.* = @floatFromInt(j);
+                    break;
+                }
+            }
+        }
+        return .{ .data = data, .shape = try a.dupe(usize, shape) };
+    }
+    const recurse_needle = needle.shape.len > haystack.shape.len;
+    if (recurse_needle and needle_rows == 0) return .{ .data = try a.dupe(f64, needle.data), .shape = try a.dupe(usize, needle.shape) };
+    if (!recurse_needle and !std.mem.endsWith(usize, haystack.shape, needle.shape)) {
+        const shape = haystack.shape[0 .. haystack.shape.len - needle.shape.len - 1];
+        var count: usize = 1;
+        for (shape) |dim| count = try std.math.mul(usize, count, dim);
+        const data = try a.alloc(f64, count);
+        @memset(data, @as(f64, @floatFromInt(hay_rows)));
+        return .{ .data = data, .shape = try a.dupe(usize, shape) };
+    }
+    const source = if (recurse_needle) needle else haystack;
+    const rows = source.shape[0];
+    const width = rowWidth(source);
+    var data: std.ArrayList(f64) = .empty;
+    errdefer data.deinit(a);
+    var shape: []const usize = &.{0};
+    for (0..rows) |i| {
+        const row: Value = .{ .data = source.data[i * width ..][0..width], .shape = source.shape[1..] };
+        const result = if (recurse_needle) try indexin(a, haystack, row) else try indexin(a, row, needle);
+        defer a.free(result.data);
+        defer a.free(result.shape);
+        if (i == 0) {
+            const dimensions = try a.alloc(usize, result.shape.len + 1);
+            dimensions[0] = rows;
+            @memcpy(dimensions[1..], result.shape);
+            shape = dimensions;
+        }
+        try data.appendSlice(a, result.data);
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = if (rows == 0) try a.dupe(usize, shape) else shape };
+}
+
+fn rowWidth(value: Value) usize {
+    var width: usize = 1;
+    for (value.shape[@min(1, value.shape.len)..]) |dim| width *= dim;
+    return width;
+}
+
 /// Uiua sort: reorder leading-axis rows lexicographically, preserving their contents.
 pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;
