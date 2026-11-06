@@ -9,6 +9,7 @@ const assert = std.debug.assert;
 const mem = std.mem;
 
 pub const ReservedBumpAllocator = struct {
+    bindings: std.StringHashMapUnmanaged(@import("runtime.zig").Value) = .empty,
     base: [*]u8,
     reserved_len: usize,
     committed_len: usize,

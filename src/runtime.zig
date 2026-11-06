@@ -51,6 +51,10 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anyty
 /// Composition defaults to B; explicit N, s, and sig retain the scope's x.
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
 pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]const u8) ![]const Value {
+    defer {
+        memory.bindings.deinit(std.heap.page_allocator);
+        memory.bindings = .empty;
+    }
     const a = memory.allocator();
     const program = try @import("parser.zig").parseProgram(a, code);
     const arity = program.scope.arity;
@@ -66,7 +70,7 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]cons
     if (arguments.len != arity) return error.WrongNumberOfArguments;
     const x = arguments[0];
     const y = if (arity == 1) x else arguments[1];
-    const result = try evaluateScope(memory, program.scope.instructions, x, y);
+    const result = try callScope(memory, program.scope, x, y);
     return if (result.tuple) |tuple| tuple else a.dupe(Value, &.{result});
 }
 
@@ -135,6 +139,26 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
         const second_argument = if (first_function or retain_y) y else if (reverse_arguments) result else if (retain_x) x else result;
         reverse_arguments = false;
         retain_y = false;
+        if (instruction == .literal or instruction == .variable or instruction == .expression or instruction == .dynamic_applied) {
+            const temporary = switch (instruction) {
+                .literal => |value| value,
+                .variable => |name| memory.bindings.get(name) orelse return error.UnboundVariable,
+                .expression => |expression| blk: {
+                    var args: [2]Value = undefined;
+                    for (expression.arguments, 0..) |arg, i| args[i] = try evaluateScope(memory, &.{arg}, first_argument, second_argument);
+                    break :blk try evaluateScope(memory, expression.body, args[0], args[expression.arguments.len - 1]);
+                },
+                .dynamic_applied => |application| blk: {
+                    const arg = try evaluateScope(memory, &.{application.argument.*}, first_argument, second_argument);
+                    break :blk try evaluateScope(memory, &.{application.function.*}, first_argument, arg);
+                },
+                else => unreachable,
+            };
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .product) {
             const temporary = try product(memory, instruction.product, first_argument, second_argument);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -231,7 +255,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             const defaults = instruction.scope.default_arguments;
             const first = if (defaults) |args| args[0] else first_argument;
             const second = if (instruction.scope.arity == 1) first else if (defaults) |args| args[1] else second_argument;
-            const temporary = try evaluateScope(memory, instruction.scope.instructions, first, second);
+            const temporary = try callScope(memory, instruction.scope, first, second);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -262,6 +286,7 @@ pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig")
     const argument = instruction.scope.default_arguments.?[0];
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
+    defer memory.bindings.deinit(std.heap.page_allocator);
     return cloneValue(a, try evaluateScope(&memory, &.{instruction}, argument, argument));
 }
 
@@ -277,7 +302,7 @@ fn cloneValue(a: std.mem.Allocator, value: Value) anyerror!Value {
 pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .primitive => |name| @import("primitives.zig").arity(name),
-        .partial, .applied, .cases => 1,
+        .partial, .applied, .dynamic_applied, .cases => 1,
         .tuples => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
@@ -748,4 +773,36 @@ fn repeat(memory: *ReservedBumpAllocator, x: Value, y: Value, r: @FieldType(@imp
     }
     if (r.second != null) return @import("primitives.zig").lookup("couple").?(memory.allocator(), left, right);
     return left;
+}
+
+// Bindings live outside the bump allocator: intermediate-result compaction must
+// not invalidate arguments still referenced by a lambda body or nested call.
+fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.zig").Instruction, "scope"), x: Value, y: Value) anyerror!Value {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var bound: std.ArrayList([]const u8) = .empty;
+    defer for (bound.items) |name| {
+        _ = memory.bindings.remove(name);
+    };
+    for (scope.parameters, 0..) |parameter, i| try bindPattern(memory, arena.allocator(), parameter, if (i == 0) x else y, &bound);
+    return evaluateScope(memory, scope.instructions, x, y);
+}
+
+fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value, bound: *std.ArrayList([]const u8)) anyerror!void {
+    switch (pattern) {
+        .name => |name| {
+            if (memory.bindings.contains(name)) {
+                std.debug.print("shadowed names not allowed\n", .{});
+                return error.ShadowedNamesNotAllowed;
+            }
+            const copy = try cloneValue(a, value);
+            try bound.append(a, name);
+            try memory.bindings.put(std.heap.page_allocator, name, copy);
+        },
+        .items => |items| {
+            const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else return error.ShapeMismatch;
+            if (count != items.len) return error.ShapeMismatch;
+            for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try rowArgument(a, value, i), bound);
+        },
+    }
 }

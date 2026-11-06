@@ -190,3 +190,17 @@ terminate. NaN elements do not compare equal.
 to every pair of leading-axis rows. `\\ Table add` on `[1 2]` and `[10 20 30]`
 returns `[[11 21 31] [12 22 32]]`. The first argument supplies the outer axis;
 scalar arguments add no axis. Result cells must have matching shapes.
+
+Lambdas name their arguments before `->`: `(x -> x |> add,1)` or
+`{x, y -> x y |> add}`. The backslash scope forms accept the same headers.
+Patterns destructure array rows or tuple elements, including nested patterns:
+`{[a b], c -> a c |> couple tuple,b}` returns a tuple containing `[a c]` and `b`.
+`tuple` constructs a pair of arbitrary values; `second` selects the second
+array row or tuple element.
+
+Arguments are written into one lookup table shared by calls within an evaluation.
+Bindings are removed on return, so repeated calls can reuse the same parameters.
+Nested calls can reference active outer arguments. Reusing an active name,
+a declared name, or a primitive name fails with `shadowed names not allowed`.
+Variable arguments to `|>` and partial applications such as `add,x` are resolved
+when the lambda runs.

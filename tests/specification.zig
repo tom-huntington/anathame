@@ -240,3 +240,9 @@ test "fill and full" {
     try expect_output("\\\\ fill", .{ "0", "[2 2]" }, "[0_0 0_0]");
     try literal_eval("zeros = 0 [2 2] |> full\nzeros", "[0_0 0_0]"); // arguments reversed
 }
+
+test "lambdas" {
+    try expect_output("{[a b], c -> a c |> couple tuple,b }", .{ "[1 2]", "3" }, .{ "[1 3]", "2" });
+    try expect_output("\\\\[a b], c -> a c |> couple tuple,b ", .{ "[1 2]", "3" }, .{ "[1 3]", "2" });
+    try expect_output("([a b] -> b a |> couple )", "[2 1]", "[1 2]");
+}

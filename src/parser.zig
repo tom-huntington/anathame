@@ -3,6 +3,9 @@ const Lexer = @import("lexer.zig").Lexer;
 const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
     literal: Value,
+    variable: []const u8,
+    expression: struct { arguments: []const Instruction, body: []const Instruction },
+    dynamic_applied: struct { function: *const Instruction, argument: *const Instruction },
     cases: Value,
     primitive: []const u8,
     partition: *const Instruction,
@@ -23,8 +26,10 @@ pub const Instruction = union(enum) {
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
     combinator: enum { n, nu, s, sig, b, phi, psi },
-    scope: struct { arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
+    scope: struct { parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
+pub const Pattern = union(enum) { name: []const u8, items: []const Pattern };
+
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
     var names: std.StringHashMapUnmanaged(Instruction) = .empty;
@@ -103,6 +108,15 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "|>"))) return error.ExpectedFunction;
         if (std.mem.eql(u8, token, "|>")) {
             if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
+            const dynamic = for (result.items) |item| {
+                if (item == .variable) break true;
+            } else false;
+            if (dynamic) {
+                for (result.items) |item| if (item != .variable and item != .literal) return error.ExpectedLiteral;
+                const body = try sequence(a, lexer, close, implicit, root, names);
+                if (body.len == 0) return error.ExpectedFunction;
+                return a.dupe(Instruction, &.{.{ .expression = .{ .arguments = try result.toOwnedSlice(a), .body = body } }});
+            }
             const arguments = try a.alloc(Value, result.items.len);
             for (result.items, arguments) |instruction, *argument| {
                 argument.* = switch (instruction) {
@@ -127,10 +141,16 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (monadic or dyadic) {
             const is_implicit = token[0] == '\\';
             const end = if (is_implicit) close else if (monadic) ")" else "}";
-            const body = try sequence(a, lexer, end, is_implicit, false, names);
+            var local_names = try names.clone(a);
+            defer local_names.deinit(a);
+            const parameters = try lambdaParameters(a, lexer, &local_names);
+            if (parameters.len != 0 and parameters.len != (if (monadic) @as(usize, 1) else 2)) return error.WrongNumberOfArguments;
+            const body = try sequence(a, lexer, end, is_implicit, false, &local_names);
             if (body.len == 0) return error.InvalidSyntax;
-            for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
-            try result.append(a, .{ .scope = .{ .arity = if (monadic) 1 else 2, .instructions = body } });
+            if (parameters.len == 0) {
+                for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
+            }
+            try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
         }
         if (std.mem.eql(u8, token, ",")) {
@@ -143,6 +163,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const function = try a.create(Instruction);
             function.* = previous.*;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
+            if (names.get(argument)) |definition| {
+                if (definition == .variable) {
+                    const arg = try a.create(Instruction);
+                    arg.* = definition;
+                    previous.* = .{ .dynamic_applied = .{ .function = function, .argument = arg } };
+                    continue;
+                }
+            }
             const value = (try strand(a, lexer, argument, names)) orelse return error.ExpectedLiteral;
             var choices: std.ArrayList(Instruction) = .empty;
             try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = value } } else .{ .applied = .{ .function = function, .argument = value } });
@@ -517,4 +545,52 @@ fn multilineString(a: std.mem.Allocator, token: []const u8) ![]const u8 {
         first = false;
     }
     return decoded.toOwnedSlice(a);
+}
+
+fn shadowed() error{ShadowedNamesNotAllowed} {
+    std.debug.print("shadowed names not allowed\n", .{});
+    return error.ShadowedNamesNotAllowed;
+}
+
+fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction)) anyerror!Pattern {
+    const token = (try lexer.next()) orelse return error.InvalidSyntax;
+    if (std.mem.eql(u8, token, "[")) {
+        var items: std.ArrayList(Pattern) = .empty;
+        while (true) {
+            const offset = lexer.offset;
+            const next = (try lexer.next()) orelse return error.InvalidSyntax;
+            if (std.mem.eql(u8, next, "]")) break;
+            lexer.offset = offset;
+            try items.append(a, try parsePattern(a, lexer, names));
+        }
+        return .{ .items = try items.toOwnedSlice(a) };
+    }
+    if (!validName(token)) return error.InvalidFunctionName;
+    if (names.contains(token) or @import("primitives.zig").known(token) or
+        std.mem.eql(u8, token, "sum") or std.mem.eql(u8, token, "total") or
+        std.mem.eql(u8, token, "split") or std.mem.eql(u8, token, "Pairwise") or
+        std.mem.eql(u8, token, "combinations") or std.mem.eql(u8, token, "tup")) return shadowed();
+    try names.put(a, token, .{ .variable = token });
+    return .{ .name = token };
+}
+
+fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction)) ![]const Pattern {
+    var look = lexer.*;
+    var found = false;
+    while (try look.next()) |token| {
+        if (std.mem.eql(u8, token, "->")) {
+            found = true;
+            break;
+        }
+        if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",")) break;
+    }
+    if (!found) return &.{};
+    var parameters: std.ArrayList(Pattern) = .empty;
+    while (true) {
+        try parameters.append(a, try parsePattern(a, lexer, names));
+        const separator = (try lexer.next()) orelse return error.InvalidSyntax;
+        if (std.mem.eql(u8, separator, "->")) break;
+        if (!std.mem.eql(u8, separator, ",")) return error.InvalidSyntax;
+    }
+    return parameters.toOwnedSlice(a);
 }

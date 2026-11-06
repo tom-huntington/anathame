@@ -3,9 +3,9 @@ const Value = @import("runtime.zig").Value;
 
 /// Return the first tuple element. Array support is not implemented yet.
 pub fn first(_: std.mem.Allocator, x: Value, _: Value) !Value {
-    const tuple = x.tuple orelse return error.UnimplementedPrimitive;
-    if (tuple.len == 0) return error.InvalidInput;
-    return tuple[0];
+    const items = x.tuple orelse return error.UnimplementedPrimitive;
+    if (items.len == 0) return error.InvalidInput;
+    return items[0];
 }
 
 /// Uiua deshape: collect all elements into a single vector in storage order.
@@ -285,4 +285,19 @@ pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
     @memcpy(data[0..y.data.len], y.data);
     @memcpy(data[y.data.len..], x.data);
     return .{ .data = data, .shape = shape };
+}
+
+/// Construct a pair without requiring equally shaped values.
+pub fn tuple(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return .{ .tuple = try a.dupe(Value, &.{ x, y }) };
+}
+
+pub fn second(_: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple) |items| {
+        if (items.len < 2) return error.InvalidInput;
+        return items[1];
+    }
+    if (x.shape.len == 0 or x.shape[0] < 2) return error.InvalidInput;
+    const width = x.data.len / x.shape[0];
+    return .{ .data = x.data[width..][0..width], .shape = x.shape[1..] };
 }
