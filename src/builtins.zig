@@ -73,6 +73,18 @@ pub fn range_inclusive(a: std.mem.Allocator, start: Value, end: Value) !Value {
     return integerRange(a, start, end, true);
 }
 
+/// Elementwise membership in the inclusive interval [lower, upper].
+pub fn @"in.closed"(a: std.mem.Allocator, x: Value, bounds: Value) !Value {
+    if (x.tuple != null or bounds.tuple != null or
+        bounds.shape.len != 1 or bounds.shape[0] != 2 or bounds.data.len != 2)
+        return error.InvalidInput;
+    const data = try a.alloc(f64, x.data.len);
+    for (x.data, data) |item, *result| {
+        result.* = @floatFromInt(@intFromBool(item >= bounds.data[0] and item <= bounds.data[1]));
+    }
+    return .{ .data = data, .shape = x.shape };
+}
+
 fn integerRange(a: std.mem.Allocator, start: Value, sentinel: Value, inclusive: bool) !Value {
     if (start.tuple != null or sentinel.tuple != null or
         start.shape.len != 0 or sentinel.shape.len != 0 or
