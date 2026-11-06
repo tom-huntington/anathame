@@ -89,9 +89,8 @@ test "day 6" {
         \\$ *   +   *   +  
     ,
         \\ parseops =\ (split,@\n lastrow \ not_eq,@ |sig Partition eq,@* flatten )
-        \\ part1 =\ ints2d |phi parseops Switch (Reduce mul) (Reduce add) sum
+        \\ parsep1 =\ ints2d transpose
         \\ parsep2 =\ split,@\n transpose \ eq,32 Reduce and not |sig Partition id \ ints squeeze
-        \\ part2 =\ parsep2 |phi parseops Switch (Reduce mul) (Reduce add) sum
-        \\ \ part2
-    , null, @src());
+        \\ \ parsep1**parsep2 |phi parseops Log Switch (Reduce mul) (Reduce add) sum
+    , "[4277556 3263827]", @src());
 }
