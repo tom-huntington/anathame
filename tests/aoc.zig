@@ -75,6 +75,6 @@ test "day 5" {
         \\$ 17
         \\$ 32
     ,
-        \\ \ tuple.blankline |phi (ints reshape,[inf 2] ) ints Table Flip in.closed total
+        \\ \ tuple.blankline |phi (ints reshape,[inf 2] ) ints Table Flip in.closed transpose Reduce or sum
     , null, @src());
 }
