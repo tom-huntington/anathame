@@ -300,9 +300,11 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
-        if (instruction == .reduce or instruction == .stencil) {
+        if (instruction == .reduce or instruction == .fold or instruction == .stencil) {
             const temporary = if (instruction == .reduce)
-                try reduce(memory, first_argument, instruction.reduce)
+                try reduce(memory, first_argument, null, instruction.reduce)
+            else if (instruction == .fold)
+                try reduce(memory, first_argument, second_argument, instruction.fold)
             else
                 try stencil(memory, first_argument, second_argument, instruction.stencil);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -389,7 +391,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .tuples, .log => |f| functionArity(f.*),
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
-        .partition, .table, .flip, .map_accum, .switch_fn, .scan => 2,
+        .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
         .partials, .reduce, .unc => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
@@ -650,34 +652,30 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const
 }
 
 /// Left fold independently along each trailing-axis vector.
-fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
-    if (x.shape.len == 0) return x;
+    if (seed) |initial| {
+        if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
+    } else if (x.data.len == 0) return error.EmptyArray;
+    if (x.shape.len == 0) {
+        if (seed) |initial| {
+            const result = try evaluateScope(memory, &.{function.*}, initial, x);
+            if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ExpectedScalar;
+            return result;
+        }
+        return x;
+    }
     const a = memory.allocator();
     const shape = x.shape[0 .. x.shape.len - 1];
     const width = x.shape[x.shape.len - 1];
     var count: usize = 1;
     for (shape) |dimension| count = try std.math.mul(usize, count, dimension);
     const data = try a.alloc(f64, count);
-    if (width == 0) {
-        const identity: f64 = if (function.* == .primitive) blk: {
-            const name = function.primitive;
-            if (std.mem.eql(u8, name, "or")) break :blk 0;
-            if (std.mem.eql(u8, name, "and")) break :blk 1;
-            if (std.mem.eql(u8, name, "add") or std.mem.eql(u8, name, "sub")) break :blk 0;
-            if (std.mem.eql(u8, name, "mul") or std.mem.eql(u8, name, "div")) break :blk 1;
-            if (std.mem.eql(u8, name, "min")) break :blk std.math.inf(f64);
-            if (std.mem.eql(u8, name, "max")) break :blk -std.math.inf(f64);
-            return error.NoReductionIdentity;
-        } else return error.NoReductionIdentity;
-        @memset(data, identity);
-        return .{ .data = data, .shape = shape };
-    }
     for (0..count) |row| {
         const start = row * width;
-        data[row] = x.data[start];
-        for (1..width) |column| {
+        data[row] = if (seed) |initial| initial.data[0] else x.data[start];
+        for (if (seed != null) @as(usize, 0) else 1..width) |column| {
             const checkpoint = memory.checkpoint();
             const acc: Value = .{ .data = data[row..][0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
