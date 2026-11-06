@@ -1,6 +1,70 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Uiua reshape without fill: scalar repetition, cyclic lists, and inferred axes.
+pub fn reshape(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
+    if (value.tuple != null or dimensions.tuple != null or dimensions.shape.len > 1 or dimensions.data.len >= 100) return error.InvalidInput;
+    const scalar = dimensions.shape.len == 0;
+    if (scalar and dimensions.data.len != 1) return error.InvalidInput;
+    const shape = try a.alloc(usize, if (scalar) value.shape.len + 1 else dimensions.data.len);
+    var inferred: ?usize = null;
+    var count: usize = 1;
+    for (dimensions.data, 0..) |n, i| {
+        if (std.math.isInf(n)) {
+            if (scalar) {
+                if (n > 0) return value;
+                return reverseReshapeRows(a, value);
+            }
+            if (inferred != null) return error.InvalidInput;
+            inferred = i;
+            shape[i] = 1;
+        } else {
+            if (std.math.isNan(n) or @trunc(n) != n or @abs(n) >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+            shape[i] = @intFromFloat(@abs(n));
+            count = try std.math.mul(usize, count, shape[i]);
+        }
+    }
+    if (scalar) {
+        @memcpy(shape[1..], value.shape);
+        count = try std.math.mul(usize, count, value.data.len);
+    } else if (inferred) |i| {
+        if (count == 0) return error.InvalidInput;
+        shape[i] = value.data.len / count;
+        count = try std.math.mul(usize, count, shape[i]);
+    }
+    if (count > 0 and value.data.len == 0) return error.ShapeMismatch;
+    const source = if (scalar and dimensions.data[0] < 0) try reverseReshapeRows(a, value) else value;
+    const data = try a.alloc(f64, count);
+    for (data, 0..) |*item, i| {
+        var index = i;
+        if (!scalar) {
+            var stride: usize = 1;
+            var axis = shape.len;
+            while (axis > 0) {
+                axis -= 1;
+                const dim = shape[axis];
+                const coordinate = i / stride % dim;
+                if (dimensions.data[axis] < 0) {
+                    index -= coordinate * stride;
+                    index += (dim - 1 - coordinate) * stride;
+                }
+                stride *= dim;
+            }
+        }
+        item.* = source.data[index % source.data.len];
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+fn reverseReshapeRows(a: std.mem.Allocator, value: Value) !Value {
+    if (value.shape.len == 0 or value.data.len == 0) return value;
+    const rows = value.shape[0];
+    const width = value.data.len / rows;
+    const data = try a.alloc(f64, value.data.len);
+    for (0..rows) |i| @memcpy(data[i * width ..][0..width], value.data[(rows - 1 - i) * width ..][0..width]);
+    return .{ .data = data, .shape = value.shape };
+}
+
 /// Repeat data cyclically to fill the requested shape.
 pub fn fill(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.shape.len == 0 and y.shape.len != 0) return full(a, x, y);

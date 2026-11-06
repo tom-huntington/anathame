@@ -447,6 +447,8 @@ fn namedLiteral(a: std.mem.Allocator, token: []const u8, names: *const std.Strin
 }
 
 fn literal(a: std.mem.Allocator, token: []const u8) !?Value {
+    if (std.mem.eql(u8, token, "inf") or std.mem.eql(u8, token, "-inf"))
+        return .{ .data = try a.dupe(f64, &.{if (token[0] == '-') -std.math.inf(f64) else std.math.inf(f64)}), .shape = &.{} };
     if (token[0] == '@' or token[0] == '"' or token[0] == '$') {
         const character = token[0] == '@';
         const multiline = token[0] == '$';
