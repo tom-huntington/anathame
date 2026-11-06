@@ -142,7 +142,7 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try a.dupe(f64, &.{number}) };
 }
 
-/// Extract contiguous runs of ASCII digits along the trailing axis.
+/// Extract contiguous runs of ASCII digits along the trailing axis, skipping empty rows.
 pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.InvalidInput;
     if (x.shape.len <= 1) return extractNumbers(a, x, false, true);
@@ -152,6 +152,8 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     var numbers: std.ArrayList(f64) = .empty;
     defer numbers.deinit(a);
     var width: ?usize = null;
+    var rows: usize = 0;
+    var first_row: usize = 0;
     for (0..cells) |i| {
         const row = try extractNumbers(a, .{
             .data = x.data[i * cell_width ..][0..cell_width],
@@ -159,14 +161,22 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
         }, false, true);
         defer a.free(row.data);
         defer a.free(row.shape);
+        if (row.data.len == 0) continue;
         if (width) |expected| {
             if (row.data.len != expected) return @import("runtime.zig").shapeMismatchIndexed(@src().fn_name, &.{
                 .{ .data = numbers.items[0..expected], .shape = &.{expected} }, row,
-            }, &.{ 0, i });
-        } else width = row.data.len;
+            }, &.{ first_row, i });
+        } else {
+            width = row.data.len;
+            first_row = i;
+        }
         try numbers.appendSlice(a, row.data);
+        rows += 1;
     }
-    const shape = try a.dupe(usize, x.shape);
+    const shape = if (rows == cells)
+        try a.dupe(usize, x.shape)
+    else
+        try a.dupe(usize, &.{ rows, width orelse 0 });
     errdefer a.free(shape);
     shape[shape.len - 1] = width orelse 0;
     return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
