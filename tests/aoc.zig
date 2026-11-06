@@ -75,6 +75,8 @@ test "day 5" {
         \\$ 17
         \\$ 32
     ,
-        \\ \ tuple.blankline |phi (ints reshape,[inf 2] ) ints Table Flip in.closed transpose Reduce or sum
-    , null, @src());
+        \\ part1 =\ tuple.blankline |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
+        \\ part2 =\ tuple.blankline first ints reshape,[inf 2] lexisort MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
+        \\ \ part1 ** part2
+    , "[3 14]", @src());
 }

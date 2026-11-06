@@ -146,10 +146,10 @@ test "builtins" {
 test "Phi combinator" {
     // phi combinator 112.1 (f,g,h) = x -> h(f(x),g(x))
     try expect_output("\\ take,2 |phi drop,2 mul", .{"[1 2 3 4]"}, .{"[3 8]"});
-    // if instead first argument returns 2-tuple (denoted 1Â²) we have
-    // phi combinator 1Â²2.1 (f,g) = x -> g(*f(x))
+    // if instead first argument returns 2-tuple (denoted 1²) we have
+    // phi combinator 1²2.1 (f,g) = x -> g(*f(x))
     try expect_output("\\ id |phi mul", .{"tup([1 2], [3 4])"}, .{"[3 8]"});
-    // phi combinator 1Â²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
+    // phi combinator 1²112.1 (f,g,h,k) = x -> k(g(f(x)[0]), h(f(x)[1]))
     try expect_output("\\ id |phi add,1 sq couple", .{"tup([1 2], [3 4])"}, .{"[2_3 9_16]"});
 }
 
@@ -174,6 +174,7 @@ test "Aliases" {
     // partial application to hof is done to hof result
     try test_alias("Stencil,2 add", "{Stencil add},2");
     try test_alias("total", "(flatten sum)");
+    try test_alias("rsub", "{Flip sub}");
 }
 
 test "Regex" {
