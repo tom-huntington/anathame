@@ -141,12 +141,12 @@ Function choices run in source order, with the last choice varying fastest:
 `(sq add,1) ** (mul,3 sub,2)`. Every branch receives the same original inputs;
 its complete composition runs before the results are stacked.
 
-`Reduce add` (alias `sum`) folds each innermost vector from left to right;
+`Reduce add` folds each innermost vector from left to right;
 `[[1 2] [3 4]]` becomes `[3 7]`. Its operand must be dyadic and its input
 must be non-empty. Scalars remain scalars.
 `Fold add` takes an array first and a scalar seed second: `[1 2 3]` with
 seed `10` produces `16`. Each innermost vector starts from the seed;
-empty vectors return the seed. Both pass the accumulator first and the next
+empty vectors return the seed. `sum` aliases `Fold,0 add`, so empty sums return `0`. Both pass the accumulator first and the next
 scalar second to their operand, which must return a scalar.
 
 `Stencil,3 sum` applies `sum` to overlapping windows of three leading-axis
@@ -157,7 +157,7 @@ implemented. With a dyadic operand, `Stencil sub` applies `sub` to adjacent
 rows without requiring a size. `Pairwise` expands to `Stencil,2`, so
 `Pairwise sub` and `Pairwise sum` both operate on adjacent pairs.
 
-`try test_alias("sum", "Reduce add")` compares parsed instruction trees
+`try test_alias("sum", "Fold,0 add")` compares parsed instruction trees
 recursively, including HOF operands and literal contents. It checks structural
 equivalence rather than equality on sample inputs. `test_hof_alias` does the
 same with several primitive, scoped, and nested-HOF operands appended.

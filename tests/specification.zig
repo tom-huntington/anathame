@@ -170,7 +170,7 @@ test "Literal alternatives macro" {
 }
 
 test "Aliases" {
-    try test_alias("sum", "Reduce add");
+    try test_alias("sum", "Fold,0 add");
     try test_alias("Pairwise add", "Stencil,2 add");
     // partial application to hof is done to hof result
     try test_alias("Stencil,2 add", "{Stencil add},2");

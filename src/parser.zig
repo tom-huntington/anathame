@@ -224,7 +224,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
-            try result.appendSlice(a, try parse(a, "Reduce add"));
+            try result.appendSlice(a, try parse(a, "Fold,0 add"));
             continue;
         }
         if (std.mem.eql(u8, token, "total")) {
