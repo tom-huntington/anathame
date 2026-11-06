@@ -271,9 +271,31 @@ pub fn sub(a: std.mem.Allocator, x: Value, y: Value) !Value {
 }
 
 // Numeric pervasive operations adapted from Uiua's algorithm/pervade.rs.
-/// Uiua uses multiplication for pervasive AND, including on non-boolean numbers.
+/// Nonzero values are true; boolean operations always return zero or one.
 pub fn @"and"(a: std.mem.Allocator, x: Value, y: Value) !Value {
-    return arithmetic(a, x, y, .multiply);
+    return arithmetic(a, x, y, .boolean_and);
+}
+
+pub fn @"or"(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .boolean_or);
+}
+
+/// Swap the two innermost axes independently in each outer cell.
+pub fn transpose(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.InvalidInput;
+    if (x.shape.len < 2) return x;
+    const shape = try a.dupe(usize, x.shape);
+    const rows = shape[shape.len - 2];
+    const cols = shape[shape.len - 1];
+    shape[shape.len - 2] = cols;
+    shape[shape.len - 1] = rows;
+    const data = try a.alloc(f64, x.data.len);
+    for (data, 0..) |*item, i| {
+        const cell_size = rows * cols;
+        const offset = i % cell_size;
+        item.* = x.data[i / cell_size * cell_size + offset % rows * cols + offset / rows];
+    }
+    return .{ .data = data, .shape = shape };
 }
 
 pub fn div(a: std.mem.Allocator, x: Value, y: Value) !Value {
@@ -314,7 +336,7 @@ pub fn max(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .maximum);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum }) !Value {
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, boolean_and, boolean_or }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return error.ShapeMismatch;
@@ -324,6 +346,8 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
         const xi = if (x.shape.len == big.shape.len) i else i / (big.data.len / x.data.len);
         const yi = if (y.shape.len == big.shape.len) i else i / (big.data.len / y.data.len);
         d.* = switch (op) {
+            .boolean_and => @floatFromInt(@intFromBool(x.data[xi] != 0) & @intFromBool(y.data[yi] != 0)),
+            .boolean_or => @floatFromInt(@intFromBool(x.data[xi] != 0) | @intFromBool(y.data[yi] != 0)),
             .add => x.data[xi] + y.data[yi],
             .multiply => x.data[xi] * y.data[yi],
             .maximum => @max(x.data[xi], y.data[yi]),

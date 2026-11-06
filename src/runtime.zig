@@ -494,6 +494,8 @@ fn reduce(memory: *ReservedBumpAllocator, x: Value, function: *const @import("pa
     if (width == 0) {
         const identity: f64 = if (function.* == .primitive) blk: {
             const name = function.primitive;
+            if (std.mem.eql(u8, name, "or")) break :blk 0;
+            if (std.mem.eql(u8, name, "and")) break :blk 1;
             if (std.mem.eql(u8, name, "add") or std.mem.eql(u8, name, "sub")) break :blk 0;
             if (std.mem.eql(u8, name, "mul") or std.mem.eql(u8, name, "div")) break :blk 1;
             if (std.mem.eql(u8, name, "min")) break :blk std.math.inf(f64);

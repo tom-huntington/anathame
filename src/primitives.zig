@@ -2,6 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
+    if (std.mem.eql(u8, name, "transpose")) return 1;
     if (std.mem.eql(u8, name, "tuple.blankline")) return 1;
     if (std.mem.eql(u8, name, "reverse") or std.mem.eql(u8, name, "flatten")) return 1;
     if (std.mem.eql(u8, name, "base10") or std.mem.eql(u8, name, "radix10")) return 1;
