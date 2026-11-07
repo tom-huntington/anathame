@@ -92,6 +92,49 @@ pub fn select(a: std.mem.Allocator, source: Value, indices: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
+/// Indices that sort each trailing-axis vector in ascending order.
+pub fn rise(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    return grade(a, value, false);
+}
+
+/// Indices that sort each trailing-axis vector in descending order.
+pub fn fall(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    return grade(a, value, true);
+}
+
+fn grade(a: std.mem.Allocator, value: Value, descending: bool) !Value {
+    if (value.tuple != null) return error.InvalidInput;
+    const data = try a.alloc(f64, value.data.len);
+    errdefer a.free(data);
+    if (value.shape.len == 0) {
+        data[0] = 0;
+        return .{ .data = data, .shape = value.shape };
+    }
+    const width = value.shape[value.shape.len - 1];
+    if (data.len == 0) return .{ .data = data, .shape = value.shape };
+    const Context = struct {
+        values: []const f64,
+        descending: bool,
+
+        fn lessThan(ctx: @This(), lhs: f64, rhs: f64) bool {
+            const x = ctx.values[@intFromFloat(if (ctx.descending) rhs else lhs)];
+            const y = ctx.values[@intFromFloat(if (ctx.descending) lhs else rhs)];
+            // Uiua treats signed zeros as equal and orders NaNs after numbers.
+            if (x < y) return true;
+            if (x > y) return false;
+            return !std.math.isNan(x) and std.math.isNan(y);
+        }
+    };
+    var offset: usize = 0;
+    while (offset < data.len) : (offset += width) {
+        const indices = data[offset..][0..width];
+        for (indices, 0..) |*index, i| index.* = @floatFromInt(i);
+        // Preserve input index order for equal values in both directions.
+        std.mem.sort(f64, indices, Context{ .values = value.data[offset..][0..width], .descending = descending }, Context.lessThan);
+    }
+    return .{ .data = data, .shape = value.shape };
+}
+
 /// Sort innermost vectors by default; components select trailing cell dimensions.
 pub fn sort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;

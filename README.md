@@ -41,6 +41,12 @@ the first: `[1 2 3 4 5 6]` becomes `[1 3 5]`. `stride.rows,2` does the
 same along axis -2 in each outer cell: `[1_2 3_4 5_6]` becomes `[1_2 5_6]`.
 The step must be a positive integer scalar. Values without the selected axis
 are unchanged; empty axes remain empty.
+`rise` and `fall` return ascending and descending sort indices independently
+for each trailing-axis vector, preserving the input shape. Equal values keep
+their original index order. Scalars return `0`; empty arrays preserve their shape.
+For example, `rise` on `[3_1_2 4_4_1]` gives `[1_2_0 2_0_1]`,
+and `fall` gives `[0_2_1 0_1_2]`.
+
 `flatten` (Uiua's `deshape`) turns any array into a vector in storage order:
 `[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
 `squeeze` removes all length-one dimensions, preserving the data and other axes.
