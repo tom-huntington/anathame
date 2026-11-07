@@ -2,6 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig").Lexer;
 const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
+    component: struct { function: *const Instruction, dimensions: ?usize },
     literal: Value,
     variable: []const u8,
     aggregate: struct { items: []const Instruction, tuple: bool = false },
@@ -248,6 +249,33 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, .{ .partial = .{ .name = token, .argument = argument } });
             continue;
         }
+        if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
+            const name = token[0..dot];
+            if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce")) {
+                var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
+                var type_dimension: usize = 0;
+                var axis_dimension: usize = 0;
+                var has_type = false;
+                var has_axis = false;
+                var outer = false;
+                while (parts.next()) |part| {
+                    if (std.mem.eql(u8, part, "r") or std.mem.eql(u8, part, "c")) {
+                        if (has_type or has_axis) return error.InvalidComponent;
+                        has_type = true;
+                        type_dimension = if (part[0] == 'c') 1 else 0;
+                    } else if (std.mem.eql(u8, part, "els") or std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "outer")) {
+                        if (has_axis) return error.InvalidComponent;
+                        has_axis = true;
+                        outer = std.mem.eql(u8, part, "outer");
+                        axis_dimension = if (std.mem.eql(u8, part, "rows")) 1 else 0;
+                    } else return error.InvalidComponent;
+                }
+                const function = try a.create(Instruction);
+                function.* = .{ .primitive = name };
+                try result.append(a, .{ .component = .{ .function = function, .dimensions = if (outer) null else type_dimension + axis_dimension } });
+                continue;
+            }
+        }
         if (try strand(a, lexer, token, names)) |value| {
             try result.append(a, .{ .literal = value });
         } else {
@@ -363,6 +391,8 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     while (i > 0) {
         i -= 1;
         var instruction = instructions[i];
+        const component = if (instruction == .component) instruction.component else null;
+        if (component) |c| instruction = c.function.*;
         const dynamic = if (instruction == .dynamic_applied and instruction.dynamic_applied.function.* == .primitive) instruction.dynamic_applied else null;
         if (dynamic) |application| instruction = .{ .partial = .{ .name = application.function.primitive, .argument = .{ .data = &.{0} } } };
         const name = switch (instruction) {
@@ -473,6 +503,12 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             }
             try result.append(a, bound);
         } else try result.append(a, instruction);
+        if (component) |c| {
+            const bound = &result.items[result.items.len - 1];
+            const function = try a.create(Instruction);
+            function.* = bound.*;
+            bound.* = .{ .component = .{ .function = function, .dimensions = c.dimensions } };
+        }
         if (dynamic) |application| {
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);

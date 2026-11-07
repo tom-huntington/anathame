@@ -221,6 +221,13 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             retain_x = false;
             continue;
         }
+        if (instruction == .component) {
+            const temporary = try componentOperation(memory, instruction.component, first_argument, second_argument);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .product) {
             const temporary = try product(memory, instruction.product, first_argument, second_argument);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -386,6 +393,7 @@ fn cloneValue(a: std.mem.Allocator, value: Value) anyerror!Value {
 
 pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
+        .component => |c| functionArity(c.function.*),
         .primitive => |name| @import("primitives.zig").arity(name),
         .partial, .applied, .dynamic_applied, .cases => 1,
         .tuples, .log => |f| functionArity(f.*),
@@ -918,4 +926,47 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
             for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try rowArgument(a, value, i), bound);
         },
     }
+}
+
+/// Component dimensions are trailing storage dimensions, after the operated axis.
+fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
+    _ = y;
+    if (x.tuple != null) return error.ExpectedArray;
+    const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
+    if (dimensions >= x.shape.len) return error.InvalidAxis;
+    const a = memory.allocator();
+    const axis = x.shape.len - dimensions - 1;
+    const width = x.shape[axis];
+    const cell_shape = x.shape[axis + 1 ..];
+    var cell_size: usize = 1;
+    for (cell_shape) |dim| cell_size *= dim;
+    var count: usize = 1;
+    for (x.shape[0..axis]) |dim| count *= dim;
+    if (width == 0) return error.EmptyArray;
+    const shape = try a.alloc(usize, x.shape.len - 1);
+    @memcpy(shape[0..axis], x.shape[0..axis]);
+    @memcpy(shape[axis..], cell_shape);
+    const data = try a.alloc(f64, count * cell_size);
+    const is_reduce = c.function.* == .reduce;
+    const rest = try a.alloc(f64, if (is_reduce) 0 else count * (width - 1) * cell_size);
+    for (0..count) |i| {
+        const start = i * width * cell_size;
+        var acc: Value = .{ .data = x.data[start..][0..cell_size], .shape = cell_shape };
+        if (is_reduce) {
+            if (functionArity(c.function.reduce.*) != 2) return error.WrongNumberOfArguments;
+            for (1..width) |j| {
+                const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
+                acc = try evaluateScope(memory, &.{c.function.reduce.*}, acc, next);
+                if (acc.tuple != null or !std.mem.eql(usize, acc.shape, cell_shape)) return error.ShapeMismatch;
+            }
+        } else {
+            @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + cell_size ..][0 .. (width - 1) * cell_size]);
+        }
+        @memcpy(data[i * cell_size ..][0..cell_size], acc.data);
+    }
+    const first: Value = .{ .data = data, .shape = shape };
+    if (is_reduce) return first;
+    const rest_shape = try a.dupe(usize, x.shape);
+    rest_shape[axis] -= 1;
+    return .{ .tuple = try a.dupe(Value, &.{ first, .{ .data = rest, .shape = rest_shape } }) };
 }

@@ -256,3 +256,28 @@ test "lambdas" {
     try expect_output("([a b] -> b*5 a |> couple )", "[2 3]", "[15 2]");
     try expect_output("([a b] -> a |> sq mul,b*5 )", "[2 3]", "60");
 }
+
+test "explicit axis" {
+    // possible future direction
+    // operation.type.axis
+    // the type and axis is a mirage. the are merely component shape
+    // storage shape = mdarray shape ++ component shape
+    // dim type + dim axis = dim component
+    // scalar types: r real shape [], c complex shape [2]. future possibilities q quaternions shape [4]
+    // r2 is length 2 vectors of reals shape [2]. c3 is length 3 vectors of complex shape [3 2]. c22 is a 2x2 matrix of complex shape [2 2 2]
+    // r^1 is vector of reals dim 1. c^1 vector of complex shape [n 2]. r^2 matrix of reals dim 2. r^2 matrix of complex shape [n m 2]
+    // axis names: els -1 (dim 0), rows -2 (dim 1), grids -3 (dim 2), outer 0
+    // every operation is trailing axis by default so els is the default and never needed. same for r
+
+    try expect_output("\\ uncons.rows", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" });
+
+    try expect_output("\\ uncons.c", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" }); // 1 scalar dimension
+    try expect_output("\\ uncons.c.rows", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
+    try expect_output("\\ uncons.outer", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
+    try expect_output("\\ uncons.c", "[[1_2 3_4 9_9] [5_6 7_8 0_0]]", .{ "[1_2 5_6]", "[[3_4 9_9] [7_8 0_0]]" });
+
+    try expect_output("\\ Reduce.rows add", "[1_2_3 4_5_6]", "[5 7 9]");
+    try expect_output("\\ Reduce.c add", "[1_2 3_4]", "[4 6]");
+    try expect_output("\\ Reduce.c.rows add", "[[1_2 3_4] [1_2 3_4]]", "[2_4 6_8]");
+    try expect_output("\\ Reduce add", "[1_2_3 4_5_6]", "[6 15]");
+}
