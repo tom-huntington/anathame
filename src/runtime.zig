@@ -952,6 +952,9 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
 /// Component dimensions are trailing storage dimensions, after the operated axis.
 fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
+    if (x.shape.len < c.type_shape.len or
+        !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape)) return error.ShapeMismatch;
+    if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     const a = memory.allocator();

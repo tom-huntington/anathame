@@ -2,7 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig").Lexer;
 const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
-    component: struct { function: *const Instruction, dimensions: ?usize },
+    component: struct { function: *const Instruction, dimensions: ?usize, type_shape: []const usize = &.{} },
     literal: Value,
     variable: []const u8,
     aggregate: struct { items: []const Instruction, tuple: bool = false },
@@ -297,6 +297,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
+                var type_shape: []const usize = &.{};
                 var axis_dimension: usize = 0;
                 var has_type = false;
                 var has_axis = false;
@@ -306,10 +307,18 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     if (std.mem.eql(u8, part, "exclusive")) {
                         if (!std.mem.eql(u8, name, "Scan") or exclusive) return error.InvalidComponent;
                         exclusive = true;
-                    } else if (std.mem.eql(u8, part, "r") or std.mem.eql(u8, part, "c")) {
+                    } else if (part.len > 0 and (part[0] == 'r' or part[0] == 'c') and (part.len == 1 or std.ascii.isDigit(part[1]))) {
                         if (has_type or has_axis) return error.InvalidComponent;
                         has_type = true;
-                        type_dimension = if (part[0] == 'c') 1 else 0;
+                        // Each digit adds a fixed dimension; complex scalars add a trailing pair.
+                        type_dimension = part.len - 1 + @as(usize, if (part[0] == 'c') 1 else 0);
+                        const shape = try a.alloc(usize, type_dimension);
+                        for (part[1..], 0..) |digit, i| {
+                            if (digit < '0' or digit > '9') return error.InvalidComponent;
+                            shape[i] = digit - '0';
+                        }
+                        if (part[0] == 'c') shape[shape.len - 1] = 2;
+                        type_shape = shape;
                     } else if (std.mem.eql(u8, part, "els") or std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "outer")) {
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;
@@ -323,7 +332,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     try result.append(a, function.*);
                     continue;
                 }
-                try result.append(a, .{ .component = .{ .function = function, .dimensions = if (outer) null else type_dimension + axis_dimension } });
+                try result.append(a, .{ .component = .{ .function = function, .dimensions = if (outer) null else type_dimension + axis_dimension, .type_shape = type_shape } });
                 continue;
             }
         }
@@ -582,7 +591,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);
             function.* = bound.*;
-            bound.* = .{ .component = .{ .function = function, .dimensions = c.dimensions } };
+            bound.* = .{ .component = .{ .function = function, .dimensions = c.dimensions, .type_shape = c.type_shape } };
         }
         if (dynamic) |application| {
             const bound = &result.items[result.items.len - 1];
