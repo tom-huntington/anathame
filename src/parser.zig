@@ -11,7 +11,7 @@ pub const Instruction = union(enum) {
     cases: Value,
     primitive: []const u8,
     partition: *const Instruction,
-    scan: *const Instruction,
+    scan: struct { function: *const Instruction, exclusive: bool = false },
     partials: *const Instruction,
     rows: *const Instruction,
     table: *const Instruction,
@@ -258,8 +258,12 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 var has_type = false;
                 var has_axis = false;
                 var outer = false;
+                var exclusive = false;
                 while (parts.next()) |part| {
-                    if (std.mem.eql(u8, part, "r") or std.mem.eql(u8, part, "c")) {
+                    if (std.mem.eql(u8, part, "exclusive")) {
+                        if (!std.mem.eql(u8, name, "Scan") or exclusive) return error.InvalidComponent;
+                        exclusive = true;
+                    } else if (std.mem.eql(u8, part, "r") or std.mem.eql(u8, part, "c")) {
                         if (has_type or has_axis) return error.InvalidComponent;
                         has_type = true;
                         type_dimension = if (part[0] == 'c') 1 else 0;
@@ -271,7 +275,11 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     } else return error.InvalidComponent;
                 }
                 const function = try a.create(Instruction);
-                function.* = .{ .primitive = name };
+                function.* = .{ .primitive = if (exclusive) "Scan.exclusive" else name };
+                if (!has_type and !has_axis and exclusive) {
+                    try result.append(a, function.*);
+                    continue;
+                }
                 try result.append(a, .{ .component = .{ .function = function, .dimensions = if (outer) null else type_dimension + axis_dimension } });
                 continue;
             }
@@ -499,13 +507,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 .{ .combinator = .sig },
                 .{ .primitive = "keep" },
             }) } });
-        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "Table")) {
+        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "Table")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             if (std.mem.eql(u8, name, "Table") and @import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = operand;
-            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan")) .{ .scan = function } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = function } else .{ .stencil = .{ .function = function } };
+            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = function } else .{ .stencil = .{ .function = function } };
             if (instruction == .partial) {
                 const scope = try a.create(Instruction);
                 scope.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{bound}) } };

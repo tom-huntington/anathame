@@ -342,9 +342,9 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             else if (instruction == .table)
                 try tableRows(memory, first_argument, second_argument, instruction.table)
             else if (instruction == .partials)
-                try scan(memory, first_argument, null, instruction.partials)
+                try scan(memory, first_argument, null, instruction.partials, false)
             else
-                try scan(memory, first_argument, second_argument, instruction.scan);
+                try scan(memory, first_argument, second_argument, instruction.scan.function, instruction.scan.exclusive);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -650,7 +650,7 @@ fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
 }
 
 /// Left prefixes along each innermost vector, optionally starting from a seed.
-fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("parser.zig").Instruction) anyerror!Value {
+fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("parser.zig").Instruction, exclusive: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
     if (seed) |initial| {
@@ -663,13 +663,17 @@ fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const
     if (width == 0) return .{ .data = data, .shape = shape };
     for (0..data.len / width) |row| {
         const start = row * width;
+        var accumulator = if (seed) |initial| initial.data[0] else data[start];
         for (if (seed != null) @as(usize, 0) else 1..width) |column| {
+            if (exclusive) data[start + column] = accumulator;
+            if (exclusive and column + 1 == width) break;
             const checkpoint = memory.checkpoint();
-            const acc: Value = if (column == 0) seed.? else .{ .data = data[start + column - 1 ..][0..1] };
+            const acc: Value = .{ .data = (&accumulator)[0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
             const result = try evaluateScope(memory, &.{function.*}, acc, next);
             if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });
-            data[start + column] = result.data[0];
+            accumulator = result.data[0];
+            if (!exclusive) data[start + column] = accumulator;
             memory.restore(checkpoint);
         }
     }
@@ -965,11 +969,12 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     const final_only = is_reduce or is_fold;
     const is_partials = c.function.* == .partials;
     if (is_reduce or is_fold or is_scan or is_partials) {
-        const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else if (is_scan) c.function.scan else c.function.partials;
+        const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else if (is_scan) c.function.scan.function else c.function.partials;
         if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
         if (!seeded and width == 0) return error.EmptyArray;
         if (seeded and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
-        const output_width = if (final_only) 1 else width + @as(usize, if (seeded) 1 else 0);
+        const exclusive = is_scan and c.function.scan.exclusive;
+        const output_width = if (final_only) 1 else width + @as(usize, if (seeded and !exclusive) 1 else 0);
         const shape = try a.alloc(usize, x.shape.len - @as(usize, if (final_only) 1 else 0));
         @memcpy(shape[0..axis], x.shape[0..axis]);
         if (final_only) {
@@ -985,8 +990,8 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
             const start = i * width * cell_size;
             @memcpy(accumulator, if (seeded) y.data else x.data[start..][0..cell_size]);
             const output_start = i * output_width * cell_size;
-            if (!final_only) @memcpy(data[output_start..][0..cell_size], accumulator);
-            for (if (seeded) @as(usize, 0) else 1..width) |j| {
+            if (!final_only and output_width > 0) @memcpy(data[output_start..][0..cell_size], accumulator);
+            for (if (seeded) @as(usize, 0) else 1..width - @as(usize, if (exclusive and width > 0) 1 else 0)) |j| {
                 const checkpoint = memory.checkpoint();
                 const acc: Value = .{ .data = accumulator, .shape = cell_shape };
                 const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
