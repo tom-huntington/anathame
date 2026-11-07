@@ -960,16 +960,19 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     for (x.shape[0..axis]) |dim| count *= dim;
     const is_reduce = c.function.* == .reduce;
     const is_fold = c.function.* == .fold;
+    const is_scan = c.function.* == .scan;
+    const seeded = is_fold or is_scan;
+    const final_only = is_reduce or is_fold;
     const is_partials = c.function.* == .partials;
-    if (is_reduce or is_fold or is_partials) {
-        const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else c.function.partials;
+    if (is_reduce or is_fold or is_scan or is_partials) {
+        const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else if (is_scan) c.function.scan else c.function.partials;
         if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
-        if (!is_fold and width == 0) return error.EmptyArray;
-        if (is_fold and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
-        const output_width = if (is_reduce) 1 else width + @as(usize, if (is_fold) 1 else 0);
-        const shape = try a.alloc(usize, x.shape.len - @as(usize, if (is_reduce) 1 else 0));
+        if (!seeded and width == 0) return error.EmptyArray;
+        if (seeded and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
+        const output_width = if (final_only) 1 else width + @as(usize, if (seeded) 1 else 0);
+        const shape = try a.alloc(usize, x.shape.len - @as(usize, if (final_only) 1 else 0));
         @memcpy(shape[0..axis], x.shape[0..axis]);
-        if (is_reduce) {
+        if (final_only) {
             @memcpy(shape[axis..], cell_shape);
         } else {
             shape[axis] = output_width;
@@ -980,10 +983,10 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         const accumulator = try a.alloc(f64, cell_size);
         for (0..count) |i| {
             const start = i * width * cell_size;
-            @memcpy(accumulator, if (is_fold) y.data else x.data[start..][0..cell_size]);
+            @memcpy(accumulator, if (seeded) y.data else x.data[start..][0..cell_size]);
             const output_start = i * output_width * cell_size;
-            if (!is_reduce) @memcpy(data[output_start..][0..cell_size], accumulator);
-            for (if (is_fold) @as(usize, 0) else 1..width) |j| {
+            if (!final_only) @memcpy(data[output_start..][0..cell_size], accumulator);
+            for (if (seeded) @as(usize, 0) else 1..width) |j| {
                 const checkpoint = memory.checkpoint();
                 const acc: Value = .{ .data = accumulator, .shape = cell_shape };
                 const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
@@ -991,12 +994,12 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
                 if (result.tuple != null or !std.mem.eql(usize, result.shape, cell_shape) or result.data.len != cell_size) return error.ShapeMismatch;
                 @memcpy(accumulator, result.data);
                 memory.restore(checkpoint);
-                if (!is_reduce) {
-                    const offset = output_start + (j + @as(usize, if (is_fold) 1 else 0)) * cell_size;
+                if (!final_only) {
+                    const offset = output_start + (j + @as(usize, if (seeded) 1 else 0)) * cell_size;
                     @memcpy(data[offset..][0..cell_size], accumulator);
                 }
             }
-            if (is_reduce) @memcpy(data[output_start..][0..cell_size], accumulator);
+            if (final_only) @memcpy(data[output_start..][0..cell_size], accumulator);
         }
         return .{ .data = data, .shape = shape };
     }

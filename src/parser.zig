@@ -251,7 +251,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Partials")) {
+            if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var axis_dimension: usize = 0;

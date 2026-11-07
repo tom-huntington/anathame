@@ -287,5 +287,6 @@ test "explicit axis" {
     try expect_output("\\ Reduce add", "[1_2_3 4_5_6]", "[6 15]");
 
     try expect_output("\\ Partials.rows add", "[1_2_3 4_5_6]", "[1_2_3 5_7_9]");
-    try expect_output("\\\\ Fold.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
+    try expect_output("\\\\ Scan.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
+    try expect_output("\\\\ Fold.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
 }
