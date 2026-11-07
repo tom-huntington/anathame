@@ -23,7 +23,9 @@ pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8
         language.console.init();
         var buffer: [4096]u8 = undefined;
         var stdout = std.Io.File.Writer.init(.stdout(), std.Io.Threaded.global_single_threaded.io(), &buffer);
-        try stdout.interface.print("file {s}, test {s}\noutput:\n{s}\n", .{ std.fs.path.basename(source.file), test_name, output.written() });
+        try stdout.interface.print("file {s}, test {s}\noutput:\n", .{ std.fs.path.basename(source.file), test_name });
+        try language.console.write(&stdout.interface, output.written());
+        try stdout.interface.writeByte('\n');
         try stdout.interface.flush();
     }
 }

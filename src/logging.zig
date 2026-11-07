@@ -19,6 +19,6 @@ pub fn printArguments(a: std.mem.Allocator, x: Value, y: ?Value, strings: bool, 
     @import("console.zig").init();
     var buffer: [4096]u8 = undefined;
     var output = std.Io.File.Writer.init(.stdout(), std.Io.Threaded.global_single_threaded.io(), &buffer);
-    try output.interface.writeAll(text.written());
+    try @import("console.zig").write(&output.interface, text.written());
     try output.interface.flush();
 }

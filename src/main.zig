@@ -38,7 +38,10 @@ fn writeOutput(io: std.Io, values: []const runtime.Value, prefix: []const u8) !v
     try output.interface.writeAll(prefix);
     for (values, 0..) |v, i| {
         if (i > 0) try output.interface.writeAll("\n");
-        try runtime.writeValue(&output.interface, v);
+        var text: std.Io.Writer.Allocating = .init(std.heap.page_allocator);
+        defer text.deinit();
+        try runtime.writeValue(&text.writer, v);
+        try @import("anathame").console.write(&output.interface, text.written());
     }
     try output.interface.writeAll("\n");
     try output.interface.flush();
