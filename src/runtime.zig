@@ -930,7 +930,6 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
 
 /// Component dimensions are trailing storage dimensions, after the operated axis.
 fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
-    _ = y;
     if (x.tuple != null) return error.ExpectedArray;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if (dimensions >= x.shape.len) return error.InvalidAxis;
@@ -942,30 +941,60 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     for (cell_shape) |dim| cell_size *= dim;
     var count: usize = 1;
     for (x.shape[0..axis]) |dim| count *= dim;
+    const is_reduce = c.function.* == .reduce;
+    const is_fold = c.function.* == .fold;
+    const is_partials = c.function.* == .partials;
+    if (is_reduce or is_fold or is_partials) {
+        const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else c.function.partials;
+        if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+        if (!is_fold and width == 0) return error.EmptyArray;
+        if (is_fold and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
+        const output_width = if (is_reduce) 1 else width + @as(usize, if (is_fold) 1 else 0);
+        const shape = try a.alloc(usize, x.shape.len - @as(usize, if (is_reduce) 1 else 0));
+        @memcpy(shape[0..axis], x.shape[0..axis]);
+        if (is_reduce) {
+            @memcpy(shape[axis..], cell_shape);
+        } else {
+            shape[axis] = output_width;
+            @memcpy(shape[axis + 1 ..], cell_shape);
+        }
+        const data = try a.alloc(f64, count * output_width * cell_size);
+        // Keep one cell accumulator and reclaim each operand's temporaries.
+        const accumulator = try a.alloc(f64, cell_size);
+        for (0..count) |i| {
+            const start = i * width * cell_size;
+            @memcpy(accumulator, if (is_fold) y.data else x.data[start..][0..cell_size]);
+            const output_start = i * output_width * cell_size;
+            if (!is_reduce) @memcpy(data[output_start..][0..cell_size], accumulator);
+            for (if (is_fold) @as(usize, 0) else 1..width) |j| {
+                const checkpoint = memory.checkpoint();
+                const acc: Value = .{ .data = accumulator, .shape = cell_shape };
+                const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
+                const result = try evaluateScope(memory, &.{function.*}, acc, next);
+                if (result.tuple != null or !std.mem.eql(usize, result.shape, cell_shape) or result.data.len != cell_size) return error.ShapeMismatch;
+                @memcpy(accumulator, result.data);
+                memory.restore(checkpoint);
+                if (!is_reduce) {
+                    const offset = output_start + (j + @as(usize, if (is_fold) 1 else 0)) * cell_size;
+                    @memcpy(data[offset..][0..cell_size], accumulator);
+                }
+            }
+            if (is_reduce) @memcpy(data[output_start..][0..cell_size], accumulator);
+        }
+        return .{ .data = data, .shape = shape };
+    }
     if (width == 0) return error.EmptyArray;
     const shape = try a.alloc(usize, x.shape.len - 1);
     @memcpy(shape[0..axis], x.shape[0..axis]);
     @memcpy(shape[axis..], cell_shape);
     const data = try a.alloc(f64, count * cell_size);
-    const is_reduce = c.function.* == .reduce;
-    const rest = try a.alloc(f64, if (is_reduce) 0 else count * (width - 1) * cell_size);
+    const rest = try a.alloc(f64, count * (width - 1) * cell_size);
     for (0..count) |i| {
         const start = i * width * cell_size;
-        var acc: Value = .{ .data = x.data[start..][0..cell_size], .shape = cell_shape };
-        if (is_reduce) {
-            if (functionArity(c.function.reduce.*) != 2) return error.WrongNumberOfArguments;
-            for (1..width) |j| {
-                const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
-                acc = try evaluateScope(memory, &.{c.function.reduce.*}, acc, next);
-                if (acc.tuple != null or !std.mem.eql(usize, acc.shape, cell_shape)) return error.ShapeMismatch;
-            }
-        } else {
-            @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + cell_size ..][0 .. (width - 1) * cell_size]);
-        }
-        @memcpy(data[i * cell_size ..][0..cell_size], acc.data);
+        @memcpy(data[i * cell_size ..][0..cell_size], x.data[start..][0..cell_size]);
+        @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + cell_size ..][0 .. (width - 1) * cell_size]);
     }
     const first: Value = .{ .data = data, .shape = shape };
-    if (is_reduce) return first;
     const rest_shape = try a.dupe(usize, x.shape);
     rest_shape[axis] -= 1;
     return .{ .tuple = try a.dupe(Value, &.{ first, .{ .data = rest, .shape = rest_shape } }) };
