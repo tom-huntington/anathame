@@ -165,6 +165,14 @@ implemented. With a dyadic operand, `Stencil sub` applies `sub` to adjacent
 rows without requiring a size. `Pairwise` expands to `Stencil,2`, so
 `Pairwise sub` and `Pairwise sum` both operate on adjacent pairs.
 
+`Tuples,2 less couple` selects increasing index pairs and applies `couple`
+to the two selected elements. Tuples takes two dyadic functions: an index
+predicate followed by the function applied to each selected pair, like dyadic
+Stencil. The result shape follows that function's output. Array selections
+require size 2; scalar inputs retain selection-count behavior. Tuples uses the
+trailing axis by default; `Tuples.r3,2 less sub` selects pairs of three-element rows from
+a matrix.
+
 `try test_alias("sum", "Fold,0 add")` compares parsed instruction trees
 recursively, including HOF operands and literal contents. It checks structural
 equivalence rather than equality on sample inputs. `test_hof_alias` does the

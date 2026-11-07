@@ -25,7 +25,7 @@ pub const Instruction = union(enum) {
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
-    tuples: *const Instruction,
+    tuples: struct { predicate: *const Instruction, function: *const Instruction },
     partial: struct { name: []const u8, argument: Value },
     choices: []const Instruction,
     function_choices: []const Instruction,
@@ -278,7 +278,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {
-            try result.appendSlice(a, try parse(a, "Tuples,2 less"));
+            try result.appendSlice(a, try parse(a, "Tuples,2 less couple"));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
@@ -593,7 +593,14 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (std.mem.eql(u8, name, "Table") and @import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = operand;
-            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = function } else .{ .stencil = .{ .function = function } };
+            var tuple_function: ?*Instruction = null;
+            if (std.mem.eql(u8, name, "Tuples")) {
+                const mapper = result.pop() orelse return error.ExpectedFunction;
+                if (@import("runtime.zig").functionArity(operand) != 2 or @import("runtime.zig").functionArity(mapper) != 2) return error.WrongNumberOfArguments;
+                tuple_function = try a.create(Instruction);
+                tuple_function.?.* = mapper;
+            }
+            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
             if (component) |c| {
                 if (std.mem.eql(u8, name, "Tuples")) {
                     const selected = try a.create(Instruction);

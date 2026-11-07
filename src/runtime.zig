@@ -413,7 +413,8 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .component => |c| functionArity(c.function.*),
         .primitive => |name| @import("primitives.zig").arity(name),
         .partial, .applied, .dynamic_applied, .cases => 1,
-        .tuples, .log => |f| functionArity(f.*),
+        .log => |f| functionArity(f.*),
+        .tuples => 2,
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
@@ -771,9 +772,9 @@ fn natural(n: f64) !usize {
     return @intFromFloat(n);
 }
 
-/// Subsets for monadic operands, index-predicate selections for dyadic operands.
+/// Select pairs by index predicate and apply a dyadic function to their elements.
 /// Apply independently within rows of multidimensional arrays.
-fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import("parser.zig").Instruction, dimensions: usize) anyerror!Value {
+fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, t: @FieldType(@import("parser.zig").Instruction, "tuples"), dimensions: usize) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
     if (x.shape.len > dimensions + 1) {
@@ -782,7 +783,7 @@ fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import(
         var output_shape: ?[]const usize = null;
         for (0..@max(count, 1)) |i| {
             const row = try rowArgument(a, x, i);
-            const result = try tuples(memory, row, y, f, dimensions);
+            const result = try tuples(memory, row, y, t, dimensions);
             if (output_shape) |shape| {
                 if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
             } else output_shape = try a.dupe(usize, result.shape);
@@ -790,43 +791,8 @@ fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import(
         }
         return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
     }
-    const arity = functionArity(f.*) orelse return error.WrongNumberOfArguments;
-    if (arity == 1) {
-        if (x.shape.len == 0) return evaluateScope(memory, &.{f.*}, x, x);
-        const n = x.shape[0];
-        if (n >= @bitSizeOf(usize)) return error.Overflow;
-        const limit = @as(usize, 1) << @intCast(n);
-        var data: std.ArrayList(f64) = .empty;
-        var output_shape: ?[]const usize = null;
-        const width = if (n == 0) 0 else x.data.len / n;
-        for (0..n + 1) |size| {
-            for (0..limit) |mask| {
-                if (@popCount(mask) != size) continue;
-                const checkpoint = memory.checkpoint();
-                const selected = try a.alloc(f64, size * width);
-                var used: usize = 0;
-                for (0..n) |i| {
-                    if ((mask & (@as(usize, 1) << @intCast(i))) == 0) continue;
-                    @memcpy(selected[used..][0..width], x.data[i * width ..][0..width]);
-                    used += width;
-                }
-                const shape = try a.dupe(usize, x.shape);
-                shape[0] = size;
-                const subset: Value = .{ .data = selected, .shape = shape };
-                const mapped = try evaluateScope(memory, &.{f.*}, subset, subset);
-                if (mapped.tuple != null) return error.ExpectedArray;
-                if (output_shape) |previous| {
-                    if (!std.mem.eql(usize, previous, mapped.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, previous), mapped });
-                }
-                // Preserve results before reclaiming temporary subset allocations.
-                const saved = try @import("memory.zig").ReturnImpl(memory, checkpoint, mapped);
-                if (output_shape == null) output_shape = try a.dupe(usize, saved.shape);
-                if (n != 0) try data.appendSlice(a, saved.data);
-            }
-        }
-        return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{if (n == 0) 0 else limit}, output_shape.? }) };
-    }
-    if (arity != 2 or y.tuple != null or y.shape.len != 0 or y.data.len != 1) return error.InvalidInput;
+    const f = t.predicate;
+    if (y.tuple != null or y.shape.len != 0 or y.data.len != 1) return error.InvalidInput;
     const scalar = x.shape.len == 0;
     const n = if (scalar) try natural(x.data[0]) else x.shape[0];
     const size = y.data[0];
@@ -839,23 +805,44 @@ fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import(
         }
         return .{ .data = try a.dupe(f64, &.{@round(combinations)}) };
     }
-    if (increasing and k > n) return .{ .data = &.{}, .shape = try std.mem.concat(a, usize, &.{ &.{ 0, k }, x.shape[1..] }) };
+    if (!scalar and k != 2) return error.WrongNumberOfArguments;
     const indices = try a.alloc(usize, k);
     var data: std.ArrayList(f64) = .empty;
     var count: usize = 0;
-    try tupleSelections(memory, x, f, n, indices, 0, &data, &count);
+    var output_shape: ?[]const usize = null;
+    try tupleSelections(memory, x, t, n, indices, 0, &data, &count, &output_shape);
     if (scalar) return .{ .data = try a.dupe(f64, &.{@floatFromInt(count)}) };
-    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{ count, k }, x.shape[1..] }) };
+    if (output_shape == null) {
+        var width: usize = 1;
+        for (x.shape[1..]) |dim| width = try std.math.mul(usize, width, dim);
+        const zeros = try a.alloc(f64, width);
+        @memset(zeros, 0);
+        const row: Value = .{ .data = zeros, .shape = x.shape[1..] };
+        const mapped = try evaluateScope(memory, &.{t.function.*}, row, row);
+        if (mapped.tuple != null) return error.ExpectedArray;
+        output_shape = mapped.shape;
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
 }
 
-fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, f: *const @import("parser.zig").Instruction, n: usize, indices: []usize, depth: usize, data: *std.ArrayList(f64), count: *usize) anyerror!void {
+fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, t: @FieldType(@import("parser.zig").Instruction, "tuples"), n: usize, indices: []usize, depth: usize, data: *std.ArrayList(f64), count: *usize, output_shape: *?[]const usize) anyerror!void {
     const a = memory.allocator();
     if (depth == indices.len) {
         count.* = try std.math.add(usize, count.*, 1);
         if (x.shape.len != 0) {
             var width: usize = 1;
             for (x.shape[1..]) |dim| width = try std.math.mul(usize, width, dim);
-            for (indices) |i| try data.appendSlice(a, x.data[i * width ..][0..width]);
+            const checkpoint = memory.checkpoint();
+            const first: Value = .{ .data = x.data[indices[0] * width ..][0..width], .shape = x.shape[1..] };
+            const second: Value = .{ .data = x.data[indices[1] * width ..][0..width], .shape = x.shape[1..] };
+            const mapped = try evaluateScope(memory, &.{t.function.*}, first, second);
+            if (mapped.tuple != null) return error.ExpectedArray;
+            if (output_shape.*) |shape| {
+                if (!std.mem.eql(usize, shape, mapped.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), mapped });
+            }
+            const saved = try @import("memory.zig").ReturnImpl(memory, checkpoint, mapped);
+            if (output_shape.* == null) output_shape.* = try a.dupe(usize, saved.shape);
+            try data.appendSlice(a, saved.data);
         }
         return;
     }
@@ -863,7 +850,7 @@ fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, f: *const @import("
         var reps: usize = 1;
         for (indices[0..depth]) |j| {
             const checkpoint = memory.checkpoint();
-            const predicate = try evaluateScope(memory, &.{f.*}, .{ .data = &.{@floatFromInt(j)} }, .{ .data = &.{@floatFromInt(i)} });
+            const predicate = try evaluateScope(memory, &.{t.predicate.*}, .{ .data = &.{@floatFromInt(j)} }, .{ .data = &.{@floatFromInt(i)} });
             if (predicate.tuple != null or predicate.shape.len != 0 or predicate.data.len != 1) return error.InvalidInput;
             const times = try natural(predicate.data[0]);
             if (indices.len > 2 and times > 1) return error.InvalidInput;
@@ -872,7 +859,7 @@ fn tupleSelections(memory: *ReservedBumpAllocator, x: Value, f: *const @import("
             if (reps == 0) break;
         }
         indices[depth] = i;
-        for (0..reps) |_| try tupleSelections(memory, x, f, n, indices, depth + 1, data, count);
+        for (0..reps) |_| try tupleSelections(memory, x, t, n, indices, depth + 1, data, count, output_shape);
     }
 }
 
