@@ -147,6 +147,8 @@ test "builtins" {
 
     try expect_output("\\ stride,2", "[1 2 3 4 5 6]", "[1 3 5]");
     try expect_output("\\ stride.rows,2", "[1_2 3_4 5_6]", "[1_2 5_6]");
+
+    try expect_output("\\\\ distance", .{ "[3 4]", "[0 0]" }, "5"); // trailing axis convention
 }
 
 test "Phi combinator" {

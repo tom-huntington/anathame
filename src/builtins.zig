@@ -1,6 +1,27 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Euclidean distance, reducing the trailing axis after pervasive subtraction.
+/// Scalars return their absolute difference; empty vectors have distance zero.
+pub fn distance(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    const difference = try @import("uiua_builtins.zig").sub(a, x, y);
+    defer a.free(difference.data);
+    defer a.free(difference.shape);
+    const rank = difference.shape.len;
+    const shape = difference.shape[0 .. rank - @intFromBool(rank != 0)];
+    var cells: usize = 1;
+    for (shape) |dim| cells = try std.math.mul(usize, cells, dim);
+    const width = if (rank == 0) 1 else difference.shape[rank - 1];
+    const data = try a.alloc(f64, cells);
+    errdefer a.free(data);
+    for (data, 0..) |*result, cell| {
+        var sum: f64 = 0;
+        for (difference.data[cell * width ..][0..width]) |delta| sum += delta * delta;
+        result.* = @sqrt(sum);
+    }
+    return .{ .data = data, .shape = try a.dupe(usize, shape) };
+}
+
 /// Keep every nth element along the trailing axis, starting with the first.
 pub fn stride(a: std.mem.Allocator, x: Value, step: Value) !Value {
     return strideAxis(a, x, step, 1);
