@@ -238,6 +238,8 @@ test "High order functions (hofs)" {
     try expect_output("\\\\ Flip sub", .{ "1", "2" }, "1");
 
     try expect_output("\\\\ Switch sq add,1", .{ "[1 2 3]", "[1 0 1]" }, "[1 3 9]");
+
+    try expect_output("\\\\ Scan.exclusive add", .{ "[1 2 3 4]", "0" }, "[0 1 3 6]");
 }
 
 test "tuples" {

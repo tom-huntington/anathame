@@ -114,6 +114,8 @@ test "day 7" {
         \\$ .^.^.^.^.^...^.
         \\$ ...............
     ,
-        \\ \ split,@\n stride.rows,2 not_eq,@. \ (uncons.rows Unc Flip { Fold.rows { mul |nu { convolve.same,[1 1 1] |d2 not and }  |phi1 { not |d mul } or } }) |s mul
-    , null, @src());
+        \\ part1 =\ split,@\n stride.rows,2 not_eq,@. \ uncons.rows Unc Flip \\ Scan.exclusive.rows { mul convolve.same,[1 0 1] |phi1 { not |d mul } or } |n mul total
+        \\ part2 =\ split,@\n stride.rows,2 not_eq,@. \ uncons.rows Unc Flip \\ Fold.rows { mul convolve.same,[1 0 1] |phi1 { not |d mul } add } sum
+        \\ \ part1 ** part2
+    , "[21 40]", @src());
 }
