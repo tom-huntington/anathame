@@ -60,6 +60,9 @@ For example, `base10` on `123` gives `[3 2 1]`, and `radix10` converts it back.
 The Psi combinator applies the preceding composition to both inputs before
 combining them: `{ sq |psi add }` on `2 3` produces `13`, following
 `(f |psi g)(x,y) = g(f(x),f(y))`. Its combining function must be dyadic.
+`{ f |d2 g h }` computes `h(f(x),g(y))`, with monadic `f` and `g`.
+`{ f |phi1 g h }` computes `h(f(x,y),g(x,y))`, with dyadic `f` and `g`.
+Both combinators require a dyadic combining function `h`.
 Inputs contain one value for monadic scopes and two for dyadic
 functions. Values can be numbers, rectangular arrays, characters (`@a`), or
 quoted strings (`"ab"`). Characters are Unicode code point scalars; strings

@@ -36,7 +36,7 @@ pub const Lexer = struct {
             if (self.source[self.offset] == '>') {
                 self.offset += 1;
             } else {
-                while (self.offset < self.source.len and std.ascii.isAlphabetic(self.source[self.offset])) self.offset += 1;
+                while (self.offset < self.source.len and std.ascii.isAlphanumeric(self.source[self.offset])) self.offset += 1;
             }
             return self.source[start..self.offset];
         }

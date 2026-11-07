@@ -132,6 +132,22 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             skip -= 1;
             continue;
         }
+        if (instruction == .combinator and (instruction.combinator == .d2 or instruction.combinator == .phi1)) {
+            if (index == 0 or index + 2 >= instructions.len) return error.ExpectedFunction;
+            const branch = instructions[index + 1];
+            const combine = instructions[index + 2];
+            const branch_arity: usize = if (instruction.combinator == .d2) 1 else 2;
+            if (functionArity(branch) != branch_arity or functionArity(combine) != 2) return error.WrongNumberOfArguments;
+            const right = try evaluateScope(memory, &.{branch}, if (branch_arity == 1) y else x, y);
+            const temporary = try evaluateScope(memory, &.{combine}, result, right);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            skip = 2;
+            first_function = false;
+            retain_x = false;
+            retain_y = false;
+            reverse_arguments = false;
+            continue;
+        }
         if (instruction == .combinator and instruction.combinator == .psi) {
             if (index == 0 or index + 1 == instructions.len) return error.ExpectedFunction;
             const function = instructions[index + 1];

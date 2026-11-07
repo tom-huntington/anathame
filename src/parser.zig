@@ -31,7 +31,7 @@ pub const Instruction = union(enum) {
     function_choices: []const Instruction,
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
-    combinator: enum { n, nu, s, sig, b, phi, psi, d, delta },
+    combinator: enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1 },
     scope: struct { parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 pub const Pattern = union(enum) { name: []const u8, items: []const Pattern };
@@ -105,9 +105,9 @@ fn validName(name: []const u8) bool {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|d") or std.mem.eql(u8, token, "|delta") or std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
+        if (std.mem.eql(u8, token, "|d2") or std.mem.eql(u8, token, "|phi1") or std.mem.eql(u8, token, "|d") or std.mem.eql(u8, token, "|delta") or std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
             if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-            try result.append(a, .{ .combinator = if (std.mem.eql(u8, token, "|delta")) .delta else if (std.mem.eql(u8, token, "|d")) .d else if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
+            try result.append(a, .{ .combinator = if (std.mem.eql(u8, token, "|d2")) .d2 else if (std.mem.eql(u8, token, "|phi1")) .phi1 else if (std.mem.eql(u8, token, "|delta")) .delta else if (std.mem.eql(u8, token, "|d")) .d else if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
             continue;
         }
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
@@ -300,7 +300,7 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
         if (instruction != .combinator) continue;
         switch (instruction.combinator) {
             .s, .sig => result_arity = 1,
-            .n, .nu, .d, .delta, .psi => result_arity = 2,
+            .n, .nu, .d, .delta, .psi, .d2, .phi1 => result_arity = 2,
             .b, .phi => {},
         }
     }
