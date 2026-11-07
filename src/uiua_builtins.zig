@@ -1,6 +1,72 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+fn natural(value: f64) !usize {
+    if (!std.math.isFinite(value) or value < 0 or @trunc(value) != value or
+        value >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    return @intFromFloat(value);
+}
+
+/// Repeat each index (or coordinate row) by its natural-number count, as in Uiua.
+pub fn where(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    if (value.tuple != null) return error.InvalidInput;
+    var total: usize = 0;
+    for (value.data) |count| total = try std.math.add(usize, total, try natural(count));
+    const rank = value.shape.len;
+    const width = @max(1, rank);
+    const data = try a.alloc(f64, try std.math.mul(usize, total, width));
+    errdefer a.free(data);
+    var offset: usize = 0;
+    for (value.data, 0..) |count, index| {
+        for (0..try natural(count)) |_| {
+            if (rank <= 1) {
+                data[offset] = @floatFromInt(if (rank == 0) 0 else index);
+            } else {
+                var remaining = index;
+                var axis = rank;
+                while (axis > 0) {
+                    axis -= 1;
+                    data[offset + axis] = @floatFromInt(remaining % value.shape[axis]);
+                    remaining /= value.shape[axis];
+                }
+            }
+            offset += width;
+        }
+    }
+    const shape = try a.alloc(usize, if (rank <= 1) 1 else 2);
+    shape[0] = total;
+    if (rank > 1) shape[1] = rank;
+    return .{ .data = data, .shape = shape };
+}
+
+/// Count indices or coordinate rows, inferring each axis from its maximum index.
+pub fn unwhere(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    if (value.tuple != null or value.shape.len > 2) return error.InvalidInput;
+    const coordinates = value.shape.len == 2;
+    const rank = if (coordinates) value.shape[1] else 1;
+    const rows = if (coordinates) value.shape[0] else value.data.len;
+    const shape = try a.alloc(usize, rank);
+    errdefer a.free(shape);
+    @memset(shape, 0);
+    for (value.data, 0..) |item, i| {
+        const size = try std.math.add(usize, try natural(item), 1);
+        const axis = if (coordinates) i % rank else 0;
+        shape[axis] = @max(shape[axis], size);
+    }
+    var size: usize = 1;
+    for (shape) |dim| size = try std.math.mul(usize, size, dim);
+    const data = try a.alloc(f64, size);
+    @memset(data, 0);
+    for (0..rows) |row| {
+        var index: usize = 0;
+        for (shape, 0..) |dim, axis| {
+            index = index * dim + (natural(value.data[if (coordinates) row * rank + axis else row]) catch unreachable);
+        }
+        data[index] += 1;
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Uiua indexin: find each needle row in the haystack (the first argument).
 /// Missing rows return the haystack's row count; duplicate rows use the first index.
 pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
