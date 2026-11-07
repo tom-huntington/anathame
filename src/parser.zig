@@ -207,6 +207,8 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, ",")) {
             if (result.items.len == 0) return error.ExpectedFunction;
             const previous = &result.items[result.items.len - 1];
+            const selected_component = if (previous.* == .component) previous.component else null;
+            if (selected_component) |c| previous.* = c.function.*;
             const name = if (previous.* == .primitive) previous.primitive else "";
             if (previous.* != .primitive and previous.* != .scope) return error.ExpectedFunction;
             if (previous.* == .scope and previous.scope.arity != 2) return error.WrongNumberOfArguments;
@@ -219,6 +221,11 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 const arg = try a.create(Instruction);
                 arg.* = parsed_argument;
                 previous.* = .{ .dynamic_applied = .{ .function = function, .argument = arg } };
+                if (selected_component) |c| {
+                    const selected = try a.create(Instruction);
+                    selected.* = previous.*;
+                    previous.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                }
                 continue;
             }
             const value = parsed_argument.literal;
@@ -234,6 +241,13 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 const next = (try lexer.next()) orelse return error.ExpectedLiteral;
                 const choice = (try strand(a, lexer, next, names)) orelse return error.ExpectedLiteral;
                 try choices.append(a, if (name.len != 0) .{ .partial = .{ .name = name, .argument = choice } } else .{ .applied = .{ .function = function, .argument = choice } });
+            }
+            if (selected_component) |c| {
+                for (choices.items) |*choice| {
+                    const selected = try a.create(Instruction);
+                    selected.* = choice.*;
+                    choice.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                }
             }
             previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
             continue;
@@ -294,7 +308,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials")) {
+            if (std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -580,6 +594,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = function } else .{ .stencil = .{ .function = function } };
+            if (component) |c| {
+                if (std.mem.eql(u8, name, "Tuples")) {
+                    const selected = try a.create(Instruction);
+                    selected.* = bound;
+                    bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                }
+            }
             if (instruction == .partial) {
                 const scope = try a.create(Instruction);
                 scope.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{bound}) } };
@@ -587,7 +608,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             }
             try result.append(a, bound);
         } else try result.append(a, instruction);
-        if (component) |c| {
+        if (if (std.mem.eql(u8, name, "Tuples")) null else component) |c| {
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);
             function.* = bound.*;

@@ -354,7 +354,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             const temporary = if (instruction == .applied)
                 try evaluateScope(memory, &.{instruction.applied.function.*}, first_argument, instruction.applied.argument)
             else
-                try tuples(memory, first_argument, second_argument, instruction.tuples);
+                try tuples(memory, first_argument, second_argument, instruction.tuples, 0);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -773,16 +773,16 @@ fn natural(n: f64) !usize {
 
 /// Subsets for monadic operands, index-predicate selections for dyadic operands.
 /// Apply independently within rows of multidimensional arrays.
-fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import("parser.zig").Instruction) anyerror!Value {
+fn tuples(memory: *ReservedBumpAllocator, x: Value, y: Value, f: *const @import("parser.zig").Instruction, dimensions: usize) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
-    if (x.shape.len > 1) {
+    if (x.shape.len > dimensions + 1) {
         const count = x.shape[0];
         var data: std.ArrayList(f64) = .empty;
         var output_shape: ?[]const usize = null;
         for (0..@max(count, 1)) |i| {
             const row = try rowArgument(a, x, i);
-            const result = try tuples(memory, row, y, f);
+            const result = try tuples(memory, row, y, f, dimensions);
             if (output_shape) |shape| {
                 if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
             } else output_shape = try a.dupe(usize, result.shape);
@@ -957,6 +957,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if (dimensions >= x.shape.len) return error.InvalidAxis;
+    if (c.function.* == .tuples) return tuples(memory, x, y, c.function.tuples, dimensions);
     const a = memory.allocator();
     const axis = x.shape.len - dimensions - 1;
     const width = x.shape[axis];
