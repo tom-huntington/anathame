@@ -244,6 +244,7 @@ test "High order functions (hofs)" {
 
 test "tuples" {
     try expect_output("\\\\ Tuples less", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
+    try expect_output("\\\\ Tuples less", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
     try test_aliases(&.{ "combinations", "Tuples,2 less", "{Tuples less},2" });
 }
 
