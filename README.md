@@ -235,3 +235,25 @@ and constants wherever a value is accepted, including partial arguments,
 arrays, tuples, and strands. Multiplication and division bind before addition
 and subtraction; equal precedence associates left to right. Use `*` for multiplication (`a*5` or `a * 5`); `***` separates literal choices.
 For example, `([a b] -> b*5 a+1 |> couple)` on `[2 3]` returns `[15 3]`.
+
+User definitions appear before the main expression, one per line. Value functions
+and constants use `snake_case`; higher-order functions use `TitleCase` (no
+underscores). `F` and `G` are reserved function placeholders and cannot be
+definition names or value parameters. A TitleCase definition must use `F`; using
+`G` makes it consume two function operands, in `F`, `G` order. Snake-case
+definitions cannot use either placeholder.
+
+HOFs expand like macros at parse time, using definitions visible where they were
+declared. They retain the explicit value arity syntax of ordinary functions.
+Operands may be primitives, named functions, grouped functions, or other HOF
+applications. Placeholders can occur repeatedly and inside nested scopes:
+
+```text
+Twice =\ F F
+Compose =\ F G
+increment =\ add,1
+\ Compose (Twice increment) sq
+```
+
+On input `3`, this returns `25`. A dyadic HOF can be declared with `\\` or
+braces, for example `Combine = { F |phi1 G add }`.

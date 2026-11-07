@@ -32,7 +32,13 @@ pub const Instruction = union(enum) {
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
     combinator: enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1 },
-    scope: struct { parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
+    scope: struct { macro_definition: ?*const Macro = null, parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
+};
+// Macro bodies are parsed after their function operands have been substituted.
+const Macro = struct {
+    source: []const u8,
+    names: std.StringHashMapUnmanaged(Instruction),
+    operands: usize,
 };
 pub const Pattern = union(enum) { name: []const u8, items: []const Pattern };
 
@@ -48,7 +54,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             lexer.offset = start;
             break;
         }
-        if (!validName(name) or @import("primitives.zig").known(name) or
+        if (!validDefinitionName(name) or @import("primitives.zig").known(name) or
             std.mem.eql(u8, name, "rsub") or std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "total") or std.mem.eql(u8, name, "split") or std.mem.eql(u8, name, "Pairwise") or
             std.mem.eql(u8, name, "combinations") or std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
         if (names.contains(name)) return error.DuplicateFunctionName;
@@ -66,6 +72,26 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
                 if (depth == 0) return error.UnexpectedClose;
                 depth -= 1;
             }
+        }
+        const source_body = source[body_start..lexer.offset];
+        var placeholders: Lexer = .{ .source = source_body };
+        var has_f = false;
+        var has_g = false;
+        while (try placeholders.next()) |token| {
+            has_f = has_f or std.mem.eql(u8, token, "F");
+            has_g = has_g or std.mem.eql(u8, token, "G");
+        }
+        const is_hof = std.ascii.isUpper(name[0]);
+        if (is_hof != has_f or (has_g and !has_f)) return error.InvalidFunctionName;
+        if (is_hof) {
+            var declaration_lexer: Lexer = .{ .source = source_body };
+            const declaration = (try declaration_lexer.next()) orelse return error.InvalidSyntax;
+            if (!std.mem.eql(u8, declaration, "(") and !std.mem.eql(u8, declaration, "{") and
+                !std.mem.eql(u8, declaration, "\\") and !std.mem.eql(u8, declaration, "\\\\")) return error.InvalidSyntax;
+            const macro = try a.create(Macro);
+            macro.* = .{ .source = source_body, .names = try names.clone(a), .operands = if (has_g) 2 else 1 };
+            try names.put(a, name, .{ .scope = .{ .arity = 0, .instructions = &.{}, .macro_definition = macro } });
+            continue;
         }
         var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset] };
         const declaration = (try body_lexer.next()) orelse return error.InvalidSyntax;
@@ -99,6 +125,23 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
 fn validName(name: []const u8) bool {
     if (name.len == 0 or !std.ascii.isAlphabetic(name[0])) return false;
     for (name[1..]) |c| if (!std.ascii.isAlphanumeric(c) and c != '_') return false;
+    return true;
+}
+
+fn validDefinitionName(name: []const u8) bool {
+    if (!validName(name) or std.mem.eql(u8, name, "F") or std.mem.eql(u8, name, "G")) return false;
+    if (std.ascii.isUpper(name[0])) {
+        // TitleCase: capitalized words, without underscores or acronyms.
+        for (name, 0..) |c, i| {
+            if (c == '_') return false;
+            if (i > 0 and std.ascii.isUpper(c) and std.ascii.isUpper(name[i - 1])) return false;
+        }
+    } else {
+        for (name, 0..) |c, i| {
+            if (std.ascii.isUpper(c)) return false;
+            if (c == '_' and (i == name.len - 1 or name[i - 1] == '_')) return false;
+        }
+    }
     return true;
 }
 
@@ -409,6 +452,20 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     while (i > 0) {
         i -= 1;
         var instruction = instructions[i];
+        if (instruction == .scope and instruction.scope.macro_definition != null) {
+            const macro = instruction.scope.macro_definition.?;
+            var local_names = try macro.names.clone(a);
+            defer local_names.deinit(a);
+            for (([_][]const u8{ "F", "G" })[0..macro.operands]) |placeholder| {
+                const operand = result.pop() orelse return error.ExpectedFunction;
+                if (isValue(operand) or operand == .combinator or operand == .alternative) return error.ExpectedFunction;
+                try local_names.put(a, placeholder, operand);
+            }
+            var body_lexer: Lexer = .{ .source = macro.source };
+            const body = try sequence(a, &body_lexer, null, false, true, &local_names);
+            if (body.len != 1 or body[0] != .scope or body[0].scope.macro_definition != null) return error.InvalidSyntax;
+            instruction = body[0];
+        }
         const component = if (instruction == .component) instruction.component else null;
         if (component) |c| instruction = c.function.*;
         const dynamic = if (instruction == .dynamic_applied and instruction.dynamic_applied.function.* == .primitive) instruction.dynamic_applied else null;
@@ -770,7 +827,7 @@ fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUn
         }
         return .{ .items = try items.toOwnedSlice(a) };
     }
-    if (!validName(token)) return error.InvalidFunctionName;
+    if (!validName(token) or std.mem.eql(u8, token, "F") or std.mem.eql(u8, token, "G")) return error.InvalidFunctionName;
     if (names.contains(token) or @import("primitives.zig").known(token) or
         std.mem.eql(u8, token, "rsub") or std.mem.eql(u8, token, "sum") or std.mem.eql(u8, token, "total") or
         std.mem.eql(u8, token, "split") or std.mem.eql(u8, token, "Pairwise") or
