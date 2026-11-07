@@ -51,6 +51,8 @@ and `fall` gives `[0_2_1 0_1_2]`.
 `[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
 `squeeze` removes all length-one dimensions, preserving the data and other axes.
 For example, shape `[1 2 1 3 1]` becomes `[2 3]`, and `[7]` becomes scalar `7`.
+`shape` returns a vector of dimension sizes: `[1_2_3 4_5_6]` gives `[2 3]`,
+and a scalar gives `[]`.
 `reshape` takes data first and a shape second. A scalar shape repeats the whole
 array along a new leading axis; a shape list cycles or truncates the flat data.
 For example, `reshape,[2 3]` on `[1 2 3]` gives `[1_2_3 1_2_3]`.

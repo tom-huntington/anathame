@@ -257,6 +257,15 @@ pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     return .{ .data = data, .shape = value.shape };
 }
 
+/// Dimension sizes as a vector, as in Uiua; scalars have an empty shape.
+pub fn arrayShape(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    if (value.tuple != null) return error.ExpectedArray;
+    const data = try a.alloc(f64, value.shape.len);
+    errdefer a.free(data);
+    for (value.shape, data) |dimension, *item| item.* = @floatFromInt(dimension);
+    return .{ .data = data, .shape = try a.dupe(usize, &.{value.shape.len}) };
+}
+
 /// Uiua reshape without fill: scalar repetition, cyclic lists, and inferred axes.
 pub fn reshape(a: std.mem.Allocator, value: Value, dimensions: Value) !Value {
     if (value.tuple != null or dimensions.tuple != null or dimensions.shape.len > 1 or dimensions.data.len >= 100) return error.InvalidInput;

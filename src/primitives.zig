@@ -2,6 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
+    if (std.mem.eql(u8, name, "shape")) return 1;
     if (std.mem.eql(u8, name, "where") or std.mem.eql(u8, name, "unwhere")) return 1;
     if (std.mem.eql(u8, name, "rise") or std.mem.eql(u8, name, "fall")) return 1;
     if (std.mem.eql(u8, name, "squeeze")) return 1;
@@ -282,6 +283,7 @@ pub fn known(name: []const u8) bool {
 }
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
+    if (std.mem.eql(u8, name, "shape")) return &@import("uiua_builtins.zig").arrayShape;
     if (std.mem.eql(u8, name, "tuple.blankline")) return &@import("tuple_builtins.zig").blankline;
     if (std.mem.startsWith(u8, name, "convolve.")) {
         inline for (comptime std.meta.declarations(@import("convolve_builtins.zig"))) |decl| {
@@ -299,7 +301,7 @@ pub fn lookup(name: []const u8) ?Function {
     const uiua_builtins = @import("uiua_builtins.zig");
     inline for (.{ builtins, uiua_builtins }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
-            if (comptime std.mem.eql(u8, decl, "sortComponents")) continue;
+            if (comptime std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "arrayShape")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }
