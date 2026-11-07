@@ -267,6 +267,7 @@ fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("
             else
                 try @import("builtins.zig").log(memory.allocator(), first_argument, second_argument);
             const temporary = try evaluateScope(memory, &.{function}, first_argument, second_argument);
+            try @import("logging.zig").printResult(memory.allocator(), temporary);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;

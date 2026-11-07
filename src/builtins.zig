@@ -112,43 +112,26 @@ pub fn reverse(a: std.mem.Allocator, x: Value, _: Value) !Value {
 
 /// Print a value and return it unchanged.
 pub fn log(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    try printArguments(a, x, null, false);
+    try @import("logging.zig").printArguments(a, x, null, false, null);
     return x;
 }
 
 /// Print both arguments and return the right argument unchanged.
 pub fn logr(a: std.mem.Allocator, x: Value, y: Value) !Value {
-    try printArguments(a, x, y, false);
+    try @import("logging.zig").printArguments(a, x, y, false, null);
     return y;
 }
 
 /// Print both arguments and return the left argument unchanged.
 pub fn logl(a: std.mem.Allocator, x: Value, y: Value) !Value {
-    try printArguments(a, x, y, false);
+    try @import("logging.zig").printArguments(a, x, y, false, null);
     return x;
 }
 
 /// Print rows as Unicode strings and return the original numeric value.
 pub fn @"log.str"(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    try printArguments(a, x, null, true);
+    try @import("logging.zig").printArguments(a, x, null, true, null);
     return x;
-}
-
-fn printArguments(a: std.mem.Allocator, x: Value, y: ?Value, strings: bool) !void {
-    var text: std.Io.Writer.Allocating = .init(a);
-    defer text.deinit();
-    if (y != null) try text.writer.writeAll("left arg:\n");
-    if (strings) try @import("display.zig").writeString(&text.writer, x) else try @import("runtime.zig").writeValue(&text.writer, x);
-    if (y) |right| {
-        try text.writer.writeAll("\nright arg:\n");
-        try @import("runtime.zig").writeValue(&text.writer, right);
-    }
-    try text.writer.writeAll("\n");
-    @import("console.zig").init();
-    var buffer: [4096]u8 = undefined;
-    var output = std.Io.File.Writer.init(.stdout(), std.Io.Threaded.global_single_threaded.io(), &buffer);
-    try output.interface.writeAll(text.written());
-    try output.interface.flush();
 }
 
 /// Number of leading-axis rows; scalars have one row.
