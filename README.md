@@ -149,6 +149,12 @@ Function choices run in source order, with the last choice varying fastest:
 `(sq add,1) ** (mul,3 sub,2)`. Every branch receives the same original inputs;
 its complete composition runs before the results are stacked.
 
+`sort` sorts each innermost vector in ascending order. Component suffixes
+select the cells to compare lexicographically: `sort.rows` sorts rows,
+`sort.r3` sorts three-element vectors, and `sort.outer` sorts the leading
+axis. `sort.els` explicitly selects scalar elements. Any axes before the
+selected axis are processed independently; the array shape is preserved.
+
 `Reduce add` folds each innermost vector from left to right;
 `[[1 2] [3 4]]` becomes `[3 7]`. Its operand must be dyadic and its input
 must be non-empty. Scalars remain scalars.

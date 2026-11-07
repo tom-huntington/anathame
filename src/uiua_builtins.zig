@@ -68,6 +68,32 @@ fn rowWidth(value: Value) usize {
     return width;
 }
 
+/// Sort innermost vectors by default; components select trailing cell dimensions.
+pub fn sort(a: std.mem.Allocator, value: Value, _: Value) !Value {
+    if (value.tuple != null) return error.InvalidInput;
+    if (value.shape.len == 0) return value;
+    return sortComponents(a, value, 0);
+}
+
+pub fn sortComponents(a: std.mem.Allocator, value: Value, dimensions: usize) !Value {
+    if (value.tuple != null) return error.InvalidInput;
+    if (dimensions >= value.shape.len) return error.InvalidAxis;
+    if (value.data.len == 0) return value;
+    const axis = value.shape.len - dimensions - 1;
+    const shape = value.shape[axis..];
+    var size: usize = 1;
+    for (shape) |dim| size *= dim;
+    const data = try a.alloc(f64, value.data.len);
+    var offset: usize = 0;
+    while (offset < data.len) : (offset += size) {
+        const input: Value = .{ .data = value.data[offset..][0..size], .shape = shape };
+        const result = try lexisort(a, input, .{});
+        @memcpy(data[offset..][0..size], result.data);
+        if (result.data.ptr != input.data.ptr) a.free(result.data);
+    }
+    return .{ .data = data, .shape = value.shape };
+}
+
 /// Uiua sort: reorder leading-axis rows lexicographically, preserving their contents.
 pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;

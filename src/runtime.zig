@@ -944,6 +944,8 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if (dimensions >= x.shape.len) return error.InvalidAxis;
+    if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
+        return @import("uiua_builtins.zig").sortComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .tuples) return tuples(memory, x, y, c.function.tuples, dimensions);
     const a = memory.allocator();
     const axis = x.shape.len - dimensions - 1;

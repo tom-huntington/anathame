@@ -5,7 +5,7 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "squeeze")) return 1;
     if (std.mem.eql(u8, name, "log.str")) return 1;
     if (std.mem.eql(u8, name, "not")) return 1;
-    if (std.mem.eql(u8, name, "lexisort")) return 1;
+    if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
     if (std.mem.eql(u8, name, "transpose") or std.mem.eql(u8, name, "lastrow")) return 1;
     if (std.mem.eql(u8, name, "tuple.blankline")) return 1;
@@ -297,6 +297,7 @@ pub fn lookup(name: []const u8) ?Function {
     const uiua_builtins = @import("uiua_builtins.zig");
     inline for (.{ builtins, uiua_builtins }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
+            if (comptime std.mem.eql(u8, decl, "sortComponents")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }
