@@ -144,6 +144,7 @@ test "day 8" {
         \\$ 984,92,344
         \\$ 425,690,689        
     ,
-        \\ \ ints2d Tuples.r3,2 less distance sort
+        \\ \ ints2d \ length iota Tuples,2 less couple |sig select Reduce.r3 distance
+        //Tuples.r3,2 less distance sort
     , null, @src());
 }

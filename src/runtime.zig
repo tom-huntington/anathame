@@ -966,6 +966,31 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
         if (!seeded and width == 0) return error.EmptyArray;
         if (seeded and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
+        if (final_only and count > 0) {
+            var data: std.ArrayList(f64) = .empty;
+            var result_shape: ?[]const usize = null;
+            for (0..count) |i| {
+                const start = i * width * cell_size;
+                const checkpoint = memory.checkpoint();
+                var accumulator: Value = if (seeded) y else .{ .data = x.data[start..][0..cell_size], .shape = cell_shape };
+                for (if (seeded) @as(usize, 0) else 1..width) |j| {
+                    const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
+                    const result = try evaluateScope(memory, &.{function.*}, accumulator, next);
+                    accumulator = try @import("memory.zig").ReturnImpl(memory, checkpoint, result);
+                }
+                if (accumulator.tuple != null) return error.ShapeMismatch;
+                if (result_shape) |expected| {
+                    if (!std.mem.eql(usize, expected, accumulator.shape)) return error.ShapeMismatch;
+                } else {
+                    result_shape = try a.dupe(usize, accumulator.shape);
+                }
+                try data.appendSlice(a, accumulator.data);
+            }
+            return .{
+                .data = try data.toOwnedSlice(a),
+                .shape = try std.mem.concat(a, usize, &.{ x.shape[0..axis], result_shape.? }),
+            };
+        }
         const exclusive = is_scan and c.function.scan.exclusive;
         const output_width = if (final_only) 1 else width + @as(usize, if (seeded and !exclusive) 1 else 0);
         const shape = try a.alloc(usize, x.shape.len - @as(usize, if (final_only) 1 else 0));
