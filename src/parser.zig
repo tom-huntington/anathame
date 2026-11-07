@@ -293,18 +293,28 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
 // Composition preserves the input arity; the other combinators declare it.
 fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     var result_arity: ?usize = null;
+    var combinator_name: []const u8 = "";
     for (body) |instruction| {
         if (instruction == .product) {
             for (instruction.product.branches) |branch| try validateCombinatorArity(branch, declared);
         }
         if (instruction != .combinator) continue;
         switch (instruction.combinator) {
-            .s, .sig => result_arity = 1,
-            .n, .nu, .d, .delta, .psi, .d2, .phi1 => result_arity = 2,
+            .s, .sig => {
+                result_arity = 1;
+                combinator_name = @tagName(instruction.combinator);
+            },
+            .n, .nu, .d, .delta, .psi, .d2, .phi1 => {
+                result_arity = 2;
+                combinator_name = @tagName(instruction.combinator);
+            },
             .b, .phi => {},
         }
     }
-    if (result_arity) |arity| if (arity != declared) return error.WrongNumberOfArguments;
+    if (result_arity) |arity| if (arity != declared) {
+        std.debug.print("WrongNumberOfArguments: combinator |{s} has arity {d}, but the enclosing function declares {d} argument(s).\n", .{ combinator_name, arity, declared });
+        return error.WrongNumberOfArguments;
+    };
 }
 
 // Fold from the right after partial applications have been parsed.
