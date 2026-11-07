@@ -1,6 +1,46 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 
+/// Keep every nth element along the trailing axis, starting with the first.
+pub fn stride(a: std.mem.Allocator, x: Value, step: Value) !Value {
+    return strideAxis(a, x, step, 1);
+}
+
+/// Keep every nth row along axis -2 in each outer cell.
+pub fn @"stride.rows"(a: std.mem.Allocator, x: Value, step: Value) !Value {
+    return strideAxis(a, x, step, 2);
+}
+
+fn strideAxis(a: std.mem.Allocator, x: Value, step: Value, depth: usize) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (step.tuple != null or step.shape.len != 0 or step.data.len != 1)
+        return error.InvalidInput;
+    const n = step.data[0];
+    if (!std.math.isFinite(n) or n <= 0 or @trunc(n) != n or
+        n >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    const amount: usize = @intFromFloat(n);
+    if (x.shape.len < depth) return x;
+    const axis = x.shape.len - depth;
+    const size = x.shape[axis];
+    const selected = size / amount + @intFromBool(size % amount != 0);
+    const shape = try a.dupe(usize, x.shape);
+    errdefer a.free(shape);
+    shape[axis] = selected;
+    var width: usize = 1;
+    for (x.shape[axis + 1 ..]) |dim| width = try std.math.mul(usize, width, dim);
+    var cells: usize = 1;
+    for (x.shape[0..axis]) |dim| cells = try std.math.mul(usize, cells, dim);
+    const data = try a.alloc(f64, try std.math.mul(usize, cells, try std.math.mul(usize, selected, width)));
+    for (0..cells) |cell| {
+        for (0..selected) |i| {
+            const source = (cell * size + i * amount) * width;
+            const dest = (cell * selected + i) * width;
+            @memcpy(data[dest..][0..width], x.data[source..][0..width]);
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Return the first tuple element. Array support is not implemented yet.
 pub fn first(_: std.mem.Allocator, x: Value, _: Value) !Value {
     const items = x.tuple orelse return error.UnimplementedPrimitive;

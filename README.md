@@ -36,6 +36,11 @@ overlaps with zero padding. Empty input axes remain empty in all modes.
 For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 `reverse` reverses the trailing axis: `[1_2_3 4_5_6]` becomes
 `[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
+`stride,2` keeps every second element along the trailing axis, starting with
+the first: `[1 2 3 4 5 6]` becomes `[1 3 5]`. `stride.rows,2` does the
+same along axis -2 in each outer cell: `[1_2 3_4 5_6]` becomes `[1_2 5_6]`.
+The step must be a positive integer scalar. Values without the selected axis
+are unchanged; empty axes remain empty.
 `flatten` (Uiua's `deshape`) turns any array into a vector in storage order:
 `[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
 `squeeze` removes all length-one dimensions, preserving the data and other axes.

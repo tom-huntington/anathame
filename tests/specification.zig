@@ -142,6 +142,9 @@ test "builtins" {
     // inclusive range
     try expect_output("\\\\ range_inclusive", .{ "1", "3" }, "[1 2 3]");
     try expect_output("\\\\ in.closed", .{ "[0 1 2 3 4 5]", "[1 3]" }, "[0 1 1 1 0 0]");
+
+    try expect_output("\\ stride,2", "[1 2 3 4 5 6]", "[1 3 5]");
+    try expect_output("\\ stride.rows,2", "[1_2 3_4 5_6]", "[1_2 5_6]");
 }
 
 test "Phi combinator" {
