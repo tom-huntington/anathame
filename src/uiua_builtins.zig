@@ -67,6 +67,24 @@ pub fn unwhere(a: std.mem.Allocator, value: Value, _: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
+/// Count directed edge pairs, padding the smaller axis with zeros to make a square.
+pub fn adjacency_matrix(a: std.mem.Allocator, value: Value, unused: Value) !Value {
+    if (value.tuple != null or value.shape.len != 2 or value.shape[1] != 2) return error.InvalidInput;
+    const matrix = try unwhere(a, value, unused);
+    const side = @max(matrix.shape[0], matrix.shape[1]);
+    if (matrix.shape[0] == matrix.shape[1]) return matrix;
+    defer a.free(matrix.data);
+    defer a.free(matrix.shape);
+    const shape = try a.dupe(usize, &.{ side, side });
+    errdefer a.free(shape);
+    const data = try a.alloc(f64, try std.math.mul(usize, side, side));
+    @memset(data, 0);
+    for (0..matrix.shape[0]) |row| {
+        @memcpy(data[row * side ..][0..matrix.shape[1]], matrix.data[row * matrix.shape[1] ..][0..matrix.shape[1]]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Uiua indexin: find each needle row in the haystack (the first argument).
 /// Missing rows return the haystack's row count; duplicate rows use the first index.
 pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
