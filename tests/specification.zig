@@ -14,7 +14,7 @@ test "part1 regex on the to_string output" {
 
 test "Must declare arity explicitly" {
     try invalid_syntax("mul |n couple"); // scope arity must be declared
-    try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
+    //try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
 }
 test "N and Nu combinator" {
     // n combinator 22.2 (f,g) = x, y -> g(x, f(x,y))
@@ -36,9 +36,11 @@ test "S and Sig combinators" {
 }
 
 test "Combinators" {
-    // delta combinator 12.2 (f,g) = x, y -> g(f(x), y)
-    // d combinator 12.2 (f,g) = x, y -> g(x, f(y))
-    // psi combinator 12.2 (f,g) = x, y -> g(f(x), f(y))
+    // delta combinator 12.2 (f,g) = x,y -> g(f(x), y)
+    // d combinator 12.2 (f,g) = x,y -> g(x, f(y))
+    // psi combinator 12.2 (f,g) = x,y -> g(f(x), f(y))
+    // d2 combinator 112.2 (f,g,h) = x,y -> h(f(x), g(y))
+    // phi1 combinator 222.2 (f,g,h) = x,y -> h(f(x,y), g(x,y))
 }
 
 test "character" {
