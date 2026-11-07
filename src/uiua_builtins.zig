@@ -68,6 +68,30 @@ fn rowWidth(value: Value) usize {
     return width;
 }
 
+/// Uiua select without fill: replace the leading axis with the indices' shape.
+/// Scalar indices remove that axis; negative indices count from the end.
+pub fn select(a: std.mem.Allocator, source: Value, indices: Value) !Value {
+    if (source.tuple != null or indices.tuple != null) return error.InvalidInput;
+    const rows = if (source.shape.len == 0) 1 else source.shape[0];
+    const width = rowWidth(source);
+    const trailing = source.shape[@min(1, source.shape.len)..];
+    const shape = try a.alloc(usize, indices.shape.len + trailing.len);
+    errdefer a.free(shape);
+    @memcpy(shape[0..indices.shape.len], indices.shape);
+    @memcpy(shape[indices.shape.len..], trailing);
+    const data = try a.alloc(f64, try std.math.mul(usize, indices.data.len, width));
+    errdefer a.free(data);
+    for (indices.data, 0..) |index, dest| {
+        if (!std.math.isFinite(index) or @trunc(index) != index) return error.InvalidInput;
+        const limit: f64 = @floatFromInt(rows);
+        if (index >= limit or index < -limit or @abs(index) >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.IndexOutOfBounds;
+        const magnitude: usize = @intFromFloat(@abs(index));
+        const row = if (index < 0) rows - magnitude else magnitude;
+        @memcpy(data[dest * width ..][0..width], source.data[row * width ..][0..width]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Sort innermost vectors by default; components select trailing cell dimensions.
 pub fn sort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;
