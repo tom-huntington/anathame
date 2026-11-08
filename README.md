@@ -13,8 +13,12 @@ first axis of its second, combining pairs with `op2` and reducing with `op1`.
 The contracted dimensions must match; remaining axes form the result shape.
 Both operators accept `add`, `mul`, `min`, `max`, `and`, or `or`.
 `mul.mat` aliases `innerproduct.add.mul`; `mul.mat.op1.op2` selects a real
-semiring, for example `mul.mat.min.add` for shortest-path costs or
-`mul.mat.or.and` for boolean reachability. Empty contractions use the reduction
+semiring: `add.mul` (also the default), `or.and` for boolean reachability,
+`min.add` for shortest-path costs, or `max.add` for longest-path costs.
+Each pair has a compile-time specialized kernel with contiguous column updates
+and cache tiling, following [Fast MMM on CPU](https://siboehm.com/articles/22/Fast-MMM-on-CPU).
+Use a release build (`zig build -Doptimize=ReleaseFast`) for performance.
+Empty contractions use the reduction
 identity (0, 1, positive infinity, or negative infinity as appropriate).
 `innerproduct` also defaults to `add.mul`.
 
