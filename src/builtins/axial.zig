@@ -306,11 +306,11 @@ pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
     return indexinComponents(a, haystack, needle, 1);
 }
 
-/// Apply Uiua lookup independently to haystack components of the selected rank.
+/// Search selected components; matrix coordinates list the innermost axis first.
 pub fn indexinComponents(a: std.mem.Allocator, haystack: Value, needle: Value, dimensions: usize) !Value {
     if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
     if (dimensions == 0) return error.InvalidAxis;
-    if (haystack.shape.len <= dimensions) return indexinRows(a, haystack, needle);
+    if (haystack.shape.len <= dimensions) return indexinCell(a, haystack, needle);
     const frame = haystack.shape[0 .. haystack.shape.len - dimensions];
     const cell_shape = haystack.shape[frame.len..];
     var cells: usize = 1;
@@ -324,17 +324,46 @@ pub fn indexinComponents(a: std.mem.Allocator, haystack: Value, needle: Value, d
         break :blk buffer;
     } else haystack.data[0..size];
     defer if (cells == 0) a.free(prototype);
-    const first = try indexinRows(a, .{ .data = prototype, .shape = cell_shape }, needle);
+    const first = try indexinCell(a, .{ .data = prototype, .shape = cell_shape }, needle);
     defer a.free(first.data);
     defer a.free(first.shape);
     const shape = try std.mem.concat(a, usize, &.{ frame, first.shape });
     const data = try a.alloc(f64, try std.math.mul(usize, cells, first.data.len));
     if (cells > 0) @memcpy(data[0..first.data.len], first.data);
     for (1..@max(1, cells)) |i| {
-        const result = try indexinRows(a, .{ .data = haystack.data[i * size ..][0..size], .shape = cell_shape }, needle);
+        const result = try indexinCell(a, .{ .data = haystack.data[i * size ..][0..size], .shape = cell_shape }, needle);
         defer a.free(result.data);
         defer a.free(result.shape);
         @memcpy(data[i * first.data.len ..][0..first.data.len], result.data);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+fn indexinCell(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+    const rank = haystack.shape.len;
+    if (rank <= 1) return indexinRows(a, haystack, needle);
+    const shape = try std.mem.concat(a, usize, &.{ needle.shape, &.{rank} });
+    const data = try a.alloc(f64, try std.math.mul(usize, needle.data.len, rank));
+    for (needle.data, 0..) |wanted, i| {
+        const coordinates = data[i * rank ..][0..rank];
+        var found: ?usize = null;
+        for (haystack.data, 0..) |candidate, j| {
+            if (candidate == wanted or (std.math.isNan(candidate) and std.math.isNan(wanted))) {
+                found = j;
+                break;
+            }
+        }
+        if (found) |index| {
+            var remaining = index;
+            for (coordinates, 0..) |*coordinate, axis| {
+                const width = haystack.shape[rank - axis - 1];
+                coordinate.* = @floatFromInt(remaining % width);
+                remaining /= width;
+            }
+        } else {
+            for (coordinates, 0..) |*coordinate, axis|
+                coordinate.* = @floatFromInt(haystack.shape[rank - axis - 1]);
+        }
     }
     return .{ .data = data, .shape = shape };
 }

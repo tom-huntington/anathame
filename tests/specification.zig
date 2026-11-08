@@ -297,7 +297,7 @@ test "explicit axis" {
     try expect_output("\\ Reduce.r2 distance", "[[3_4 0_0] [5_12 0_0]]", "[5 13]");
     try expect_output("\\\\ indexin.rows", .{ "[1 2 3]", "3" }, "2");
     try expect_output("\\\\ indexin", .{ "[1 2 3]", "2" }, "1"); // rows is the default axis
-    try expect_output("\\\\ indexin.mat", .{ "[1_2_3 4_5_6]", "2" }, "[1 3]");
+    try expect_output("\\\\ indexin.mat", .{ "[1_2_3 4_5_6]", "2" }, "[1 0]");
 }
 
 test "types" {
