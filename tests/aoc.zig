@@ -122,7 +122,7 @@ test "day 7" {
 }
 
 test "day 8" {
-    try expected_result(
+    const example =
         \\$ 162,817,812
         \\$ 57,618,57
         \\$ 906,360,560
@@ -143,8 +143,11 @@ test "day 8" {
         \\$ 862,61,35
         \\$ 984,92,344
         \\$ 425,690,689        
-    ,
+    ;
+    const d8input = @embedFile("d8input.txt");
+    _ = example;
+    try expected_result(d8input,
         \\ all_edges =\ length iota combinations
-        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,10 |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
+        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,1000 |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix.check mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
     , null, @src());
 }
