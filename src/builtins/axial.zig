@@ -466,6 +466,37 @@ pub fn select(a: std.mem.Allocator, source: Value, indices: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
+/// Pick a cell by leading-axis coordinates, or a batch of coordinate vectors.
+/// The last index axis holds coordinates; preceding axes shape the batch.
+pub fn pick(a: std.mem.Allocator, source: Value, indices: Value) !Value {
+    if (source.tuple != null or indices.tuple != null) return error.ExpectedArray;
+    const depth = if (indices.shape.len == 0) @as(usize, 1) else indices.shape[indices.shape.len - 1];
+    if (depth > source.shape.len) return error.InvalidInput;
+    const batch = indices.shape[0..indices.shape.len -| 1];
+    const trailing = source.shape[depth..];
+    const shape = try a.alloc(usize, batch.len + trailing.len);
+    errdefer a.free(shape);
+    @memcpy(shape[0..batch.len], batch);
+    @memcpy(shape[batch.len..], trailing);
+    var cell_count: usize = 1;
+    for (batch) |dim| cell_count = try std.math.mul(usize, cell_count, dim);
+    var width: usize = 1;
+    for (trailing) |dim| width = try std.math.mul(usize, width, dim);
+    const data = try a.alloc(f64, try std.math.mul(usize, cell_count, width));
+    errdefer a.free(data);
+    // Uiua returns empty batches without resolving their coordinates.
+    if (indices.shape.len > 1 and data.len == 0) return .{ .data = data, .shape = shape };
+    for (0..cell_count) |cell| {
+        var offset: usize = 0;
+        for (source.shape[0..depth], indices.data[cell * depth ..][0..depth]) |dim, index| {
+            offset = try std.math.add(usize, try std.math.mul(usize, offset, dim), try selectionIndex(index, dim));
+        }
+        const start = try std.math.mul(usize, offset, width);
+        @memcpy(data[cell * width ..][0..width], source.data[start..][0..width]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 fn selectionIndex(index: f64, size: usize) !usize {
     if (!std.math.isFinite(index) or @trunc(index) != index) return error.InvalidInput;
     const limit: f64 = @floatFromInt(size);
