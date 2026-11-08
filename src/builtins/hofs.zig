@@ -452,7 +452,8 @@ pub fn repeat(memory: *ReservedBumpAllocator, x: Value, y: Value, r: @FieldType(
     var right = y;
     var i: usize = 0;
     while (r.fixed or i < count) : (i += 1) {
-        const next_left = try evaluateScope(memory, &.{r.first.*}, left, if (r.second != null) right else left);
+        // A single dyad keeps the original input as its right argument.
+        const next_left = try evaluateScope(memory, &.{r.first.*}, left, if (r.second != null) right else x);
         const next_right = if (r.second) |f| try evaluateScope(memory, &.{f.*}, left, right) else next_left;
         const done = r.fixed and sameValue(left, next_left) and (r.second == null or sameValue(right, next_right));
         // Preserve both outputs together before reclaiming the previous iteration.

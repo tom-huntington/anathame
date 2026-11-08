@@ -572,10 +572,10 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const first = try a.create(Instruction);
             first.* = operand;
             var second: ?*const Instruction = null;
-            if (arity == 2) {
-                if (instruction != .partial and std.mem.eql(u8, name, "Repeat")) return error.WrongNumberOfArguments;
-                const other = result.pop() orelse return error.ExpectedFunction;
-                if (@import("runtime.zig").functionArity(other) != 2) return error.WrongNumberOfArguments;
+            if (arity == 2 and (instruction == .partial or std.mem.eql(u8, name, "Fix")) and
+                result.items.len > 0 and @import("runtime.zig").functionArity(result.items[result.items.len - 1]) == 2)
+            {
+                const other = result.pop().?;
                 const ptr = try a.create(Instruction);
                 ptr.* = other;
                 second = ptr;

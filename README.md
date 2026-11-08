@@ -250,11 +250,14 @@ accumulator.
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
 binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
 and `(Repeat,3 sq)` on `2` both produce `256`. A zero count returns the input.
+When `f` is dyadic, each step uses the original input as its second argument:
+`(Repeat,3 add)` on `2` produces `8` (`add(add(add(2,2),2),2)`).
 For dyadic updates, `Repeat,n f g` takes two values and simultaneously updates
 both using the previous pair: `{ Repeat,2 mul sub }` on `2 3` produces `[-6 7]`.
 The final pair is combined with `couple`, which requires matching shapes.
-`Fix f` repeatedly applies a monadic function until consecutive results have
-exactly equal shapes and elements (including tuple structure). `Fix f g` uses
+`Fix f` repeatedly applies a function until consecutive results have
+exactly equal shapes and elements (including tuple structure). A single dyadic
+function keeps the original input as its second argument, as in `Repeat f`. `Fix f g` uses
 the same simultaneous pair updates and stops when both values are unchanged.
 Fix always applies its functions at least once; nonconverging functions do not
 terminate. NaN elements do not compare equal.
