@@ -22,3 +22,11 @@ pub fn printArguments(a: std.mem.Allocator, x: Value, y: ?Value, strings: bool, 
     try @import("console.zig").write(&output.interface, text.written());
     try output.interface.flush();
 }
+
+/// Report completed iterations without converting the counter to a float.
+pub fn printIteration(iteration: usize) !void {
+    var buffer: [64]u8 = undefined;
+    var output = std.Io.File.Writer.init(.stdout(), std.Io.Threaded.global_single_threaded.io(), &buffer);
+    try output.interface.print("{d}\n", .{iteration});
+    try output.interface.flush();
+}

@@ -23,7 +23,7 @@ pub const Instruction = union(enum) {
     reduce: *const Instruction,
     fold: *const Instruction,
     map_accum: struct { map: *const Instruction, update: *const Instruction },
-    repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false },
+    repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false, check: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
     tuples: struct { predicate: *const Instruction, function: *const Instruction },
@@ -566,13 +566,14 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
             }
             try result.append(a, bound);
-        } else if (std.mem.eql(u8, name, "Repeat") or std.mem.eql(u8, name, "Fix")) {
+        } else if (std.mem.eql(u8, name, "Repeat") or std.mem.eql(u8, name, "Fix") or std.mem.eql(u8, name, "Repeat.check") or std.mem.eql(u8, name, "Fix.check")) {
+            const fixed = std.mem.startsWith(u8, name, "Fix");
             const operand = result.pop() orelse return error.ExpectedFunction;
             const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;
             const first = try a.create(Instruction);
             first.* = operand;
             var second: ?*const Instruction = null;
-            if (arity == 2 and (instruction == .partial or std.mem.eql(u8, name, "Fix")) and
+            if (arity == 2 and (instruction == .partial or fixed) and
                 result.items.len > 0 and @import("runtime.zig").functionArity(result.items[result.items.len - 1]) == 2)
             {
                 const other = result.pop().?;
@@ -580,12 +581,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 ptr.* = other;
                 second = ptr;
             }
-            if (instruction == .partial and std.mem.eql(u8, name, "Fix")) return error.WrongNumberOfArguments;
+            if (instruction == .partial and fixed) return error.WrongNumberOfArguments;
             try result.append(a, .{ .repeat = .{
                 .first = first,
                 .second = second,
                 .count = if (instruction == .partial) instruction.partial.argument else null,
-                .fixed = std.mem.eql(u8, name, "Fix"),
+                .fixed = fixed,
+                .check = std.mem.endsWith(u8, name, ".check"),
             } });
         } else if (std.mem.eql(u8, name, "Filter")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
@@ -635,7 +637,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             function.* = switch (bound.*) {
                 .partial => |partial| .{ .primitive = partial.name },
                 .applied => |applied| applied.function.*,
-                .repeat => |repeat| .{ .repeat = .{ .first = repeat.first, .second = repeat.second, .fixed = repeat.fixed } },
+                .repeat => |repeat| .{ .repeat = .{ .first = repeat.first, .second = repeat.second, .fixed = repeat.fixed, .check = repeat.check } },
                 else => return error.ExpectedFunction,
             };
             bound.* = .{ .dynamic_applied = .{ .function = function, .argument = application.argument } };

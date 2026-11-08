@@ -273,6 +273,9 @@ function keeps the original input as its second argument, as in `Repeat f`. `Fix
 the same simultaneous pair updates and stops when both values are unchanged.
 Fix always applies its functions at least once; nonconverging functions do not
 terminate. NaN elements do not compare equal.
+`Fix.check` and `Repeat.check` log the completed iteration number to standard
+output at powers of two (1, 2, 4, 8, ...), including the final iteration if it
+is a power of two. They otherwise behave like `Fix` and `Repeat`.
 
 `Table` takes a dyadic function and produces a dyadic function that applies it
 to every pair of leading-axis rows. `\\ Table add` on `[1 2]` and `[10 20 30]`

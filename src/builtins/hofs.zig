@@ -460,6 +460,10 @@ pub fn repeat(memory: *ReservedBumpAllocator, x: Value, y: Value, r: @FieldType(
         const pair = try @import("../memory.zig").ReturnImpl(memory, checkpoint, .{ .tuple = &.{ next_left, next_right } });
         left = pair.tuple.?[0];
         right = pair.tuple.?[1];
+        if (r.check) {
+            const iteration = i + 1;
+            if (iteration & (iteration - 1) == 0) try @import("../logging.zig").printIteration(iteration);
+        }
         if (done) break;
     }
     if (r.second != null) return @import("../primitives.zig").lookup("couple").?(memory.allocator(), left, right);
