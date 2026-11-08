@@ -22,17 +22,10 @@ fn product(comptime reduce: Function, comptime combine: Function) Function {
                 for (0..cols) |j| {
                     var acc: f64 = if (reduce == &scalar.add or reduce == &scalar.@"or") 0 else if (reduce == &scalar.mul or reduce == &scalar.@"and") 1 else if (reduce == &scalar.min) std.math.inf(f64) else if (reduce == &scalar.max) -std.math.inf(f64) else return error.InvalidInput;
                     for (0..width) |k| {
-                        const term = try combine(a, .{ .data = x.data[i * width + k ..][0..1] }, .{ .data = y.data[k * cols + j ..][0..1] });
-                        defer a.free(term.data);
-                        defer a.free(term.shape);
-                        if (k == 0) {
-                            acc = term.data[0];
-                        } else {
-                            const next = try reduce(a, .{ .data = (&acc)[0..1] }, term);
-                            defer a.free(next.data);
-                            defer a.free(next.shape);
-                            acc = next.data[0];
-                        }
+                        const term = apply(combine, x.data[i * width + k], y.data[k * cols + j]);
+                        acc = if (k == 0) term else apply(reduce, acc, term);
+                        // Boolean OR cannot change after the first true term.
+                        if (reduce == &scalar.@"or" and combine == &scalar.@"and" and acc != 0) break;
                     }
                     data[i * cols + j] = acc;
                 }
@@ -40,6 +33,18 @@ fn product(comptime reduce: Function, comptime combine: Function) Function {
             return .{ .data = data, .shape = shape };
         }
     }.call;
+}
+
+// Inner products already validate shapes; avoid allocating scalar Values for
+// every combine and reduction in the cubic loop.
+inline fn apply(comptime op: Function, x: f64, y: f64) f64 {
+    if (op == &scalar.add) return x + y;
+    if (op == &scalar.mul) return x * y;
+    if (op == &scalar.min) return @min(x, y);
+    if (op == &scalar.max) return @max(x, y);
+    if (op == &scalar.@"and") return @floatFromInt(@intFromBool(x != 0 and y != 0));
+    if (op == &scalar.@"or") return @floatFromInt(@intFromBool(x != 0 or y != 0));
+    unreachable;
 }
 
 pub fn lookup(name: []const u8) ?Function {
