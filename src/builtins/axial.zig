@@ -70,6 +70,14 @@ pub fn deduplicateComponents(a: std.mem.Allocator, x: Value, dimensions: usize) 
 /// Euclidean distance, reducing the trailing axis after pervasive subtraction.
 /// Scalars return their absolute difference; empty vectors have distance zero.
 pub fn distance(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    const result = try quadrance(a, x, y);
+    for (@constCast(result.data)) |*item| item.* = @sqrt(item.*);
+    return result;
+}
+
+/// Squared Euclidean distance, reducing the trailing axis after pervasive subtraction.
+/// Scalars return their squared difference; empty vectors have quadrance zero.
+pub fn quadrance(a: std.mem.Allocator, x: Value, y: Value) !Value {
     const difference = try @import("pervasives.zig").sub(a, x, y);
     defer a.free(difference.data);
     defer a.free(difference.shape);
@@ -83,7 +91,7 @@ pub fn distance(a: std.mem.Allocator, x: Value, y: Value) !Value {
     for (data, 0..) |*result, cell| {
         var sum: f64 = 0;
         for (difference.data[cell * width ..][0..width]) |delta| sum += delta * delta;
-        result.* = @sqrt(sum);
+        result.* = sum;
     }
     return .{ .data = data, .shape = try a.dupe(usize, shape) };
 }
