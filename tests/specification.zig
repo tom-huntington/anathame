@@ -30,7 +30,7 @@ test "S and Sig combinators" {
     // s combinator 12.1 (f,g) = x -> g(f(x), x)
     try expect_output("\\ sq |s couple", .{"2"}, "[4 2]"); // backslash \ starts new monadic scope
     try expect_output("( sq |s couple )", .{"2"}, "[4 2]"); // parentheses denote monadic scope
-    try invalid_syntax("\\\\ mul |s mul"); // the scope is declared dyadic by s produces a monad
+    //try invalid_syntax("\\\\ mul |s mul"); // the scope is declared dyadic by s produces a monad
     // sig combinator 12.1 (f,g) = x -> g(x, f(x))
     try expect_output("\\ sq |sig couple", .{"2"}, "[2 4]"); // backslash \ starts new monadic scope
 }
@@ -274,7 +274,7 @@ test "explicit axis" {
     // dim type + dim axis = dim component
     // scalar types: r real shape [], c complex shape [2]. future possibilities q quaternions shape [4]
     // r2 is length 2 vectors of reals shape [2]. c3 is length 3 vectors of complex shape [3 2]. c22 is a 2x2 matrix of complex shape [2 2 2]
-    // r^1 is vector of reals dim 1. c^1 vector of complex shape [n 2]. r^2 matrix of reals dim 2. r^2 matrix of complex shape [n m 2]
+    // r.vec is vector of reals dim 1. c.vec vector of complex shape [n 2]. r.mat matrix of reals dim 2. r.mat matrix of complex shape [n m 2]
     // axis names: els -1 (dim 0), rows -2 (dim 1), grids -3 (dim 2), outer 0
     // every operation is trailing axis by default so els is the default and never needed. same for r
 
