@@ -14,7 +14,8 @@ The contracted dimensions must match; remaining axes form the result shape.
 Both operators accept `add`, `mul`, `min`, `max`, `and`, or `or`.
 `mul.mat` aliases `innerproduct.add.mul`; `mul.mat.op1.op2` selects a real
 semiring: `add.mul` (also the default), `or.and` for boolean reachability,
-`min.add` for shortest-path costs, or `max.add` for longest-path costs.
+`min.add` for shortest-path costs, `max.add` for longest-path costs,
+`min.max` for minimax paths, or `max.min` for maximum-capacity paths.
 Each pair has a compile-time specialized kernel with contiguous column updates
 and cache tiling, following [Fast MMM on CPU](https://siboehm.com/articles/22/Fast-MMM-on-CPU).
 Use a release build (`zig build -Doptimize=ReleaseFast`) for performance.

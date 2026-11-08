@@ -80,7 +80,7 @@ pub fn lookup(name: []const u8) ?Function {
     const suffix = if (std.mem.eql(u8, name, "mul.mat") or std.mem.eql(u8, name, "innerproduct")) return product(&scalar.add, &scalar.mul) else if (std.mem.startsWith(u8, name, "mul.mat.")) name[8..] else if (std.mem.startsWith(u8, name, "innerproduct.")) name[13..] else return null;
     const dot = std.mem.indexOfScalar(u8, suffix, '.') orelse return null;
     if (std.mem.startsWith(u8, name, "mul.mat.")) {
-        inline for (.{ .{ "add", "mul" }, .{ "or", "and" }, .{ "min", "add" }, .{ "max", "add" } }) |ops| {
+        inline for (.{ .{ "add", "mul" }, .{ "or", "and" }, .{ "min", "add" }, .{ "max", "add" }, .{ "min", "max" }, .{ "max", "min" } }) |ops| {
             if (std.mem.eql(u8, suffix[0..dot], ops[0]) and std.mem.eql(u8, suffix[dot + 1 ..], ops[1])) return product(&@field(scalar, ops[0]), &@field(scalar, ops[1]));
         }
         return null;
