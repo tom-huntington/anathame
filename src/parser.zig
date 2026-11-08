@@ -274,8 +274,12 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, function);
             continue;
         }
-        if (std.mem.eql(u8, token, "first") or std.mem.eql(u8, token, "second")) {
-            try result.appendSlice(a, try parse(a, if (std.mem.eql(u8, token, "first")) "select,0" else "select,1"));
+        if (std.mem.eql(u8, token, "first") or std.mem.eql(u8, token, "last") or std.mem.eql(u8, token, "second") or std.mem.startsWith(u8, token, "first.") or (std.mem.startsWith(u8, token, "last.") and !std.mem.eql(u8, token, "last.row"))) {
+            const dot = std.mem.indexOfScalar(u8, token, '.');
+            const name = token[0 .. dot orelse token.len];
+            const suffix = if (dot) |i| token[i..] else if (std.mem.eql(u8, name, "second")) "" else ".r";
+            const index = if (std.mem.eql(u8, name, "first")) "0" else if (std.mem.eql(u8, name, "last")) "-1" else "1";
+            try result.appendSlice(a, try parse(a, try std.fmt.allocPrint(a, "select{s},{s}", .{ suffix, index })));
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {
@@ -309,7 +313,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
+            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -334,15 +338,15 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                         }
                         if (part[0] == 'c') shape[shape.len - 1] = 2;
                         type_shape = shape;
-                    } else if (std.mem.eql(u8, name, "indexin") and (std.mem.eql(u8, part, "vec") or std.mem.eql(u8, part, "mat"))) {
+                    } else if (std.mem.eql(u8, part, "vec") or std.mem.eql(u8, part, "mat")) {
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;
                         axis_dimension = if (std.mem.eql(u8, part, "vec")) 1 else 2;
-                    } else if (std.mem.eql(u8, part, "els") or std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "outer")) {
+                    } else if (std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "grids") or std.mem.eql(u8, part, "outer")) {
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;
                         outer = std.mem.eql(u8, part, "outer");
-                        axis_dimension = if (std.mem.eql(u8, part, "rows")) 1 else 0;
+                        axis_dimension = if (std.mem.eql(u8, part, "rows")) 1 else if (std.mem.eql(u8, part, "grids")) 2 else 0;
                     } else return error.InvalidComponent;
                 }
                 const function = try a.create(Instruction);
@@ -638,12 +642,19 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
         if (dynamic) |application| {
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);
-            function.* = switch (bound.*) {
+            const bound_component = if (bound.* == .component) bound.component else null;
+            const inner = if (bound_component) |c| c.function.* else bound.*;
+            function.* = switch (inner) {
                 .partial => |partial| .{ .primitive = partial.name },
                 .applied => |applied| applied.function.*,
                 .repeat => |repeat| .{ .repeat = .{ .first = repeat.first, .second = repeat.second, .fixed = repeat.fixed, .check = repeat.check } },
                 else => return error.ExpectedFunction,
             };
+            if (bound_component) |c| {
+                const selected = try a.create(Instruction);
+                selected.* = function.*;
+                function.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+            }
             bound.* = .{ .dynamic_applied = .{ .function = function, .argument = application.argument } };
         }
     }

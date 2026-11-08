@@ -503,13 +503,22 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
 
 /// Component dimensions are trailing storage dimensions, after the operated axis.
 fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
+    const selection = c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "select");
+    const bound_selection = c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "select");
+    if (selection or bound_selection) {
+        if (x.tuple == null and (x.shape.len < c.type_shape.len or
+            !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
+        if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
+        return @import("builtins/axial.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, c.dimensions);
+    }
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len < c.type_shape.len or
         !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape)) return error.ShapeMismatch;
     if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
-    if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "indexin"))
-        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, y, c.dimensions orelse x.shape.len);
+    if ((c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "indexin")) or
+        (c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "indexin")))
+        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, dimensions);
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
         return @import("builtins/axial.zig").sortComponents(memory.allocator(), x, dimensions);
@@ -595,19 +604,5 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         }
         return .{ .data = data, .shape = shape };
     }
-    if (width == 0) return error.EmptyArray;
-    const shape = try a.alloc(usize, x.shape.len - 1);
-    @memcpy(shape[0..axis], x.shape[0..axis]);
-    @memcpy(shape[axis..], cell_shape);
-    const data = try a.alloc(f64, count * cell_size);
-    const rest = try a.alloc(f64, count * (width - 1) * cell_size);
-    for (0..count) |i| {
-        const start = i * width * cell_size;
-        @memcpy(data[i * cell_size ..][0..cell_size], x.data[start..][0..cell_size]);
-        @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + cell_size ..][0 .. (width - 1) * cell_size]);
-    }
-    const first: Value = .{ .data = data, .shape = shape };
-    const rest_shape = try a.dupe(usize, x.shape);
-    rest_shape[axis] -= 1;
-    return .{ .tuple = try a.dupe(Value, &.{ first, .{ .data = rest, .shape = rest_shape } }) };
+    return @import("builtins/axial.zig").unconsComponents(a, x, dimensions);
 }

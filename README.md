@@ -32,11 +32,34 @@ elementwise operations, `axial.zig` for axis-dependent operations,
 `axis_agnostic.zig` for other value operations, and `hofs.zig` for
 higher-order functions. Convolution and regex helpers have separate
 modules there. `src/primitives.zig` registers builtin names, aliases, and arities.
-This organization preserves current behavior; the revised general axis-selector
-convention is not yet implemented.
+Component suffixes describe the items being operated on. Scalar items are the
+default, so no `.els` suffix is needed. `.rows` (or `.vec`) selects vector items
+along axis -2; `.grids` (or `.mat`) selects matrix items along axis -3.
+`.outer` selects the leading axis, regardless of rank. Earlier axes are processed
+independently. Type suffixes such as `.c`, `.r3`, and `.c.rows` also work.
 
-`first` and `second` alias `select,0` and `select,1`, selecting array rows or
-unwrapping tuple elements. `last.row` selects the last row along axis -2.
+`first` and `last` alias `select.r,0` and `select.r,-1`, selecting the first or
+last element of each trailing vector. `first.rows` and `last.rows` select whole
+rows; `first.outer` and `last.outer` select along the leading axis.
+`select` accepts the same component suffixes, for example `select.rows,1`.
+Bare `select` and `second` (`select,1`) retain leading-axis selection.
+Scalar selection also unwraps tuple elements. The legacy `last.row` remains
+available and leaves scalars and vectors unchanged.
+
+`uncons` splits each trailing vector into its first element and remaining elements.
+For `[1_2_3 4_5_6]` it returns the pair `[1 4]` and `[2_3 5_6]`.
+`uncons.rows` splits off a whole row; `uncons.outer` splits off a leading-axis item.
+
+`indexin` searches for scalar items along each trailing haystack vector.
+`indexin.rows` (or `.vec`) searches for whole vectors, and `indexin.mat` (or
+`.grids`) searches for whole matrices. The suffix describes one item in the
+second argument; additional leading needle dimensions represent batches of
+searches. For example, searching `[1_2 3_4 5_6]` for `[5_6 1_2]` with
+`indexin.rows` returns `[2 0]`. Haystack frame dimensions precede needle batch
+dimensions in the result. Missing items return the selected axis length;
+duplicate items return the first index, and NaNs compare equal.
+`indexin.mat` no longer returns scalar coordinates inside a matrix; use equality
+followed by `where` to obtain matching coordinates.
 
 `split` splits a vector at every non-overlapping occurrence of its delimiter;
 `split.first` splits only at the first. Delimiters can be scalars or nonempty
@@ -209,7 +232,7 @@ its complete composition runs before the results are stacked.
 `sort` sorts each innermost vector in ascending order. Component suffixes
 select the cells to compare lexicographically: `sort.rows` sorts rows,
 `sort.r3` sorts three-element vectors, and `sort.outer` sorts the leading
-axis. `sort.els` explicitly selects scalar elements. Any axes before the
+axis. Scalar elements are the default. Any axes before the
 selected axis are processed independently; the array shape is preserved.
 
 `Reduce add` folds each innermost vector from left to right;
