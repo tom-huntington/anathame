@@ -3,7 +3,9 @@ const runtime = @import("anathame").runtime;
 pub fn main(init: std.process.Init) !void {
     @import("anathame").console.init();
 
-    const a = init.arena.allocator();
+    var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
+    defer memory.deinit();
+    const a = memory.allocator();
     const args = try init.minimal.args.toSlice(a);
     const is_test = args.len >= 2 and std.mem.eql(u8, args[1], "test");
     const is_eval = args.len >= 2 and std.mem.eql(u8, args[1], "eval");
@@ -13,8 +15,6 @@ pub fn main(init: std.process.Init) !void {
     }
     const input_end = if (is_test) args.len - 1 else args.len;
     const input = if (input_end == 3) null else try std.mem.join(a, "; ", args[3..input_end]);
-    var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
-    defer memory.deinit();
     const values = runtime.evaluate(&memory, args[2], input) catch |err| {
         std.debug.print("{s}\n", .{@errorName(err)});
         std.process.exit(1);
@@ -23,24 +23,26 @@ pub fn main(init: std.process.Init) !void {
         runtime.expectOutput(a, values, args[args.len - 1]) catch |err| {
             std.debug.print("{s}\n", .{@errorName(err)});
             if (err == error.OutputMismatch) {
-                try writeOutput(init.io, values, "Actual output:\n");
+                try writeOutput(&memory, init.io, values, "Actual output:\n");
             }
             std.process.exit(1);
         };
         return;
     }
-    try writeOutput(init.io, values, "");
+    try writeOutput(&memory, init.io, values, "");
 }
 
-fn writeOutput(io: std.Io, values: []const runtime.Value, prefix: []const u8) !void {
+fn writeOutput(memory: *@import("anathame").ReservedBumpAllocator, io: std.Io, values: []const runtime.Value, prefix: []const u8) !void {
     var buffer: [4096]u8 = undefined;
     var output = std.Io.File.Writer.init(.stdout(), io, &buffer);
     try output.interface.writeAll(prefix);
     for (values, 0..) |v, i| {
         if (i > 0) try output.interface.writeAll("\n");
-        var text: std.Io.Writer.Allocating = .init(std.heap.page_allocator);
+        const checkpoint = memory.checkpoint();
+        defer memory.restore(checkpoint);
+        var text: std.Io.Writer.Allocating = .init(memory.allocator());
         defer text.deinit();
-        try runtime.writeValue(&text.writer, v);
+        try runtime.writeValueAlloc(memory.allocator(), &text.writer, v);
         try @import("anathame").console.write(&output.interface, text.written());
     }
     try output.interface.writeAll("\n");

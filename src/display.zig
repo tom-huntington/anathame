@@ -28,8 +28,8 @@ const Value = @import("runtime.zig").Value;
 const Row = std.ArrayList([]const u8);
 const Grid = std.ArrayList(Row);
 
-pub fn write(w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
-    return writeMode(w, value, false) catch |err| switch (err) {
+pub fn write(a: std.mem.Allocator, w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
+    return writeMode(a, w, value, false) catch |err| switch (err) {
         error.InvalidInput => unreachable,
         error.OutOfMemory => return error.OutOfMemory,
         error.WriteFailed => return error.WriteFailed,
@@ -37,22 +37,19 @@ pub fn write(w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io
 }
 
 /// Render numeric Unicode scalars using Uiua character-array formatting.
-pub fn writeString(w: *std.Io.Writer, value: Value) !void {
-    return writeMode(w, value, true);
+pub fn writeString(a: std.mem.Allocator, w: *std.Io.Writer, value: Value) !void {
+    return writeMode(a, w, value, true);
 }
 
-fn writeMode(w: *std.Io.Writer, value: Value, strings: bool) (std.mem.Allocator.Error || std.Io.Writer.Error || error{InvalidInput})!void {
+fn writeMode(a: std.mem.Allocator, w: *std.Io.Writer, value: Value, strings: bool) (std.mem.Allocator.Error || std.Io.Writer.Error || error{InvalidInput})!void {
     if (value.tuple) |tuple| {
         try w.writeAll("tup( ");
         for (tuple, 0..) |item, i| {
             if (i > 0) try w.writeAll(", ");
-            try writeMode(w, item, strings);
+            try writeMode(a, w, item, strings);
         }
         return w.writeAll(" )");
     }
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
     if (value.shape.len == 0) {
         if (!strings) return w.writeAll(try number(a, value.data[0]));
         try w.writeByte('@');

@@ -63,7 +63,7 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anyty
         defer output.deinit();
         for (actual, 0..) |value, i| {
             if (i > 0) output.writer.writeAll("\n; ") catch break;
-            writeValue(&output.writer, value) catch break;
+            writeValueAlloc(a, &output.writer, value) catch break;
         }
         std.debug.print("expected:\n{s}\nactual:\n{s}\n", .{ source, output.written() });
     };
@@ -89,7 +89,7 @@ pub fn expectOutput(a: std.mem.Allocator, actual: []const Value, expected: anyty
 /// Parsing allocations and returned values live until memory is reset or deinitialized.
 pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]const u8) ![]const Value {
     defer {
-        memory.bindings.deinit(std.heap.page_allocator);
+        memory.bindings.deinit(memory.allocator());
         memory.bindings = .empty;
     }
     const a = memory.allocator();
@@ -401,9 +401,12 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
 pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig").Instruction) !Value {
     if (instruction != .scope or instruction.scope.default_arguments == null) return error.ExpectedLiteral;
     const argument = instruction.scope.default_arguments.?[0];
+    if (ReservedBumpAllocator.fromAllocator(a)) |memory| {
+        return evaluateScope(memory, &.{instruction}, argument, argument);
+    }
     var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
-    defer memory.bindings.deinit(std.heap.page_allocator);
+    defer memory.bindings.deinit(memory.allocator());
     return cloneValue(a, try evaluateScope(&memory, &.{instruction}, argument, argument));
 }
 
@@ -452,32 +455,40 @@ fn cases(a: std.mem.Allocator, input: Value, table: Value) !Value {
 }
 
 pub fn writeValue(w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
-    return @import("display.zig").write(w, value);
+    var memory = ReservedBumpAllocator.init(64 * 1024 * 1024) catch return error.OutOfMemory;
+    defer memory.deinit();
+    return writeValueAlloc(memory.allocator(), w, value);
 }
 
-// Bindings live outside the bump allocator: intermediate-result compaction must
-// not invalidate arguments still referenced by a lambda body or nested call.
+pub fn writeValueAlloc(a: std.mem.Allocator, w: *std.Io.Writer, value: Value) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
+    return @import("display.zig").write(a, w, value);
+}
+
+// Scope bindings and pattern views precede the body's checkpoint. Nested calls
+// use their own table so resizing cannot leave a parent pointing into a dead frame.
 fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.zig").Instruction, "scope"), x: Value, y: Value) anyerror!Value {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    var bound: std.ArrayList([]const u8) = .empty;
-    defer for (bound.items) |name| {
-        _ = memory.bindings.remove(name);
-    };
-    for (scope.parameters, 0..) |parameter, i| try bindPattern(memory, arena.allocator(), parameter, if (i == 0) x else y, &bound);
-    return evaluateScope(memory, scope.instructions, x, y);
+    if (scope.parameters.len == 0) return evaluateScope(memory, scope.instructions, x, y);
+    const checkpoint = memory.checkpoint();
+    const previous = memory.bindings;
+    memory.bindings = .empty;
+    defer memory.bindings = previous;
+    errdefer memory.restore(checkpoint);
+    const a = memory.allocator();
+    var entries = previous.iterator();
+    while (entries.next()) |entry| try memory.bindings.put(a, entry.key_ptr.*, entry.value_ptr.*);
+    for (scope.parameters, 0..) |parameter, i| try bindPattern(memory, a, parameter, if (i == 0) x else y);
+    const result = try evaluateScope(memory, scope.instructions, x, y);
+    return @import("memory.zig").ReturnImpl(memory, checkpoint, result);
 }
 
-fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value, bound: *std.ArrayList([]const u8)) anyerror!void {
+fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value) anyerror!void {
     switch (pattern) {
         .name => |name| {
             if (memory.bindings.contains(name)) {
                 std.debug.print("shadowed names not allowed\n", .{});
                 return error.ShadowedNamesNotAllowed;
             }
-            const copy = try cloneValue(a, value);
-            try bound.append(a, name);
-            try memory.bindings.put(std.heap.page_allocator, name, copy);
+            try memory.bindings.put(a, name, value);
         },
         .items => |items| {
             const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else return shapeMismatch("array or tuple required for pattern", &.{value});
@@ -485,7 +496,7 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
                 std.debug.print("Pattern expects {d} items, received {d}\n", .{ items.len, count });
                 return shapeMismatch(@src().fn_name, &.{value});
             }
-            for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try hofs.rowArgument(a, value, i), bound);
+            for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try hofs.rowArgument(a, value, i));
         },
     }
 }

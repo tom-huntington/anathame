@@ -15,11 +15,17 @@ pub const ReservedBumpAllocator = struct {
     committed_len: usize,
     sentinel: usize,
     page_size: usize,
+    wasm_owned: bool = false,
 
     pub const Error = error{ OutOfMemory, UnsupportedPlatform };
     pub fn init(reserved_len: usize) Error!ReservedBumpAllocator {
         if (reserved_len == 0) return error.OutOfMemory;
 
+        if (comptime builtin.cpu.arch.isWasm()) {
+            var memory = try initFixedBuffer(try std.heap.wasm_allocator.alloc(u8, reserved_len));
+            memory.wasm_owned = true;
+            return memory;
+        }
         const page_size = std.heap.pageSize();
         const reserved_len_aligned = mem.alignForward(usize, reserved_len, page_size);
         const raw_ptr = switch (builtin.os.tag) {
@@ -65,6 +71,9 @@ pub const ReservedBumpAllocator = struct {
     }
 
     pub fn deinit(self: *ReservedBumpAllocator) void {
+        if (comptime builtin.cpu.arch.isWasm()) {
+            if (self.wasm_owned) std.heap.wasm_allocator.free(self.base[0..self.reserved_len]);
+        }
         if (self.page_size != 0) {
             switch (builtin.os.tag) {
                 .windows => _ = VirtualFree(self.base, 0, 0x8000),
@@ -87,7 +96,14 @@ pub const ReservedBumpAllocator = struct {
         };
     }
 
+    /// Recover the frame allocator when an allocator-generic parser folds code.
+    pub fn fromAllocator(a: Allocator) ?*ReservedBumpAllocator {
+        if (a.vtable.alloc != alloc) return null;
+        return @ptrCast(@alignCast(a.ptr));
+    }
+
     pub fn reset(self: *ReservedBumpAllocator) void {
+        self.bindings = .empty;
         self.sentinel = 0;
     }
 
