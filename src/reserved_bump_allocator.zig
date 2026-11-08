@@ -175,14 +175,30 @@ pub const ReservedBumpAllocator = struct {
         _ = ra;
 
         const ptr_align = alignment.toByteUnits();
-        const adjust_off = mem.alignPointerOffset(self.base + self.sentinel, ptr_align) orelse return null;
+        const adjust_off = mem.alignPointerOffset(self.base + self.sentinel, ptr_align) orelse {
+            self.reportOutOfMemory(n, "alignment overflow");
+            return null;
+        };
         const adjusted_index = self.sentinel + adjust_off;
         const new_sentinel = adjusted_index + n;
-        if (new_sentinel > self.reserved_len) return null;
+        if (new_sentinel > self.reserved_len) {
+            self.reportOutOfMemory(n, "reservation exhausted");
+            return null;
+        }
 
-        self.ensureCommitted(new_sentinel) catch return null;
+        self.ensureCommitted(new_sentinel) catch {
+            self.reportOutOfMemory(n, "OS memory commit failed");
+            return null;
+        };
         self.sentinel = new_sentinel;
         return self.base + adjusted_index;
+    }
+
+    fn reportOutOfMemory(self: *const ReservedBumpAllocator, requested: usize, reason: []const u8) void {
+        std.debug.print(
+            "\nOutOfMemory ({s}): allocated={d} bytes, committed={d} bytes, reserved={d} bytes, requested={d} bytes\n",
+            .{ reason, self.sentinel, self.committed_len, self.reserved_len, requested },
+        );
     }
 
     fn resize(
