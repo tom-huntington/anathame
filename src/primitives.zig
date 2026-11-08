@@ -245,6 +245,7 @@ pub const names = [_][]const u8{
     "Fix.check",
     "Stencil",
     "Tuples",
+    "TuplesWith",
     "select",
     "second",
     "self",
