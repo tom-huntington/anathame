@@ -16,6 +16,7 @@ pub const Instruction = union(enum) {
     rows: *const Instruction,
     table: *const Instruction,
     flip: *const Instruction,
+    join: *const Instruction,
     switch_fn: struct { yes: *const Instruction, no: *const Instruction },
     unc: *const Instruction,
     log: *const Instruction,
@@ -513,6 +514,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
             }
             try result.append(a, bound);
+        } else if (std.mem.eql(u8, name, "Join")) {
+            if (instruction == .partial) return error.WrongNumberOfArguments;
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            try result.append(a, .{ .join = function });
         } else if (std.mem.eql(u8, name, "Flip")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;

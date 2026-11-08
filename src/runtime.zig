@@ -290,6 +290,13 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
+        if (instruction == .join) {
+            const temporary = try evaluateScope(memory, &.{instruction.join.*}, first_argument, first_argument);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .flip) {
             const temporary = try evaluateScope(memory, &.{instruction.flip.*}, second_argument, first_argument);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -419,7 +426,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
-        .partials, .reduce, .unc => 1,
+        .partials, .reduce, .unc, .join => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,

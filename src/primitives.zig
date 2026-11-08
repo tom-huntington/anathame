@@ -225,6 +225,7 @@ pub const names = [_][]const u8{
     "Rows",
     "Table",
     "Flip",
+    "Join",
     "Switch",
     "Filter",
     "Unc",
