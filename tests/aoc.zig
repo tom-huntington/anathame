@@ -145,7 +145,7 @@ test "day 8" {
         \\$ 425,690,689        
     ;
     //_ = example;
-    //const input_env = .{ @embedFile("d8input.txt"), "10" };
+    //const input_env = .{ @embedFile("d8input.txt"), "1000" };
     const input_env = .{ example, "10" };
     const environment = @import("anathame").environment;
     const allocator = @import("std").testing.allocator;
@@ -156,5 +156,5 @@ test "day 8" {
         \\ all_edges =\ length iota combinations
         \\ num_closest = "num_closest" |> env
         \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix.check mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
-    , null, @src());
+    , "40", @src());
 }

@@ -308,5 +308,5 @@ test "types" {
     // mul.mat.max.add Longest paths, scheduling
     // mul.mat.min.max Minimax paths
     // mul.mat.max.min Maximum-capacity paths
-    // mul.mat.add.mul Counting walks same as mal.mat
+    // mul.mat.add.mul Counting walks same as mul.mat
 }
