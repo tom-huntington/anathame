@@ -309,7 +309,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
+            if (std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -334,6 +334,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                         }
                         if (part[0] == 'c') shape[shape.len - 1] = 2;
                         type_shape = shape;
+                    } else if (std.mem.eql(u8, name, "indexin") and (std.mem.eql(u8, part, "vec") or std.mem.eql(u8, part, "mat"))) {
+                        if (has_axis) return error.InvalidComponent;
+                        has_axis = true;
+                        axis_dimension = if (std.mem.eql(u8, part, "vec")) 1 else 2;
                     } else if (std.mem.eql(u8, part, "els") or std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "outer")) {
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;

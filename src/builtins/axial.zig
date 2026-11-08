@@ -301,9 +301,47 @@ pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
+/// Search each trailing vector by default.
+pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+    return indexinComponents(a, haystack, needle, 1);
+}
+
+/// Apply Uiua lookup independently to haystack components of the selected rank.
+pub fn indexinComponents(a: std.mem.Allocator, haystack: Value, needle: Value, dimensions: usize) !Value {
+    if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
+    if (dimensions == 0) return error.InvalidAxis;
+    if (haystack.shape.len <= dimensions) return indexinRows(a, haystack, needle);
+    const frame = haystack.shape[0 .. haystack.shape.len - dimensions];
+    const cell_shape = haystack.shape[frame.len..];
+    var cells: usize = 1;
+    for (frame) |dim| cells = try std.math.mul(usize, cells, dim);
+    var size: usize = 1;
+    for (cell_shape) |dim| size = try std.math.mul(usize, size, dim);
+    // A prototype preserves the result shape even when the outer frame is empty.
+    const prototype = if (cells == 0) blk: {
+        const buffer = try a.alloc(f64, size);
+        @memset(buffer, 0);
+        break :blk buffer;
+    } else haystack.data[0..size];
+    defer if (cells == 0) a.free(prototype);
+    const first = try indexinRows(a, .{ .data = prototype, .shape = cell_shape }, needle);
+    defer a.free(first.data);
+    defer a.free(first.shape);
+    const shape = try std.mem.concat(a, usize, &.{ frame, first.shape });
+    const data = try a.alloc(f64, try std.math.mul(usize, cells, first.data.len));
+    if (cells > 0) @memcpy(data[0..first.data.len], first.data);
+    for (1..@max(1, cells)) |i| {
+        const result = try indexinRows(a, .{ .data = haystack.data[i * size ..][0..size], .shape = cell_shape }, needle);
+        defer a.free(result.data);
+        defer a.free(result.shape);
+        @memcpy(data[i * first.data.len ..][0..first.data.len], result.data);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Uiua indexin: find each needle row in the haystack (the first argument).
 /// Missing rows return the haystack's row count; duplicate rows use the first index.
-pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+fn indexinRows(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
     if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
     const hay_rows = if (haystack.shape.len == 0) 1 else haystack.shape[0];
     const needle_rows = if (needle.shape.len == 0) 1 else needle.shape[0];
@@ -348,7 +386,7 @@ pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
     var shape: []const usize = &.{0};
     for (0..rows) |i| {
         const row: Value = .{ .data = source.data[i * width ..][0..width], .shape = source.shape[1..] };
-        const result = if (recurse_needle) try indexin(a, haystack, row) else try indexin(a, row, needle);
+        const result = if (recurse_needle) try indexinRows(a, haystack, row) else try indexinRows(a, row, needle);
         defer a.free(result.data);
         defer a.free(result.shape);
         if (i == 0) {

@@ -508,6 +508,8 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape)) return error.ShapeMismatch;
     if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
     const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
+    if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "indexin"))
+        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, y, c.dimensions orelse x.shape.len);
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
         return @import("builtins/axial.zig").sortComponents(memory.allocator(), x, dimensions);
