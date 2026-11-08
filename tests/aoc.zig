@@ -144,10 +144,15 @@ test "day 8" {
         \\$ 984,92,344
         \\$ 425,690,689        
     ;
-    const d8input = @embedFile("d8input.txt");
-    _ = example;
-    try expected_result(d8input,
+    //const d8input = @embedFile("d8input.txt");
+    //_ = example;
+    const environment = @import("anathame").environment;
+    const allocator = @import("std").testing.allocator;
+    try environment.set(allocator, "num_closest", "10");
+    defer environment.remove(allocator, "num_closest") catch unreachable;
+    try expected_result(example,
         \\ all_edges =\ length iota combinations
-        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,1000 |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix.check mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
+        \\ num_closest = "num_closest" |> env parse
+        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix.check mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
     , null, @src());
 }

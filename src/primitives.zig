@@ -2,6 +2,7 @@ const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
 pub fn arity(name: []const u8) usize {
+    if (std.mem.eql(u8, name, "env")) return 1;
     if (std.mem.eql(u8, name, "deduplicate")) return 1;
     if (std.mem.eql(u8, name, "eye")) return 1;
     if (std.mem.eql(u8, name, "shape")) return 1;

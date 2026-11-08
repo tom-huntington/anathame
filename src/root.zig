@@ -11,6 +11,7 @@ pub const builtins = struct {
 pub const memory = @import("memory.zig");
 pub const runtime = @import("runtime.zig");
 pub const console = @import("console.zig");
+pub const environment = @import("environment.zig");
 pub const ReservedBumpAllocator = @import("reserved_bump_allocator.zig").ReservedBumpAllocator;
 test {
     _ = @import("memory.zig");

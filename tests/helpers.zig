@@ -8,6 +8,8 @@ pub fn expected_result(input: anytype, code: []const u8, expected: ?[]const u8, 
     var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const source_input: []const u8 = if (comptime @typeInfo(@TypeOf(input)) == .@"struct") blk: {
+        if (!@typeInfo(@TypeOf(input)).@"struct".is_tuple or input.len != 2)
+            @compileError("expected_result input must be a string or a two-tuple of strings");
         var arguments: [input.len][]const u8 = undefined;
         inline for (input, 0..) |argument, i| arguments[i] = argument;
         break :blk try std.mem.join(a, "\n; ", &arguments);

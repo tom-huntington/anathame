@@ -6,11 +6,30 @@ pub fn main(init: std.process.Init) !void {
     var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
     const a = memory.allocator();
-    const args = try init.minimal.args.toSlice(a);
+    const raw_args = try init.minimal.args.toSlice(a);
+    var positional: std.ArrayList([]const u8) = .empty;
+    try positional.append(a, raw_args[0]);
+    var index: usize = 1;
+    var options = true;
+    while (index < raw_args.len) : (index += 1) {
+        const argument = raw_args[index];
+        if (options and std.mem.eql(u8, argument, "--")) {
+            options = false;
+        } else if (options and std.mem.eql(u8, argument, "--env")) {
+            index += 1;
+            if (index == raw_args.len) return error.ExpectedEnvironmentAssignment;
+            const assignment = raw_args[index];
+            const equals = std.mem.indexOfScalar(u8, assignment, '=') orelse return error.ExpectedEnvironmentAssignment;
+            try @import("anathame").environment.set(a, assignment[0..equals], assignment[equals + 1 ..]);
+        } else {
+            try positional.append(a, argument);
+        }
+    }
+    const args = positional.items;
     const is_test = args.len >= 2 and std.mem.eql(u8, args[1], "test");
     const is_eval = args.len >= 2 and std.mem.eql(u8, args[1], "eval");
     if ((!is_eval and !is_test) or args.len < (if (is_test) @as(usize, 4) else 3)) {
-        std.debug.print("Usage: anathame eval <code> [first-value] [second-value]\n       anathame test <code> [first-value] [second-value] <expected>\n", .{});
+        std.debug.print("Usage: anathame [--env NAME=value] eval <code> [first-value] [second-value]\n       anathame [--env NAME=value] test <code> [first-value] [second-value] <expected>\n", .{});
         return error.InvalidArguments;
     }
     const input_end = if (is_test) args.len - 1 else args.len;

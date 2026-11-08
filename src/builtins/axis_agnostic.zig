@@ -3,6 +3,28 @@
 const std = @import("std");
 const Value = @import("../runtime.zig").Value;
 
+/// Look up a process environment variable and return its Unicode string value.
+pub fn env(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null or x.shape.len != 1) return error.ExpectedString;
+    var name: std.ArrayList(u8) = .empty;
+    defer name.deinit(a);
+    for (x.data) |number| {
+        if (!std.math.isFinite(number) or number < 0 or number > 0x10ffff or @trunc(number) != number)
+            return error.InvalidCharacter;
+        var encoded: [4]u8 = undefined;
+        const length = try std.unicode.utf8Encode(@intFromFloat(number), &encoded);
+        try name.appendSlice(a, encoded[0..length]);
+    }
+    const text = try @import("../environment.zig").get(a, name.items);
+    defer a.free(text);
+    var characters: std.ArrayList(f64) = .empty;
+    defer characters.deinit(a);
+    var iterator = (try std.unicode.Utf8View.init(text)).iterator();
+    while (iterator.nextCodepoint()) |character| try characters.append(a, @floatFromInt(character));
+    const shape = try a.dupe(usize, &.{characters.items.len});
+    return .{ .data = try characters.toOwnedSlice(a), .shape = shape };
+}
+
 /// Uiua deshape: collect all elements into a single vector in storage order.
 pub fn flatten(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;

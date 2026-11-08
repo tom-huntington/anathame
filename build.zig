@@ -39,6 +39,7 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        .link_libc = target.result.os.tag != .windows,
     });
 
     mod.addImport("regex", b.dependency("regex", .{ .target = target, .optimize = optimize }).module("regex"));
