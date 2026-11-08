@@ -1,5 +1,5 @@
 const std = @import("std");
-const Value = @import("runtime.zig").Value;
+const Value = @import("../runtime.zig").Value;
 
 /// Convolve trailing axes, preserving the input shape. Even kernels crop the
 /// full result starting at floor((kernel size - 1) / 2) on each axis.

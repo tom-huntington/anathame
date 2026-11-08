@@ -1,6 +1,14 @@
 # Anathame
 
-Requires Zig 0.17 and (for differential tests) Uiua on PATH.
+Requires Zig 0.17.
+
+Builtin implementations live in `src/builtins/`: `pervasives.zig` for
+elementwise operations, `axial.zig` for axis-dependent operations,
+`axis_agnostic.zig` for other value operations, and `hofs.zig` for
+higher-order functions. Convolution, regex, and tuple helpers have separate
+modules there. `src/primitives.zig` registers builtin names, aliases, and arities.
+This organization preserves current behavior; the revised general axis-selector
+convention is not yet implemented.
 
 `tuple.blankline` splits a Unicode character vector at the first blank line
 (`\n\n` or `\r\n\r\n`) into a tuple of two character vectors, removing the
@@ -8,8 +16,6 @@ separator. Later blank lines are preserved. Without a blank line, the tuple
 contains the original vector and an empty vector.
 
 - `zig build test`: Zig unit tests and combinator conformance tests.
-- `zig build test-uiua`: generated Zig differential tests against Uiua (seed 1729, 30 cases per primitive).
-- `zig build test-uiua -- 42 100`: reproduce or expand coverage with a seed and case count.
 - `zig build run -- eval "{ mul }" 2 3`: evaluate a binary function.
 - `zig build run -- test "{ mul |n couple }" 2 3 "[6, 2]"`: compare the result with the final expected-output argument. Success is silent; a mismatch reports `OutputMismatch`, prints the actual output, and exits with status 1.
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const Value = @import("runtime.zig").Value;
+const Value = @import("../runtime.zig").Value;
 const regex = @import("regex");
 
 // Strings contain Unicode codepoints as f64 values; zig-regex takes UTF-8.

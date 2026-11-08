@@ -284,36 +284,37 @@ pub fn known(name: []const u8) bool {
 }
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
-    if (std.mem.eql(u8, name, "shape")) return &@import("uiua_builtins.zig").arrayShape;
-    if (std.mem.eql(u8, name, "tuple.blankline")) return &@import("tuple_builtins.zig").blankline;
+    if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_agnostic.zig").arrayShape;
+    if (std.mem.eql(u8, name, "tuple.blankline")) return &@import("builtins/tuple_builtins.zig").blankline;
     if (std.mem.startsWith(u8, name, "convolve.")) {
-        inline for (comptime std.meta.declarations(@import("convolve_builtins.zig"))) |decl| {
-            if (std.mem.eql(u8, name[9..], decl)) return &@field(@import("convolve_builtins.zig"), decl);
+        inline for (comptime std.meta.declarations(@import("builtins/convolve_builtins.zig"))) |decl| {
+            if (std.mem.eql(u8, name[9..], decl)) return &@field(@import("builtins/convolve_builtins.zig"), decl);
         }
         return null;
     }
     if (std.mem.startsWith(u8, name, "re.")) {
-        inline for (comptime std.meta.declarations(@import("regex_builtins.zig"))) |decl| {
-            if (std.mem.eql(u8, name[3..], decl)) return &@field(@import("regex_builtins.zig"), decl);
+        inline for (comptime std.meta.declarations(@import("builtins/regex_builtins.zig"))) |decl| {
+            if (std.mem.eql(u8, name[3..], decl)) return &@field(@import("builtins/regex_builtins.zig"), decl);
         }
         return null;
     }
-    const builtins = @import("builtins.zig");
-    const uiua_builtins = @import("uiua_builtins.zig");
-    inline for (.{ builtins, uiua_builtins }) |implementations| {
+    const pervasives = @import("builtins/pervasives.zig");
+    const axial = @import("builtins/axial.zig");
+    const axis_agnostic = @import("builtins/axis_agnostic.zig");
+    inline for (.{ pervasives, axial, axis_agnostic }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
-            if (comptime std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "arrayShape")) continue;
+            if (comptime std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }
-    if (std.mem.eql(u8, name, "less than")) return &uiua_builtins.less;
-    if (std.mem.eql(u8, name, "greater than") or std.mem.eql(u8, name, ">")) return &uiua_builtins.greater;
-    if (std.mem.eql(u8, name, "maximum")) return &uiua_builtins.max;
-    if (std.mem.eql(u8, name, "absolute value")) return &uiua_builtins.abs;
-    if (std.mem.eql(u8, name, "divide")) return &uiua_builtins.div;
-    if (std.mem.eql(u8, name, "identity")) return &uiua_builtins.id;
-    if (std.mem.eql(u8, name, "multiply")) return &uiua_builtins.mul;
-    if (std.mem.eql(u8, name, "subtract")) return &uiua_builtins.sub;
-    if (std.mem.eql(u8, name, "modulo")) return &uiua_builtins.mod;
+    if (std.mem.eql(u8, name, "less than")) return &pervasives.less;
+    if (std.mem.eql(u8, name, "greater than") or std.mem.eql(u8, name, ">")) return &pervasives.greater;
+    if (std.mem.eql(u8, name, "maximum")) return &pervasives.max;
+    if (std.mem.eql(u8, name, "absolute value")) return &pervasives.abs;
+    if (std.mem.eql(u8, name, "divide")) return &pervasives.div;
+    if (std.mem.eql(u8, name, "identity")) return &axis_agnostic.id;
+    if (std.mem.eql(u8, name, "multiply")) return &pervasives.mul;
+    if (std.mem.eql(u8, name, "subtract")) return &pervasives.sub;
+    if (std.mem.eql(u8, name, "modulo")) return &pervasives.mod;
     return null;
 }

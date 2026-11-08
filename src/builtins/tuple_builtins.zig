@@ -1,5 +1,5 @@
 const std = @import("std");
-const Value = @import("runtime.zig").Value;
+const Value = @import("../runtime.zig").Value;
 
 /// Split at the first empty line, excluding its surrounding line endings.
 pub fn blankline(a: std.mem.Allocator, x: Value, _: Value) !Value {
