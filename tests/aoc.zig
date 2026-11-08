@@ -76,7 +76,7 @@ test "day 5" {
         \\$ 32
     ,
         \\ part1 =\ split.first,"\n\n" |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
-        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] Log sort.rows MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
+        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.rows MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
         \\ \ part1 ** part2
     , "[3 14]", @src());
 }
@@ -144,7 +144,7 @@ test "day 8" {
         \\$ 984,92,344
         \\$ 425,690,689        
     ,
-        \\ \ ints2d \ length iota Tuples,2 less couple |sig select Reduce.r3 distance
-        //Tuples.r3,2 less distance sort
+        \\ all_edges =\ length iota combinations
+        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise |phi length take |phi all_edges Flip select adjacency_matrix Join mul.mat.or.and
     , null, @src());
 }

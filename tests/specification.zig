@@ -238,6 +238,7 @@ test "High order functions (hofs)" {
 
     try expect_output("\\\\ sub", .{ "1", "2" }, "-1");
     try expect_output("\\\\ Flip sub", .{ "1", "2" }, "1");
+    try expect_output("\\ Join mul", "2", "4");
 
     try expect_output("\\\\ Switch sq add,1", .{ "[1 2 3]", "[1 0 1]" }, "[1 3 9]");
 
@@ -294,4 +295,18 @@ test "explicit axis" {
     try expect_output("\\\\ Scan.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
     try expect_output("\\\\ Fold.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
     try expect_output("\\ Reduce.r2 distance", "[[3_4 0_0] [5_12 0_0]]", "[5 13]");
+}
+
+test "types" {
+    try expect_output("\\\\ mul.c", .{ "[0 1]", "[1 1]" }, "[-1 1]");
+    //try expect_output("\\ mul.c.mat", .{ "[[2_1 1_-2] [0_3 -1_1]]", "[1_1 2_-1]" }, "[1_-2 -4_6]");
+    try expect_output("\\\\ mul.mat", .{ "[2_3 4_-1]", "[5 2]" }, "[16 18]"); // mat vec mul
+    try expect_output("\\\\ mul.mat", .{ "[2_3 4_-1]", "[5_2 3_4]" }, "[19_16 17_4]"); // mat mat mul
+    // only for real
+    // mul.mat.or.and Reachability, transitive closure
+    // mul.mat.min.add Shortest paths
+    // mul.mat.max.add Longest paths, scheduling
+    // mul.mat.min.max Minimax paths
+    // mul.mat.max.min Maximum-capacity paths
+    // mul.mat.add.mul Counting walks same as mal.mat
 }

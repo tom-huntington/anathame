@@ -2,6 +2,20 @@
 
 Requires Zig 0.17.
 
+`innerproduct.op1.op2` contracts the last axis of its first argument with the
+first axis of its second, combining pairs with `op2` and reducing with `op1`.
+The contracted dimensions must match; remaining axes form the result shape.
+Both operators accept `add`, `mul`, `min`, `max`, `and`, or `or`.
+`mul.mat` aliases `innerproduct.add.mul`; `mul.mat.op1.op2` selects a real
+semiring, for example `mul.mat.min.add` for shortest-path costs or
+`mul.mat.or.and` for boolean reachability. Empty contractions use the reduction
+identity (0, 1, positive infinity, or negative infinity as appropriate).
+`innerproduct` also defaults to `add.mul`.
+
+`mul.c` multiplies complex numbers represented by a trailing `[real imaginary]`
+pair, broadcasting over matching leading axes like real multiplication.
+`mul.c.mat` remains unimplemented.
+
 Builtin implementations live in `src/builtins/`: `pervasives.zig` for
 elementwise operations, `axial.zig` for axis-dependent operations,
 `axis_agnostic.zig` for other value operations, and `hofs.zig` for

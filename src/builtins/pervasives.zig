@@ -72,7 +72,11 @@ pub fn max(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .maximum);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, boolean_and, boolean_or }) !Value {
+pub fn min(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .minimum);
+}
+
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, minimum, boolean_and, boolean_or }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
@@ -87,6 +91,7 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
             .add => x.data[xi] + y.data[yi],
             .multiply => x.data[xi] * y.data[yi],
             .maximum => @max(x.data[xi], y.data[yi]),
+            .minimum => @min(x.data[xi], y.data[yi]),
             .subtract => x.data[xi] - y.data[yi],
             .divide => x.data[xi] / y.data[yi],
             .modulo => if (y.data[yi] == 0) std.math.nan(f64) else @mod(x.data[xi], y.data[yi]),

@@ -285,6 +285,7 @@ pub fn known(name: []const u8) bool {
 }
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
+    if (@import("builtins/products.zig").lookup(name)) |function| return function;
     if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_agnostic.zig").arrayShape;
     if (std.mem.startsWith(u8, name, "convolve.")) {
         inline for (comptime std.meta.declarations(@import("builtins/convolve_builtins.zig"))) |decl| {
