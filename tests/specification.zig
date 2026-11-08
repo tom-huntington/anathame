@@ -3,11 +3,11 @@ const test_aliases = @import("helpers.zig").test_aliases;
 const literal_eval = @import("helpers.zig").literal_eval;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
-const expected_unary = @import("helpers.zig").expected_unary;
+const expected_result = @import("helpers.zig").expected_result;
 
 test "part1 regex on the to_string output" {
     // Match each row of character codes independently.
-    try expected_unary("[49_49 49_50]",
+    try expected_result("[49_49 49_50]",
         \\ \ re.Matches "^(\d+)\1$"
     , "[1 0]", @src());
 }

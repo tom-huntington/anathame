@@ -1,13 +1,18 @@
 const std = @import("std");
 const language = @import("anathame");
 
-pub fn expected_unary(input: []const u8, code: []const u8, expected: ?[]const u8, source: std.builtin.SourceLocation) !void {
+pub fn expected_result(input: anytype, code: []const u8, expected: ?[]const u8, source: std.builtin.SourceLocation) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
     defer memory.deinit();
-    const actual = try language.runtime.evaluate(&memory, code, input);
+    const source_input: []const u8 = if (comptime @typeInfo(@TypeOf(input)) == .@"struct") blk: {
+        var arguments: [input.len][]const u8 = undefined;
+        inline for (input, 0..) |argument, i| arguments[i] = argument;
+        break :blk try std.mem.join(a, "\n; ", &arguments);
+    } else input;
+    const actual = try language.runtime.evaluate(&memory, code, source_input);
     if (expected) |output| {
         try language.runtime.expectOutput(a, actual, output);
     } else {

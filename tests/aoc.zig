@@ -1,7 +1,7 @@
-const expected_unary = @import("helpers.zig").expected_unary;
+const expected_result = @import("helpers.zig").expected_result;
 
 test "day 1" {
-    try expected_unary(
+    try expected_result(
         \\$ L68
         \\$ L30
         \\$ R48
@@ -20,7 +20,7 @@ test "day 1" {
 }
 
 test "day 2" {
-    try expected_unary(
+    try expected_result(
         \\$ 11-22,95-115,998-1012,1188511880-1188511890,222220-222224,
         \\$ 1698522-1698528,446443-446449,38593856-38593862,565653-565659,
         \\$ 824824821-824824827,2121212118-2121212124
@@ -32,7 +32,7 @@ test "day 2" {
 }
 
 test "day 3" {
-    try expected_unary(
+    try expected_result(
         \\$ 987654321111111
         \\$ 811111111111119
         \\$ 234234234234278
@@ -43,7 +43,7 @@ test "day 3" {
 }
 
 test "day 4" {
-    try expected_unary(
+    try expected_result(
         \\$ ..@@.@@@@.
         \\$ @@@.@.@.@@
         \\$ @@@@@.@.@@
@@ -62,7 +62,7 @@ test "day 4" {
 }
 
 test "day 5" {
-    try expected_unary(
+    try expected_result(
         \\$ 3-5
         \\$ 10-14
         \\$ 16-20
@@ -82,7 +82,7 @@ test "day 5" {
 }
 
 test "day 6" {
-    try expected_unary(
+    try expected_result(
         \\$ 123 328  51 64 
         \\$  45 64  387 23 
         \\$   6 98  215 314
@@ -96,7 +96,7 @@ test "day 6" {
 }
 
 test "day 7" {
-    try expected_unary(
+    try expected_result(
         \\$ .......S.......
         \\$ ...............
         \\$ .......^.......
@@ -122,7 +122,7 @@ test "day 7" {
 }
 
 test "day 8" {
-    try expected_unary(
+    try expected_result(
         \\$ 162,817,812
         \\$ 57,618,57
         \\$ 906,360,560
