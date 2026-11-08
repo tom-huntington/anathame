@@ -4,6 +4,40 @@
 const std = @import("std");
 const Value = @import("../runtime.zig").Value;
 
+/// Keep first occurrences independently in each trailing-axis vector.
+pub fn deduplicate(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (x.shape.len == 0 or x.data.len == 0) return x;
+    const width = x.shape[x.shape.len - 1];
+    var data: std.ArrayList(f64) = .empty;
+    defer data.deinit(a);
+    var seen: std.AutoHashMap(u64, void) = .init(a);
+    defer seen.deinit();
+    var result_width: ?usize = null;
+    var offset: usize = 0;
+    while (offset < x.data.len) : (offset += width) {
+        seen.clearRetainingCapacity();
+        const start = data.items.len;
+        for (x.data[offset..][0..width]) |item| {
+            // Uiua considers all NaNs equal, as well as signed zeros.
+            const key: u64 = if (std.math.isNan(item)) 0x7ff8000000000000 else if (item == 0) 0 else @bitCast(item);
+            const entry = try seen.getOrPut(key);
+            if (!entry.found_existing) try data.append(a, item);
+        }
+        const unique_count = data.items.len - start;
+        if (result_width) |expected| {
+            if (unique_count != expected) return @import("../runtime.zig").shapeMismatchIndexed(@src().fn_name, &.{
+                .{ .data = data.items[0..expected], .shape = &.{expected} },
+                .{ .data = data.items[start..], .shape = &.{unique_count} },
+            }, &.{ 0, offset / width });
+        } else result_width = unique_count;
+    }
+    const shape = try a.dupe(usize, x.shape);
+    errdefer a.free(shape);
+    shape[shape.len - 1] = result_width.?;
+    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
 /// Euclidean distance, reducing the trailing axis after pervasive subtraction.
 /// Scalars return their absolute difference; empty vectors have distance zero.
 pub fn distance(a: std.mem.Allocator, x: Value, y: Value) !Value {
