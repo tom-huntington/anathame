@@ -3,7 +3,7 @@
 const std = @import("std");
 const Value = @import("../runtime.zig").Value;
 
-/// Look up a process environment variable and return its Unicode string value.
+/// Look up a process environment variable and parse its value as one literal.
 pub fn env(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null or x.shape.len != 1) return error.ExpectedString;
     var name: std.ArrayList(u8) = .empty;
@@ -17,12 +17,12 @@ pub fn env(a: std.mem.Allocator, x: Value, _: Value) !Value {
     }
     const text = try @import("../environment.zig").get(a, name.items);
     defer a.free(text);
-    var characters: std.ArrayList(f64) = .empty;
-    defer characters.deinit(a);
-    var iterator = (try std.unicode.Utf8View.init(text)).iterator();
-    while (iterator.nextCodepoint()) |character| try characters.append(a, @floatFromInt(character));
-    const shape = try a.dupe(usize, &.{characters.items.len});
-    return .{ .data = try characters.toOwnedSlice(a), .shape = shape };
+    const instructions = try @import("../parser.zig").parse(a, text);
+    if (instructions.len != 1) return error.ExpectedLiteral;
+    return switch (instructions[0]) {
+        .literal => |value| value,
+        else => error.ExpectedLiteral,
+    };
 }
 
 /// Uiua deshape: collect all elements into a single vector in storage order.

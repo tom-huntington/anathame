@@ -2,6 +2,12 @@
 
 Requires Zig 0.17.
 
+`env` reads an environment variable as one language literal: `"num_closest" |> env`
+returns the number `10` when its value is `10`. Arrays such as `[1 2 3]` and
+quoted strings such as `"hello"` are also accepted. Plain unquoted text is not
+a string literal. `parse` separately converts Unicode character data into a
+single number (including decimals), rather than parsing general literals.
+
 `innerproduct.op1.op2` contracts the last axis of its first argument with the
 first axis of its second, combining pairs with `op2` and reducing with `op1`.
 The contracted dimensions must match; remaining axes form the result shape.
