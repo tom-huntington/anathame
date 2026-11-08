@@ -307,7 +307,7 @@ pub fn lookup(name: []const u8) ?Function {
     const axis_agnostic = @import("builtins/axis_agnostic.zig");
     inline for (.{ pervasives, axial, axis_agnostic }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
-            if (comptime std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
+            if (comptime std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }

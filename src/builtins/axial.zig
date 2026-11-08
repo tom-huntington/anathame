@@ -7,34 +7,63 @@ const Value = @import("../runtime.zig").Value;
 /// Keep first occurrences independently in each trailing-axis vector.
 pub fn deduplicate(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
-    if (x.shape.len == 0 or x.data.len == 0) return x;
-    const width = x.shape[x.shape.len - 1];
+    if (x.shape.len == 0) return x;
+    return deduplicateComponents(a, x, 0);
+}
+
+/// Deduplicate cells along the axis preceding the selected component dimensions.
+pub fn deduplicateComponents(a: std.mem.Allocator, x: Value, dimensions: usize) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (dimensions >= x.shape.len) return error.InvalidAxis;
+    const axis = x.shape.len - dimensions - 1;
+    const width = x.shape[axis];
+    var cell_size: usize = 1;
+    for (x.shape[axis + 1 ..]) |dim| cell_size = try std.math.mul(usize, cell_size, dim);
+    var groups: usize = 1;
+    for (x.shape[0..axis]) |dim| groups = try std.math.mul(usize, groups, dim);
+    const Context = struct {
+        fn key(item: f64) u64 {
+            // Uiua considers all NaNs equal, as well as signed zeros.
+            return if (std.math.isNan(item)) 0x7ff8000000000000 else if (item == 0) 0 else @bitCast(item);
+        }
+        pub fn hash(_: @This(), items: []const f64) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            for (items) |item| {
+                const bits = key(item);
+                hasher.update(std.mem.asBytes(&bits));
+            }
+            return hasher.final();
+        }
+        pub fn eql(_: @This(), lhs: []const f64, rhs: []const f64) bool {
+            if (lhs.len != rhs.len) return false;
+            for (lhs, rhs) |l, r| if (key(l) != key(r)) return false;
+            return true;
+        }
+    };
+    var seen: std.HashMap([]const f64, void, Context, std.hash_map.default_max_load_percentage) = .init(a);
+    defer seen.deinit();
     var data: std.ArrayList(f64) = .empty;
     defer data.deinit(a);
-    var seen: std.AutoHashMap(u64, void) = .init(a);
-    defer seen.deinit();
     var result_width: ?usize = null;
-    var offset: usize = 0;
-    while (offset < x.data.len) : (offset += width) {
+    for (0..groups) |group| {
         seen.clearRetainingCapacity();
-        const start = data.items.len;
-        for (x.data[offset..][0..width]) |item| {
-            // Uiua considers all NaNs equal, as well as signed zeros.
-            const key: u64 = if (std.math.isNan(item)) 0x7ff8000000000000 else if (item == 0) 0 else @bitCast(item);
-            const entry = try seen.getOrPut(key);
-            if (!entry.found_existing) try data.append(a, item);
+        var unique_count: usize = 0;
+        for (0..width) |i| {
+            const start = (group * width + i) * cell_size;
+            const cell = x.data[start..][0..cell_size];
+            const entry = try seen.getOrPut(cell);
+            if (!entry.found_existing) {
+                try data.appendSlice(a, cell);
+                unique_count += 1;
+            }
         }
-        const unique_count = data.items.len - start;
         if (result_width) |expected| {
-            if (unique_count != expected) return @import("../runtime.zig").shapeMismatchIndexed(@src().fn_name, &.{
-                .{ .data = data.items[0..expected], .shape = &.{expected} },
-                .{ .data = data.items[start..], .shape = &.{unique_count} },
-            }, &.{ 0, offset / width });
+            if (unique_count != expected) return error.ShapeMismatch;
         } else result_width = unique_count;
     }
     const shape = try a.dupe(usize, x.shape);
     errdefer a.free(shape);
-    shape[shape.len - 1] = result_width.?;
+    shape[axis] = result_width orelse width;
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 

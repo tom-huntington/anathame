@@ -66,6 +66,9 @@ For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 vector, preserving order. For example, `[2_1_2 4_4_3]` becomes `[2_1 4_3]`.
 Scalars and empty arrays are unchanged. NaNs compare equal, as do signed zeros.
 Different unique counts across vectors report `ShapeMismatch`.
+`deduplicate.rows` removes repeated whole rows along axis -2 in each outer cell.
+For example, `[1_2 3_4 1_2]` becomes `[1_2 3_4]`. The general component and
+axis selectors are supported, including `.c`, `.grids`, and `.outer`.
 
 `stride,2` keeps every second element along the trailing axis, starting with
 the first: `[1 2 3 4 5 6]` becomes `[1 3 5]`. `stride.rows,2` does the

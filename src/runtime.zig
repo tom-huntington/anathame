@@ -500,6 +500,8 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
         return @import("builtins/axial.zig").sortComponents(memory.allocator(), x, dimensions);
+    if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))
+        return @import("builtins/axial.zig").deduplicateComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .tuples) return hofs.tuples(memory, x, y, c.function.tuples, dimensions);
     const a = memory.allocator();
     const axis = x.shape.len - dimensions - 1;
