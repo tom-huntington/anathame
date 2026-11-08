@@ -233,7 +233,7 @@ test "High order functions (hofs)" {
     , .{ "2", "3" }, "[-6 7]");
 
     try expect_output(
-        \\\\ couple |mapaccum mul
+        \\\\ MapAccum couple mul
     , .{ "[2 3 5]", "7" }, "[2_7 3_14 5_42]");
 
     try expect_output("\\\\ sub", .{ "1", "2" }, "-1");
@@ -246,9 +246,9 @@ test "High order functions (hofs)" {
 }
 
 test "tuples" {
-    try expect_output("\\\\ less |tuple couple", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
-    try expect_output("\\\\ less |tuple couple", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
-    try test_aliases(&.{ "combinations", "Tuple,2 less", "{less |tuple couple},2" });
+    try expect_output("\\\\ Tuples less couple", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
+    try expect_output("\\\\ Tuples less couple", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
+    try test_aliases(&.{ "combinations", "Tuples,2 less couple", "{Tuples less couple},2" });
 }
 
 test "fill and full" {

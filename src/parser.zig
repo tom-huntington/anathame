@@ -32,7 +32,7 @@ pub const Instruction = union(enum) {
     function_choices: []const Instruction,
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
-    infix_hof: enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1, mapaccum, tuple },
+    combinator: enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1 },
     scope: struct { macro_definition: ?*const Macro = null, parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 // Macro bodies are parsed after their function operands have been substituted.
@@ -149,12 +149,12 @@ fn validDefinitionName(name: []const u8) bool {
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|mapaccum") or std.mem.eql(u8, token, "|tuple") or std.mem.eql(u8, token, "|d2") or std.mem.eql(u8, token, "|phi1") or std.mem.eql(u8, token, "|d") or std.mem.eql(u8, token, "|delta") or std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
-            if (result.items.len == 0 or result.items[result.items.len - 1] == .infix_hof) return error.ExpectedFunction;
-            try result.append(a, .{ .infix_hof = if (std.mem.eql(u8, token, "|mapaccum")) .mapaccum else if (std.mem.eql(u8, token, "|tuple")) .tuple else if (std.mem.eql(u8, token, "|d2")) .d2 else if (std.mem.eql(u8, token, "|phi1")) .phi1 else if (std.mem.eql(u8, token, "|delta")) .delta else if (std.mem.eql(u8, token, "|d")) .d else if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
+        if (std.mem.eql(u8, token, "|d2") or std.mem.eql(u8, token, "|phi1") or std.mem.eql(u8, token, "|d") or std.mem.eql(u8, token, "|delta") or std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
+            if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
+            try result.append(a, .{ .combinator = if (std.mem.eql(u8, token, "|d2")) .d2 else if (std.mem.eql(u8, token, "|phi1")) .phi1 else if (std.mem.eql(u8, token, "|delta")) .delta else if (std.mem.eql(u8, token, "|d")) .d else if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
             continue;
         }
-        if (result.items.len > 0 and result.items[result.items.len - 1] == .infix_hof and
+        if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
             (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "|>"))) return error.ExpectedFunction;
         if (std.mem.eql(u8, token, "|>")) {
             if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
@@ -178,7 +178,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             if (body.len == 0) return error.ExpectedFunction;
             var application: Instruction = if (body.len == 1 and body[0] == .scope) body[0] else .{ .scope = .{ .arity = arguments.len, .instructions = body } };
             application.scope.arity = arguments.len;
-            try validateInfixHofArity(application.scope.instructions, arguments.len);
+            try validateCombinatorArity(application.scope.instructions, arguments.len);
             application.scope.default_arguments = arguments;
             return a.dupe(Instruction, &.{application});
         }
@@ -201,7 +201,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             if (parameters.len == 0) {
                 for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             }
-            try validateInfixHofArity(body, if (monadic) 1 else 2);
+            try validateCombinatorArity(body, if (monadic) 1 else 2);
             try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = if (monadic) 1 else 2, .instructions = body } });
             continue;
         }
@@ -279,7 +279,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {
-            try result.appendSlice(a, try parse(a, "Tuple,2 less"));
+            try result.appendSlice(a, try parse(a, "Tuples,2 less couple"));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
@@ -309,7 +309,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuple")) {
+            if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Tuples")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -362,32 +362,32 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
     }
     if (close != null and !implicit) return error.InvalidSyntax;
-    if (result.items.len > 0 and result.items[result.items.len - 1] == .infix_hof) return error.ExpectedFunction;
+    if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
     return bindFunctions(a, result.items, !root);
 }
-// Composition preserves the input arity; the other infix HOFs declare it.
-fn validateInfixHofArity(body: []const Instruction, declared: usize) !void {
+// Composition preserves the input arity; the other combinators declare it.
+fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     var result_arity: ?usize = null;
-    var infix_hof_name: []const u8 = "";
+    var combinator_name: []const u8 = "";
     for (body) |instruction| {
         if (instruction == .product) {
-            for (instruction.product.branches) |branch| try validateInfixHofArity(branch, declared);
+            for (instruction.product.branches) |branch| try validateCombinatorArity(branch, declared);
         }
-        if (instruction != .infix_hof) continue;
-        switch (instruction.infix_hof) {
+        if (instruction != .combinator) continue;
+        switch (instruction.combinator) {
             .s, .sig => {
                 result_arity = 1;
-                infix_hof_name = @tagName(instruction.infix_hof);
+                combinator_name = @tagName(instruction.combinator);
             },
-            .n, .nu, .d, .delta, .psi, .d2, .phi1, .mapaccum, .tuple => {
+            .n, .nu, .d, .delta, .psi, .d2, .phi1 => {
                 result_arity = 2;
-                infix_hof_name = @tagName(instruction.infix_hof);
+                combinator_name = @tagName(instruction.combinator);
             },
             .b, .phi => {},
         }
     }
     if (result_arity) |arity| if (arity != declared) {
-        std.debug.print("WrongNumberOfArguments: infix HOF |{s} has arity {d}, but the enclosing function declares {d} argument(s).\n", .{ infix_hof_name, arity, declared });
+        std.debug.print("WrongNumberOfArguments: combinator |{s} has arity {d}, but the enclosing function declares {d} argument(s).\n", .{ combinator_name, arity, declared });
         return error.WrongNumberOfArguments;
     };
 }
@@ -420,14 +420,14 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
         if (instruction == .alternative) return error.ExpectedFunction;
         if (cursor < prepared.items.len and prepared.items[cursor] == .alternative) {
             var choices: std.ArrayList(Instruction) = .empty;
-            if (instruction == .literal or instruction == .infix_hof) return error.ExpectedFunction;
+            if (instruction == .literal or instruction == .combinator) return error.ExpectedFunction;
             if (instruction == .function_choices) try choices.appendSlice(a, instruction.function_choices) else try choices.append(a, instruction);
             while (cursor < prepared.items.len and prepared.items[cursor] == .alternative) {
                 cursor += 1;
                 if (cursor == prepared.items.len) return error.ExpectedFunction;
                 const next = prepared.items[cursor];
                 cursor += 1;
-                if (next == .literal or next == .infix_hof or next == .alternative) return error.ExpectedFunction;
+                if (next == .literal or next == .combinator or next == .alternative) return error.ExpectedFunction;
                 if (next == .function_choices) try choices.appendSlice(a, next.function_choices) else try choices.append(a, next);
             }
             instruction = .{ .function_choices = try choices.toOwnedSlice(a) };
@@ -476,31 +476,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     while (i > 0) {
         i -= 1;
         var instruction = instructions[i];
-        // Bind the whole left composition and one right function, preserving left association.
-        if (instruction == .infix_hof and (instruction.infix_hof == .mapaccum or instruction.infix_hof == .tuple)) {
-            const right = result.pop() orelse return error.ExpectedFunction;
-            const left_body = try bindFunctions(a, instructions[0..i], lift_scopes);
-            if (left_body.len == 0) return error.ExpectedFunction;
-            const left: Instruction = if (left_body.len == 1) left_body[0] else .{ .scope = .{ .arity = 2, .instructions = left_body } };
-            try validateInfixHofArity(left_body, 2);
-            if (@import("runtime.zig").functionArity(left) != 2 or @import("runtime.zig").functionArity(right) != 2) return error.WrongNumberOfArguments;
-            const left_ptr = try a.create(Instruction);
-            left_ptr.* = left;
-            const right_ptr = try a.create(Instruction);
-            right_ptr.* = right;
-            try result.append(a, if (instruction.infix_hof == .mapaccum)
-                .{ .map_accum = .{ .map = left_ptr, .update = right_ptr } }
-            else
-                .{ .tuples = .{ .predicate = left_ptr, .function = right_ptr } });
-            break;
-        }
         if (instruction == .scope and instruction.scope.macro_definition != null) {
             const macro = instruction.scope.macro_definition.?;
             var local_names = try macro.names.clone(a);
             defer local_names.deinit(a);
             for (([_][]const u8{ "F", "G" })[0..macro.operands]) |placeholder| {
                 const operand = result.pop() orelse return error.ExpectedFunction;
-                if (isValue(operand) or operand == .infix_hof or operand == .alternative) return error.ExpectedFunction;
+                if (isValue(operand) or operand == .combinator or operand == .alternative) return error.ExpectedFunction;
                 try local_names.put(a, placeholder, operand);
             }
             var body_lexer: Lexer = .{ .source = macro.source };
@@ -565,10 +547,25 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             try result.append(a, bound);
         } else if (std.mem.eql(u8, name, "Unc")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
-            if (operand == .infix_hof or operand == .literal) return error.ExpectedFunction;
+            if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .unc = function });
+        } else if (std.mem.eql(u8, name, "MapAccum")) {
+            const map = result.pop() orelse return error.ExpectedFunction;
+            const update = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(map) != 2 or @import("runtime.zig").functionArity(update) != 2) return error.WrongNumberOfArguments;
+            const map_ptr = try a.create(Instruction);
+            map_ptr.* = map;
+            const update_ptr = try a.create(Instruction);
+            update_ptr.* = update;
+            var bound: Instruction = .{ .map_accum = .{ .map = map_ptr, .update = update_ptr } };
+            if (instruction == .partial) {
+                const function = try a.create(Instruction);
+                function.* = bound;
+                bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
         } else if (std.mem.eql(u8, name, "Repeat") or std.mem.eql(u8, name, "Fix") or std.mem.eql(u8, name, "Repeat.check") or std.mem.eql(u8, name, "Fix.check")) {
             const fixed = std.mem.startsWith(u8, name, "Fix");
             const operand = result.pop() orelse return error.ExpectedFunction;
@@ -594,28 +591,28 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             } });
         } else if (std.mem.eql(u8, name, "Filter")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
-            if (operand == .infix_hof or operand == .literal) return error.ExpectedFunction;
+            if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
                 operand,
-                .{ .infix_hof = .sig },
+                .{ .combinator = .sig },
                 .{ .primitive = "keep" },
             }) } });
-        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuple") or std.mem.eql(u8, name, "Table")) {
+        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "Table")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
-            if (operand == .infix_hof or operand == .literal) return error.ExpectedFunction;
+            if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             if (std.mem.eql(u8, name, "Table") and @import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = operand;
             var tuple_function: ?*Instruction = null;
-            if (std.mem.eql(u8, name, "Tuple")) {
-                const mapper: Instruction = .{ .primitive = "couple" };
+            if (std.mem.eql(u8, name, "Tuples")) {
+                const mapper = result.pop() orelse return error.ExpectedFunction;
                 if (@import("runtime.zig").functionArity(operand) != 2 or @import("runtime.zig").functionArity(mapper) != 2) return error.WrongNumberOfArguments;
                 tuple_function = try a.create(Instruction);
                 tuple_function.?.* = mapper;
             }
-            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuple")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
+            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
             if (component) |c| {
-                if (std.mem.eql(u8, name, "Tuple")) {
+                if (std.mem.eql(u8, name, "Tuples")) {
                     const selected = try a.create(Instruction);
                     selected.* = bound;
                     bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
@@ -628,7 +625,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             }
             try result.append(a, bound);
         } else try result.append(a, instruction);
-        if (if (std.mem.eql(u8, name, "Tuple")) null else component) |c| {
+        if (if (std.mem.eql(u8, name, "Tuples")) null else component) |c| {
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);
             function.* = bound.*;

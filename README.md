@@ -50,7 +50,7 @@ Conformance tests live in `tests/specification.zig`. Each test calls
 and compares parsed output shapes and numbers. Expected arrays accept commas.
 
 Scopes declare arity: `\` or parentheses for monadic functions, and `\\`
-or braces for dyadic functions. Infix HOFs associate left.
+or braces for dyadic functions. Combinators are infix and associate left.
 `{ mul |n couple }` with input `2 3` produces `[6 2]`:
 `(f |n g)(x,y) = g(f(x,y),x)`. Likewise, `(sq |s couple)` with
 input `2` produces `[4 2]`: `(f |s g)(x) = g(f(x),x)`.
@@ -105,12 +105,12 @@ It adds a trailing digit axis and pads shorter results with zeros.
 `radix` performs Uiua's anti-base operation, collapsing the trailing digit axis.
 `base10` and `radix10` are monadic aliases for `base,10` and `radix,10`.
 For example, `base10` on `123` gives `[3 2 1]`, and `radix10` converts it back.
-The Psi infix HOF applies the preceding composition to both inputs before
+The Psi combinator applies the preceding composition to both inputs before
 combining them: `{ sq |psi add }` on `2 3` produces `13`, following
 `(f |psi g)(x,y) = g(f(x),f(y))`. Its combining function must be dyadic.
 `{ f |d2 g h }` computes `h(f(x),g(y))`, with monadic `f` and `g`.
 `{ f |phi1 g h }` computes `h(f(x,y),g(x,y))`, with dyadic `f` and `g`.
-Both infix HOFs require a dyadic combining function `h`.
+Both combinators require a dyadic combining function `h`.
 Inputs contain one value for monadic scopes and two for dyadic
 functions. Values can be numbers, rectangular arrays, characters (`@a`), or
 quoted strings (`"ab"`). Characters are Unicode code point scalars; strings
@@ -223,15 +223,13 @@ implemented. With a dyadic operand, `Stencil sub` applies `sub` to adjacent
 rows without requiring a size. `Pairwise` expands to `Stencil,2`, so
 `Pairwise sub` and `Pairwise sum` both operate on adjacent pairs.
 
-`{less |tuple couple},2` selects increasing index pairs and applies `couple`
-to the two selected elements. The infix HOF `|tuple` takes two dyadic functions:
-an index predicate followed by the function applied to each selected pair.
-The prefix HOF `Tuple f` supplies `couple` as the second function, so
-`Tuple,2 less` is equivalent to `{less |tuple couple},2`.
-The result shape follows the second function's output. Array selections
-require size 2; scalar inputs retain selection-count behavior. Tuple uses the
-trailing axis by default; `Tuple.r3,2 less` selects pairs of three-element rows
-from a matrix.
+`Tuples,2 less couple` selects increasing index pairs and applies `couple`
+to the two selected elements. Tuples takes two dyadic functions: an index
+predicate followed by the function applied to each selected pair, like dyadic
+Stencil. The result shape follows that function's output. Array selections
+require size 2; scalar inputs retain selection-count behavior. Tuples uses the
+trailing axis by default; `Tuples.r3,2 less sub` selects pairs of three-element rows from
+a matrix.
 
 `try test_alias("sum", "Fold,0 add")` compares parsed instruction trees
 recursively, including HOF operands and literal contents. It checks structural
@@ -261,16 +259,11 @@ stdout before each call. For example, `Log add` prints both arguments and
 returns their sum; `Log sq` prints one argument and returns its square.
 `Log,7 add` binds the second argument to `7` and logs both arguments.
 
-`{f |mapaccum g}` takes an array and an initial accumulator. For each leading-axis
+`MapAccum f g` takes an array and an initial accumulator. For each leading-axis
 row, it collects `f row accumulator`, then uses `g row accumulator` as the
-accumulator for the next row. For example, `{couple |mapaccum mul}` on
-`[2 3 5] 7` produces `[2_7 3_14 5_42]`. `{f |mapaccum g},7` binds the initial
+accumulator for the next row. For example, `{ MapAccum couple mul }` on
+`[2 3 5] 7` produces `[2_7 3_14 5_42]`. `MapAccum,7 f g` binds the initial
 accumulator.
-
-Infix HOFs (including `|b`, `|psi`, `|tuple`, and `|mapaccum`) associate left.
-Use parentheses for a monadic resulting function and braces for a dyadic one.
-Partial application attaches to the completed function: `{f |tuple g},2`.
-Prefix `MapAccum f g` and `Tuples f g` are no longer supported.
 
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
 binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
