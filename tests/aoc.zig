@@ -76,7 +76,7 @@ test "day 5" {
         \\$ 32
     ,
         \\ part1 =\ split.first,"\n\n" |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
-        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.rows MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
+        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.rows {{[a b], m -> a m |> max rsub,b+1 max,0  } |mapaccum { second add,1 |delta max }},0 sum
         \\ \ part1 ** part2
     , "[3 14]", @src());
 }

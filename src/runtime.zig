@@ -122,7 +122,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
     // D transforms only the right input, so do not evaluate its prefix on x.
     var start: usize = 0;
     for (instructions, 0..) |instruction, index| {
-        if (instruction == .combinator and instruction.combinator == .d) start = index;
+        if (instruction == .infix_hof and instruction.infix_hof == .d) start = index;
     }
     if (start > 0) {
         result = try evaluateScope(memory, instructions[0..start], y, y);
@@ -133,11 +133,11 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             skip -= 1;
             continue;
         }
-        if (instruction == .combinator and (instruction.combinator == .d2 or instruction.combinator == .phi1)) {
+        if (instruction == .infix_hof and (instruction.infix_hof == .d2 or instruction.infix_hof == .phi1)) {
             if (index == 0 or index + 2 >= instructions.len) return error.ExpectedFunction;
             const branch = instructions[index + 1];
             const combine = instructions[index + 2];
-            const branch_arity: usize = if (instruction.combinator == .d2) 1 else 2;
+            const branch_arity: usize = if (instruction.infix_hof == .d2) 1 else 2;
             if (functionArity(branch) != branch_arity or functionArity(combine) != 2) return error.WrongNumberOfArguments;
             const right = try evaluateScope(memory, &.{branch}, if (branch_arity == 1) y else x, y);
             const temporary = try evaluateScope(memory, &.{combine}, result, right);
@@ -149,7 +149,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             reverse_arguments = false;
             continue;
         }
-        if (instruction == .combinator and instruction.combinator == .psi) {
+        if (instruction == .infix_hof and instruction.infix_hof == .psi) {
             if (index == 0 or index + 1 == instructions.len) return error.ExpectedFunction;
             const function = instructions[index + 1];
             if (functionArity(function) != 2) return error.WrongNumberOfArguments;
@@ -162,7 +162,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             reverse_arguments = false;
             continue;
         }
-        if (instruction == .combinator and instruction.combinator == .phi) {
+        if (instruction == .infix_hof and instruction.infix_hof == .phi) {
             const remaining = instructions[index + 1 ..];
             const temporary = if (result.tuple) |tuple| blk: {
                 if (tuple.len != 2) return error.WrongNumberOfArguments;
@@ -191,10 +191,10 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             reverse_arguments = false;
             continue;
         }
-        if (instruction == .combinator) {
-            retain_x = instruction.combinator != .b;
-            reverse_arguments = instruction.combinator == .sig or instruction.combinator == .n or instruction.combinator == .d;
-            retain_y = instruction.combinator == .nu or instruction.combinator == .delta;
+        if (instruction == .infix_hof) {
+            retain_x = instruction.infix_hof != .b;
+            reverse_arguments = instruction.infix_hof == .sig or instruction.infix_hof == .n or instruction.infix_hof == .d;
+            retain_y = instruction.infix_hof == .nu or instruction.infix_hof == .delta;
             continue;
         }
         const first_argument = if (first_function or reverse_arguments) x else result;
