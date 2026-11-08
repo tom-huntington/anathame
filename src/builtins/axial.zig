@@ -65,16 +65,9 @@ fn strideAxis(a: std.mem.Allocator, x: Value, step: Value, depth: usize) !Value 
     return .{ .data = data, .shape = shape };
 }
 
-/// Return the first tuple element. Array support is not implemented yet.
-pub fn first(_: std.mem.Allocator, x: Value, _: Value) !Value {
-    const items = x.tuple orelse return error.UnimplementedPrimitive;
-    if (items.len == 0) return error.InvalidInput;
-    return items[0];
-}
-
 /// Select the last row along axis -2 in each outer cell, removing that axis.
 /// Scalars and vectors have no row axis and are returned unchanged.
-pub fn lastrow(a: std.mem.Allocator, x: Value, _: Value) !Value {
+pub fn @"last.row"(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len < 2) return x;
     const axis = x.shape.len - 2;
@@ -192,16 +185,16 @@ fn splitRowsAt(a: std.mem.Allocator, x: Value, index: Value) !Value {
     if (!std.math.isFinite(row_count) or @trunc(row_count) != row_count) return error.InvalidInput;
     if (@abs(row_count) > @as(f64, @floatFromInt(x.shape[0]))) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, index });
     const amount: usize = @intFromFloat(@abs(row_count));
-    const split = if (row_count < 0) x.shape[0] - amount else amount;
+    const split_index = if (row_count < 0) x.shape[0] - amount else amount;
     var row_size: usize = 1;
     for (x.shape[1..]) |dim| row_size = try std.math.mul(usize, row_size, dim);
     const left_shape = try a.dupe(usize, x.shape);
     const right_shape = try a.dupe(usize, x.shape);
-    left_shape[0] = split;
-    right_shape[0] -= split;
+    left_shape[0] = split_index;
+    right_shape[0] -= split_index;
     const values = try a.alloc(Value, 2);
-    values[0] = .{ .data = x.data[0 .. split * row_size], .shape = left_shape };
-    values[1] = .{ .data = x.data[split * row_size ..], .shape = right_shape };
+    values[0] = .{ .data = x.data[0 .. split_index * row_size], .shape = left_shape };
+    values[1] = .{ .data = x.data[split_index * row_size ..], .shape = right_shape };
     return .{ .tuple = values };
 }
 
@@ -235,16 +228,6 @@ pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
     @memcpy(data[0..y.data.len], y.data);
     @memcpy(data[y.data.len..], x.data);
     return .{ .data = data, .shape = shape };
-}
-
-pub fn second(_: std.mem.Allocator, x: Value, _: Value) !Value {
-    if (x.tuple) |items| {
-        if (items.len < 2) return error.InvalidInput;
-        return items[1];
-    }
-    if (x.shape.len == 0 or x.shape[0] < 2) return error.InvalidInput;
-    const width = x.data.len / x.shape[0];
-    return .{ .data = x.data[width..][0..width], .shape = x.shape[1..] };
 }
 
 /// Uiua indexin: find each needle row in the haystack (the first argument).
@@ -314,10 +297,21 @@ fn rowWidth(value: Value) usize {
     return width;
 }
 
-/// Uiua select without fill: replace the leading axis with the indices' shape.
-/// Scalar indices remove that axis; negative indices count from the end.
+/// Select array rows or tuple elements. Negative indices count from the end.
+/// Scalar indices remove the selected array axis or unwrap a tuple element.
 pub fn select(a: std.mem.Allocator, source: Value, indices: Value) !Value {
-    if (source.tuple != null or indices.tuple != null) return error.InvalidInput;
+    if (indices.tuple != null) return error.InvalidInput;
+    if (source.tuple) |items| {
+        if (indices.shape.len == 0) {
+            if (indices.data.len != 1) return error.InvalidInput;
+            return items[try selectionIndex(indices.data[0], items.len)];
+        }
+        if (indices.shape.len != 1) return error.InvalidInput;
+        const selected = try a.alloc(Value, indices.data.len);
+        errdefer a.free(selected);
+        for (indices.data, selected) |index, *item| item.* = items[try selectionIndex(index, items.len)];
+        return .{ .tuple = selected };
+    }
     const rows = if (source.shape.len == 0) 1 else source.shape[0];
     const width = rowWidth(source);
     const trailing = source.shape[@min(1, source.shape.len)..];
@@ -328,12 +322,66 @@ pub fn select(a: std.mem.Allocator, source: Value, indices: Value) !Value {
     const data = try a.alloc(f64, try std.math.mul(usize, indices.data.len, width));
     errdefer a.free(data);
     for (indices.data, 0..) |index, dest| {
-        if (!std.math.isFinite(index) or @trunc(index) != index) return error.InvalidInput;
-        const limit: f64 = @floatFromInt(rows);
-        if (index >= limit or index < -limit or @abs(index) >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.IndexOutOfBounds;
-        const magnitude: usize = @intFromFloat(@abs(index));
-        const row = if (index < 0) rows - magnitude else magnitude;
+        const row = try selectionIndex(index, rows);
         @memcpy(data[dest * width ..][0..width], source.data[row * width ..][0..width]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+fn selectionIndex(index: f64, size: usize) !usize {
+    if (!std.math.isFinite(index) or @trunc(index) != index) return error.InvalidInput;
+    const limit: f64 = @floatFromInt(size);
+    if (index >= limit or index < -limit or @abs(index) >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.IndexOutOfBounds;
+    const magnitude: usize = @intFromFloat(@abs(index));
+    return if (index < 0) size - magnitude else magnitude;
+}
+
+/// Split a vector at every non-overlapping occurrence of a scalar or vector delimiter.
+pub fn split(a: std.mem.Allocator, x: Value, delimiter: Value) !Value {
+    return splitImpl(a, x, delimiter, false);
+}
+
+/// Split a vector only at the first occurrence of the delimiter.
+pub fn @"split.first"(a: std.mem.Allocator, x: Value, delimiter: Value) !Value {
+    return splitImpl(a, x, delimiter, true);
+}
+
+fn splitImpl(a: std.mem.Allocator, x: Value, delimiter: Value, first_only: bool) !Value {
+    if (x.tuple != null or x.shape.len != 1 or delimiter.tuple != null or
+        delimiter.shape.len > 1 or delimiter.data.len == 0 or
+        (delimiter.shape.len == 0 and delimiter.data.len != 1)) return error.InvalidInput;
+    var pieces: std.ArrayList(Value) = .empty;
+    defer pieces.deinit(a);
+    errdefer for (pieces.items) |piece| a.free(piece.shape);
+    var start: usize = 0;
+    var cursor: usize = 0;
+    while (delimiter.data.len <= x.data.len - cursor) {
+        if (!std.mem.eql(f64, x.data[cursor..][0..delimiter.data.len], delimiter.data)) {
+            cursor += 1;
+            continue;
+        }
+        const shape = try a.dupe(usize, &.{cursor - start});
+        errdefer a.free(shape);
+        try pieces.append(a, .{ .data = x.data[start..cursor], .shape = shape });
+        cursor += delimiter.data.len;
+        start = cursor;
+        if (first_only) break;
+    }
+    const final_shape = try a.dupe(usize, &.{x.data.len - start});
+    pieces.append(a, .{ .data = x.data[start..], .shape = final_shape }) catch |err| {
+        a.free(final_shape);
+        return err;
+    };
+    const width = pieces.items[0].data.len;
+    for (pieces.items) |piece| {
+        if (piece.data.len != width) return .{ .tuple = try pieces.toOwnedSlice(a) };
+    }
+    const shape = try a.dupe(usize, &.{ pieces.items.len, width });
+    errdefer a.free(shape);
+    const data = try a.alloc(f64, try std.math.mul(usize, pieces.items.len, width));
+    for (pieces.items, 0..) |piece, i| {
+        @memcpy(data[i * width ..][0..width], piece.data);
+        a.free(piece.shape);
     }
     return .{ .data = data, .shape = shape };
 }

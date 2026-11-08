@@ -140,7 +140,6 @@ test "tuple literal" {
 
 test "builtins" {
     try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
-    try test_alias("split", "{ not_eq |n Partition id}");
     try expect_output("\\\\ split", .{ "[1 2 3 4 5 3 6 7]", "3" }, "[1_2 4_5 6_7]");
     try expect_output("\\ uncons", .{"[1 2 3 4]"}, .{ "1", "[2 3 4]" });
 

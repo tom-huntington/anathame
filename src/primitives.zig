@@ -11,8 +11,7 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "not")) return 1;
     if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
-    if (std.mem.eql(u8, name, "transpose") or std.mem.eql(u8, name, "lastrow")) return 1;
-    if (std.mem.eql(u8, name, "tuple.blankline")) return 1;
+    if (std.mem.eql(u8, name, "transpose") or std.mem.eql(u8, name, "last.row")) return 1;
     if (std.mem.eql(u8, name, "reverse") or std.mem.eql(u8, name, "flatten")) return 1;
     if (std.mem.eql(u8, name, "base10") or std.mem.eql(u8, name, "radix10")) return 1;
     if (std.mem.eql(u8, name, "ints") or std.mem.eql(u8, name, "ints2d") or std.mem.eql(u8, name, "digits") or std.mem.eql(u8, name, "digits2d")) return 1;
@@ -240,6 +239,7 @@ pub const names = [_][]const u8{
     "Stencil",
     "Tuples",
     "select",
+    "second",
     "self",
     "send",
     "shape",
@@ -285,7 +285,6 @@ pub fn known(name: []const u8) bool {
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
     if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_agnostic.zig").arrayShape;
-    if (std.mem.eql(u8, name, "tuple.blankline")) return &@import("builtins/tuple_builtins.zig").blankline;
     if (std.mem.startsWith(u8, name, "convolve.")) {
         inline for (comptime std.meta.declarations(@import("builtins/convolve_builtins.zig"))) |decl| {
             if (std.mem.eql(u8, name[9..], decl)) return &@field(@import("builtins/convolve_builtins.zig"), decl);

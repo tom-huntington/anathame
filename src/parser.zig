@@ -273,8 +273,8 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, function);
             continue;
         }
-        if (std.mem.eql(u8, token, "split")) {
-            try result.appendSlice(a, try parse(a, "{ not_eq |n Partition id }"));
+        if (std.mem.eql(u8, token, "first") or std.mem.eql(u8, token, "second")) {
+            try result.appendSlice(a, try parse(a, if (std.mem.eql(u8, token, "first")) "select,0" else "select,1"));
             continue;
         }
         if (std.mem.eql(u8, token, "combinations")) {

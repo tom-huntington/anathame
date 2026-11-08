@@ -7,7 +7,6 @@ pub const builtins = struct {
     pub const hofs = @import("builtins/hofs.zig");
     pub const convolve_builtins = @import("builtins/convolve_builtins.zig");
     pub const regex_builtins = @import("builtins/regex_builtins.zig");
-    pub const tuple_builtins = @import("builtins/tuple_builtins.zig");
 };
 pub const memory = @import("memory.zig");
 pub const runtime = @import("runtime.zig");

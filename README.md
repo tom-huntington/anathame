@@ -5,15 +5,21 @@ Requires Zig 0.17.
 Builtin implementations live in `src/builtins/`: `pervasives.zig` for
 elementwise operations, `axial.zig` for axis-dependent operations,
 `axis_agnostic.zig` for other value operations, and `hofs.zig` for
-higher-order functions. Convolution, regex, and tuple helpers have separate
+higher-order functions. Convolution and regex helpers have separate
 modules there. `src/primitives.zig` registers builtin names, aliases, and arities.
 This organization preserves current behavior; the revised general axis-selector
 convention is not yet implemented.
 
-`tuple.blankline` splits a Unicode character vector at the first blank line
-(`\n\n` or `\r\n\r\n`) into a tuple of two character vectors, removing the
-separator. Later blank lines are preserved. Without a blank line, the tuple
-contains the original vector and an empty vector.
+`first` and `second` alias `select,0` and `select,1`, selecting array rows or
+unwrapping tuple elements. `last.row` selects the last row along axis -2.
+
+`split` splits a vector at every non-overlapping occurrence of its delimiter;
+`split.first` splits only at the first. Delimiters can be scalars or nonempty
+vectors, including strings. Matched delimiters are removed, and empty pieces
+are preserved. Equal-length pieces stack into an array; unequal pieces form a
+tuple. No match produces an array containing the original vector as one row.
+For example, `split.first,"\n\n"` replaces the former `tuple.blankline` for
+LF-separated text; use `"\r\n\r\n"` for CRLF-separated text.
 
 - `zig build test`: Zig unit tests and combinator conformance tests.
 - `zig build run -- eval "{ mul }" 2 3`: evaluate a binary function.
