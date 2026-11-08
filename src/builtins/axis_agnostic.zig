@@ -190,6 +190,32 @@ fn natural(value: f64) !usize {
     return @intFromFloat(value);
 }
 
+/// Ones on the main diagonal of a shape; a scalar requests a square matrix.
+pub fn eye(a: std.mem.Allocator, dimensions: Value, _: Value) !Value {
+    if (dimensions.tuple != null or dimensions.shape.len > 1) return error.InvalidInput;
+    const scalar = dimensions.shape.len == 0;
+    if (scalar and dimensions.data.len != 1) return error.InvalidInput;
+    const shape = try a.alloc(usize, if (scalar) 2 else dimensions.data.len);
+    errdefer a.free(shape);
+    for (shape, 0..) |*dimension, axis| {
+        dimension.* = try natural(dimensions.data[if (scalar) 0 else axis]);
+    }
+    var count: usize = 1;
+    var diagonal: usize = if (shape.len == 0) 1 else std.math.maxInt(usize);
+    for (shape) |dimension| {
+        count = try std.math.mul(usize, count, dimension);
+        diagonal = @min(diagonal, dimension);
+    }
+    const data = try a.alloc(f64, count);
+    @memset(data, 0);
+    for (0..diagonal) |i| {
+        var index: usize = 0;
+        for (shape) |dimension| index = index * dimension + i;
+        data[index] = 1;
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Repeat each index (or coordinate row) by its natural-number count, as in Uiua.
 pub fn where(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;

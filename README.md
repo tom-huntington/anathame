@@ -154,6 +154,10 @@ keep their shape; Partials requires non-empty input.
 produces `[11 13 16]`. It preserves the input shape, including empty arrays,
 and starts each innermost vector from the seed.
 
+`eye` takes a shape and fills its main diagonal with ones and the rest with zeros.
+For example, `eye` on `[2 3]` returns `[[1 0 0] [0 1 0]]`.
+A scalar size requests a square matrix; `eye` on `3` returns the 3-by-3 identity.
+
 `prepend` takes an array first and a row second, adding that row at the front.
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
 the row's shape must match the array's trailing dimensions.
