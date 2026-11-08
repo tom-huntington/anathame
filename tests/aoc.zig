@@ -145,6 +145,6 @@ test "day 8" {
         \\$ 425,690,689        
     ,
         \\ all_edges =\ length iota combinations
-        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise |phi length take |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.rows sum sort take,-3
+        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,10 |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.rows sum sort take,-3
     , null, @src());
 }
