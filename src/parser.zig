@@ -197,14 +197,20 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             var local_names = try names.clone(a);
             defer local_names.deinit(a);
             const parameters = try lambdaParameters(a, lexer, &local_names);
-            if (parameters.len != 0 and parameters.len != (if (monadic) @as(usize, 1) else 2)) return error.WrongNumberOfArguments;
             const body = try sequence(a, lexer, end, is_implicit, false, &local_names);
             if (body.len == 0) return error.InvalidSyntax;
             if (parameters.len == 0) {
                 for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             }
-            try validateCombinatorArity(body, if (monadic) 1 else 2);
-            try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = if (monadic) 1 else 2, .instructions = body } });
+            var arity: usize = if (monadic) 1 else 2;
+            // A lambda returning a unary function consumes its remaining argument.
+            // Keep the nested scope so its parameters and outer captures stay intact.
+            const returns_function = parameters.len == 1 and body.len == 1 and
+                !isValue(body[0]) and @import("runtime.zig").functionArity(body[0]) == 1;
+            if (returns_function) arity = 2;
+            if (parameters.len != 0 and parameters.len != arity and !returns_function) return error.WrongNumberOfArguments;
+            try validateCombinatorArity(body, if (returns_function) 1 else arity);
+            try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = arity, .instructions = body } });
             continue;
         }
         if (std.mem.eql(u8, token, ",")) {

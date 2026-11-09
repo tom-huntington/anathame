@@ -274,6 +274,12 @@ test "lambdas" {
     try expect_output("([a b] -> b a |> couple )", "[2 1]", "[1 2]");
     try expect_output("([a b] -> b*5 a |> couple )", "[2 3]", "[15 2]");
     try expect_output("([a b] -> a |> sq mul,b*5 )", "[2 3]", "60");
+    try expect_output(
+        \\  \\ a -> \ id
+    , .{ "2", "3" }, "3");
+    try expect_output(
+        \\ {Flip \\ b -> \ id}
+    , .{ "2", "3" }, "2");
 }
 
 test "explicit axis" {

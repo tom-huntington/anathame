@@ -485,7 +485,7 @@ fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.z
     var entries = previous.iterator();
     while (entries.next()) |entry| try memory.bindings.put(a, entry.key_ptr.*, entry.value_ptr.*);
     for (scope.parameters, 0..) |parameter, i| try bindPattern(memory, a, parameter, if (i == 0) x else y);
-    const result = try evaluateScope(memory, scope.instructions, x, y);
+    const result = try evaluateScope(memory, scope.instructions, if (scope.parameters.len < scope.arity) y else x, y);
     return @import("memory.zig").ReturnImpl(memory, checkpoint, result);
 }
 
