@@ -322,46 +322,132 @@ pub fn prepend(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
-/// Search for scalar items along each trailing vector by default.
+/// Search each trailing vector by default.
 pub fn indexin(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
-    return indexinComponents(a, haystack, needle, 0);
+    return indexinComponents(a, haystack, needle, 1);
 }
 
-/// Component dimensions describe one needle item, not the search domain.
-/// Haystack frames and needle batches form the outer result dimensions.
-/// Missing items return the selected axis length; NaNs compare equal.
+/// Search selected components; matrix coordinates list the innermost axis first.
 pub fn indexinComponents(a: std.mem.Allocator, haystack: Value, needle: Value, dimensions: usize) !Value {
     if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
-    if (haystack.shape.len <= dimensions or needle.shape.len < dimensions) return error.InvalidAxis;
-    const axis = haystack.shape.len - dimensions - 1;
-    const component = haystack.shape[axis + 1 ..];
-    const needle_frame = needle.shape[0 .. needle.shape.len - dimensions];
-    if (!std.mem.eql(usize, component, needle.shape[needle_frame.len..])) return error.ShapeMismatch;
-    var item_size: usize = 1;
-    for (component) |dim| item_size *= dim;
-    var frames: usize = 1;
-    for (haystack.shape[0..axis]) |dim| frames *= dim;
-    var needles: usize = 1;
-    for (needle_frame) |dim| needles *= dim;
-    const width = haystack.shape[axis];
-    const data = try a.alloc(f64, frames * needles);
-    for (0..frames) |frame| {
-        for (0..needles) |i| {
-            const wanted = needle.data[i * item_size ..][0..item_size];
-            var found = width;
-            for (0..width) |j| {
-                const candidate = haystack.data[(frame * width + j) * item_size ..][0..item_size];
+    if (dimensions == 0) return error.InvalidAxis;
+    if (haystack.shape.len <= dimensions) return indexinCell(a, haystack, needle);
+    const frame = haystack.shape[0 .. haystack.shape.len - dimensions];
+    const cell_shape = haystack.shape[frame.len..];
+    var cells: usize = 1;
+    for (frame) |dim| cells = try std.math.mul(usize, cells, dim);
+    var size: usize = 1;
+    for (cell_shape) |dim| size = try std.math.mul(usize, size, dim);
+    // A prototype preserves the result shape even when the outer frame is empty.
+    const prototype = if (cells == 0) blk: {
+        const buffer = try a.alloc(f64, size);
+        @memset(buffer, 0);
+        break :blk buffer;
+    } else haystack.data[0..size];
+    defer if (cells == 0) a.free(prototype);
+    const first = try indexinCell(a, .{ .data = prototype, .shape = cell_shape }, needle);
+    defer a.free(first.data);
+    defer a.free(first.shape);
+    const shape = try std.mem.concat(a, usize, &.{ frame, first.shape });
+    const data = try a.alloc(f64, try std.math.mul(usize, cells, first.data.len));
+    if (cells > 0) @memcpy(data[0..first.data.len], first.data);
+    for (1..@max(1, cells)) |i| {
+        const result = try indexinCell(a, .{ .data = haystack.data[i * size ..][0..size], .shape = cell_shape }, needle);
+        defer a.free(result.data);
+        defer a.free(result.shape);
+        @memcpy(data[i * first.data.len ..][0..first.data.len], result.data);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+fn indexinCell(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+    const rank = haystack.shape.len;
+    if (rank <= 1) return indexinRows(a, haystack, needle);
+    const shape = try std.mem.concat(a, usize, &.{ needle.shape, &.{rank} });
+    const data = try a.alloc(f64, try std.math.mul(usize, needle.data.len, rank));
+    for (needle.data, 0..) |wanted, i| {
+        const coordinates = data[i * rank ..][0..rank];
+        var found: ?usize = null;
+        for (haystack.data, 0..) |candidate, j| {
+            if (candidate == wanted or (std.math.isNan(candidate) and std.math.isNan(wanted))) {
+                found = j;
+                break;
+            }
+        }
+        if (found) |index| {
+            var remaining = index;
+            for (coordinates, 0..) |*coordinate, axis| {
+                const width = haystack.shape[rank - axis - 1];
+                coordinate.* = @floatFromInt(remaining % width);
+                remaining /= width;
+            }
+        } else {
+            for (coordinates, 0..) |*coordinate, axis|
+                coordinate.* = @floatFromInt(haystack.shape[rank - axis - 1]);
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
+/// Uiua indexin: find each needle row in the haystack (the first argument).
+/// Missing rows return the haystack's row count; duplicate rows use the first index.
+fn indexinRows(a: std.mem.Allocator, haystack: Value, needle: Value) !Value {
+    if (haystack.tuple != null or needle.tuple != null) return error.InvalidInput;
+    const hay_rows = if (haystack.shape.len == 0) 1 else haystack.shape[0];
+    const needle_rows = if (needle.shape.len == 0) 1 else needle.shape[0];
+    if (needle.shape.len == haystack.shape.len or needle.shape.len + 1 == haystack.shape.len) {
+        const same_rank = needle.shape.len == haystack.shape.len;
+        const shape = if (same_rank) needle.shape[0..@min(1, needle.shape.len)] else &.{};
+        const data = try a.alloc(f64, if (same_rank) needle_rows else 1);
+        const hay_width = rowWidth(haystack);
+        const needle_width = if (same_rank) rowWidth(needle) else needle.data.len;
+        for (data, 0..) |*result, i| {
+            result.* = @floatFromInt(hay_rows);
+            if (!same_rank and !std.mem.endsWith(usize, haystack.shape, needle.shape)) continue;
+            const wanted = needle.data[i * needle_width ..][0..needle_width];
+            for (0..hay_rows) |j| {
+                const candidate = haystack.data[j * hay_width ..][0..hay_width];
+                if (candidate.len != wanted.len) continue;
                 for (candidate, wanted) |x, y| {
                     if (x != y and !(std.math.isNan(x) and std.math.isNan(y))) break;
                 } else {
-                    found = j;
+                    result.* = @floatFromInt(j);
                     break;
                 }
             }
-            data[frame * needles + i] = @floatFromInt(found);
         }
+        return .{ .data = data, .shape = try a.dupe(usize, shape) };
     }
-    return .{ .data = data, .shape = try std.mem.concat(a, usize, &.{ haystack.shape[0..axis], needle_frame }) };
+    const recurse_needle = needle.shape.len > haystack.shape.len;
+    if (recurse_needle and needle_rows == 0) return .{ .data = try a.dupe(f64, needle.data), .shape = try a.dupe(usize, needle.shape) };
+    if (!recurse_needle and !std.mem.endsWith(usize, haystack.shape, needle.shape)) {
+        const shape = haystack.shape[0 .. haystack.shape.len - needle.shape.len - 1];
+        var item_count: usize = 1;
+        for (shape) |dim| item_count = try std.math.mul(usize, item_count, dim);
+        const data = try a.alloc(f64, item_count);
+        @memset(data, @as(f64, @floatFromInt(hay_rows)));
+        return .{ .data = data, .shape = try a.dupe(usize, shape) };
+    }
+    const source = if (recurse_needle) needle else haystack;
+    const rows = source.shape[0];
+    const width = rowWidth(source);
+    var data: std.ArrayList(f64) = .empty;
+    errdefer data.deinit(a);
+    var shape: []const usize = &.{0};
+    for (0..rows) |i| {
+        const row: Value = .{ .data = source.data[i * width ..][0..width], .shape = source.shape[1..] };
+        const result = if (recurse_needle) try indexinRows(a, haystack, row) else try indexinRows(a, row, needle);
+        defer a.free(result.data);
+        defer a.free(result.shape);
+        if (i == 0) {
+            const dimensions = try a.alloc(usize, result.shape.len + 1);
+            dimensions[0] = rows;
+            @memcpy(dimensions[1..], result.shape);
+            shape = dimensions;
+        }
+        try data.appendSlice(a, result.data);
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = if (rows == 0) try a.dupe(usize, shape) else shape };
 }
 
 fn rowWidth(value: Value) usize {

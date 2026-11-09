@@ -295,9 +295,9 @@ test "explicit axis" {
     try expect_output("\\\\ Scan.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
     try expect_output("\\\\ Fold.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
     try expect_output("\\ Reduce.r2 distance", "[[3_4 0_0] [5_12 0_0]]", "[5 13]");
-    try expect_output("\\\\ indexin.rows", .{ "[1_2 3_4 5_6]", "3_4" }, "1");
-    try expect_output("\\\\ indexin", .{ "[1 2 3]", "2" }, "1"); // scalar items are the default
-    try expect_output("\\\\ indexin.mat", .{ "[[1_2 3_4] [5_6 7_8]]", "[5_6 7_8]" }, "1");
+    try expect_output("\\\\ indexin.rows", .{ "[1 2 3]", "3" }, "2");
+    try expect_output("\\\\ indexin", .{ "[1 2 3]", "2" }, "1"); // rows is the default axis
+    try expect_output("\\\\ indexin.mat", .{ "[1_2_3 4_5_6]", "2" }, "[1 0]");
 }
 
 test "types" {

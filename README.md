@@ -50,16 +50,13 @@ available and leaves scalars and vectors unchanged.
 For `[1_2_3 4_5_6]` it returns the pair `[1 4]` and `[2_3 5_6]`.
 `uncons.rows` splits off a whole row; `uncons.outer` splits off a leading-axis item.
 
-`indexin` searches for scalar items along each trailing haystack vector.
-`indexin.rows` (or `.vec`) searches for whole vectors, and `indexin.mat` (or
-`.grids`) searches for whole matrices. The suffix describes one item in the
-second argument; additional leading needle dimensions represent batches of
-searches. For example, searching `[1_2 3_4 5_6]` for `[5_6 1_2]` with
-`indexin.rows` returns `[2 0]`. Haystack frame dimensions precede needle batch
-dimensions in the result. Missing items return the selected axis length;
-duplicate items return the first index, and NaNs compare equal.
-`indexin.mat` no longer returns scalar coordinates inside a matrix; use equality
-followed by `where` to obtain matching coordinates.
+`indexin` retains its search-domain suffixes: the default, `.rows`, and `.vec`
+search within trailing vectors. `.mat` searches within trailing matrices and
+returns coordinate pairs, with the innermost axis first. For example, searching
+`[1_2_3 4_5_6]` for `2` with `indexin.mat` returns `[1 0]`.
+`.outer` searches the entire array. Earlier haystack dimensions are processed
+independently. These suffixes describe the search domain, unlike the item
+components used by `first`, `last`, `uncons`, and `sort`.
 
 `split` splits a vector at every non-overlapping occurrence of its delimiter;
 `split.first` splits only at the first. Delimiters can be scalars or nonempty
