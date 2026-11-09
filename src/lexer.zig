@@ -32,6 +32,11 @@ pub const Lexer = struct {
                 self.offset = next_line + 2;
             }
         }
+        if ((c == '&' or c == '|') and self.offset < self.source.len and self.source[self.offset] == c) {
+            self.offset += 1;
+            return self.source[start..self.offset];
+        }
+        if (c == '<' or c == '>') return self.source[start..self.offset];
         if (c == '|' and self.offset < self.source.len) {
             if (self.source[self.offset] == '>') {
                 self.offset += 1;
@@ -84,7 +89,8 @@ pub const Lexer = struct {
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
             if ((b == '+' or b == '-') and self.offset > start and (self.source[self.offset - 1] == 'e' or self.source[self.offset - 1] == 'E') and (std.ascii.isDigit(c) or c == '-')) continue;
-            if (b == '+' or b == '-' or b == '/') break;
+            if (b == '+' or b == '-' or b == '/' or b == '<' or b == '>' or
+                (b == '&' and std.mem.startsWith(u8, self.source[self.offset..], "&&"))) break;
             if (b == '_' and (std.ascii.isAlphabetic(c) or c == '&')) continue;
             if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=\\\"@$", b) != null or
                 b == '|') break;

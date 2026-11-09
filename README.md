@@ -346,10 +346,18 @@ a declared name, or a primitive name fails with `shadowed names not allowed`.
 Variable arguments to `|>` and partial applications such as `add,x` are resolved
 when the lambda runs.
 
-Value expressions support `+`, `-`, `*`, and `/` with named lambda variables
+Lambda bodies can return a value directly, such as
+`([[x y] [u_v]] -> x<y && u<v)` or `([a b] -> [1 b])`, or pass
+values to a function with `|>`. Function bodies declare their arity with
+`\`, `(...)`, `\\`, or `{...}`. Within bracketed parameter patterns,
+underscores separate items just like spaces.
+
+Value expressions support `<`, `>`, `&&`, `||`, `+`, `-`, `*`, and `/` with named lambda variables
 and constants wherever a value is accepted, including partial arguments,
-arrays, tuples, and strands. Multiplication and division bind before addition
-and subtraction; equal precedence associates left to right. Use `*` for multiplication (`a*5` or `a * 5`); `***` separates literal choices.
+arrays, tuples, and strands. Precedence from highest to lowest is multiplication
+and division, addition and subtraction, comparisons, `&&`, then `||`; equal
+precedence associates left to right. Boolean operators apply the existing
+elementwise `and` and `or` primitives and evaluate both operands. Use `*` for multiplication (`a*5` or `a * 5`); `***` separates literal choices.
 For example, `([a b] -> b*5 a+1 |> couple)` on `[2 3]` returns `[15 3]`.
 
 User definitions appear before the main expression, one per line. Value functions

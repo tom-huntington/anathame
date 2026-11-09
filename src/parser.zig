@@ -889,10 +889,10 @@ fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names
         const offset = lexer.offset;
         const op = (try lexer.next()) orelse break;
         const adjacent = lexer.offset - op.len == offset;
-        const precedence: u8 = if (std.mem.eql(u8, op, "_")) 1 else if (std.mem.eql(u8, op, "+") or std.mem.eql(u8, op, "-")) 2 else if (std.mem.eql(u8, op, "/") or std.mem.eql(u8, op, "*")) 3 else 0;
+        const precedence: u8 = if (std.mem.eql(u8, op, "_")) 1 else if (std.mem.eql(u8, op, "||")) 2 else if (std.mem.eql(u8, op, "&&")) 3 else if (std.mem.eql(u8, op, "<") or std.mem.eql(u8, op, ">")) 4 else if (std.mem.eql(u8, op, "+") or std.mem.eql(u8, op, "-")) 5 else if (std.mem.eql(u8, op, "/") or std.mem.eql(u8, op, "*")) 6 else 0;
         // A signed numeric token immediately following an atom is subtraction.
         const signed = adjacent and op.len > 1 and op[0] == '-' and op[1] != '>';
-        const rank: u8 = if (signed) 2 else precedence;
+        const rank: u8 = if (signed) 5 else precedence;
         if (rank == 0 or rank < minimum) {
             lexer.offset = offset;
             break;
@@ -918,6 +918,10 @@ fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names
                 '+' => "add",
                 '*' => "mul",
                 '/' => "div",
+                '<' => "less",
+                '>' => "greater",
+                '&' => "and",
+                '|' => "or",
                 else => unreachable,
             };
             left = try foldValue(a, .{ .expression = .{ .arguments = try a.dupe(Instruction, &.{ left, right }), .body = try a.dupe(Instruction, &.{.{ .primitive = name }}) } });
@@ -983,16 +987,22 @@ fn shadowed() error{ShadowedNamesNotAllowed} {
     return error.ShadowedNamesNotAllowed;
 }
 
-fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction)) anyerror!Pattern {
-    const token = (try lexer.next()) orelse return error.InvalidSyntax;
+fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction), split_names: bool) anyerror!Pattern {
+    var token = (try lexer.next()) orelse return error.InvalidSyntax;
+    // Underscores separate names in patterns, while ordinary identifiers retain them.
+    if (if (split_names) std.mem.indexOfScalar(u8, token, '_') else null) |index| {
+        lexer.offset -= token.len - index;
+        token = token[0..index];
+    }
     if (std.mem.eql(u8, token, "[")) {
         var items: std.ArrayList(Pattern) = .empty;
         while (true) {
             const offset = lexer.offset;
             const next = (try lexer.next()) orelse return error.InvalidSyntax;
             if (std.mem.eql(u8, next, "]")) break;
+            if (std.mem.eql(u8, next, "_")) continue;
             lexer.offset = offset;
-            try items.append(a, try parsePattern(a, lexer, names));
+            try items.append(a, try parsePattern(a, lexer, names, true));
         }
         return .{ .items = try items.toOwnedSlice(a) };
     }
@@ -1018,7 +1028,7 @@ fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashM
     if (!found) return &.{};
     var parameters: std.ArrayList(Pattern) = .empty;
     while (true) {
-        try parameters.append(a, try parsePattern(a, lexer, names));
+        try parameters.append(a, try parsePattern(a, lexer, names, false));
         const separator = (try lexer.next()) orelse return error.InvalidSyntax;
         if (std.mem.eql(u8, separator, "->")) break;
         if (!std.mem.eql(u8, separator, ",")) return error.InvalidSyntax;
