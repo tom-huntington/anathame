@@ -248,15 +248,22 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = try numbers.toOwnedSlice(a), .shape = shape };
 }
 
-/// Split an array's rows at an integer index; negative indices count from the end.
+/// Split array rows or tuple elements at an integer index; negative indices count from the end.
 fn splitRowsAt(a: std.mem.Allocator, x: Value, index: Value) !Value {
-    if (x.tuple != null or x.shape.len == 0 or index.tuple != null or
+    if ((x.tuple == null and x.shape.len == 0) or index.tuple != null or
         index.shape.len != 0 or index.data.len != 1) return error.InvalidInput;
     const row_count = index.data[0];
     if (!std.math.isFinite(row_count) or @trunc(row_count) != row_count) return error.InvalidInput;
-    if (@abs(row_count) > @as(f64, @floatFromInt(x.shape[0]))) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, index });
+    const item_count = if (x.tuple) |items| items.len else x.shape[0];
+    if (@abs(row_count) > @as(f64, @floatFromInt(item_count))) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, index });
     const amount: usize = @intFromFloat(@abs(row_count));
-    const split_index = if (row_count < 0) x.shape[0] - amount else amount;
+    const split_index = if (row_count < 0) item_count - amount else amount;
+    if (x.tuple) |items| {
+        return .{ .tuple = try a.dupe(Value, &.{
+            .{ .tuple = items[0..split_index] },
+            .{ .tuple = items[split_index..] },
+        }) };
+    }
     var row_size: usize = 1;
     for (x.shape[1..]) |dim| row_size = try std.math.mul(usize, row_size, dim);
     const left_shape = try a.dupe(usize, x.shape);
@@ -298,13 +305,13 @@ pub fn unconsComponents(a: std.mem.Allocator, x: Value, dimensions: usize) !Valu
     return .{ .tuple = try a.dupe(Value, &.{ .{ .data = data, .shape = shape }, .{ .data = rest, .shape = rest_shape } }) };
 }
 
-/// Take rows from the front, or from the back for a negative count.
+/// Take array rows or tuple elements from the front, or from the back for a negative count.
 pub fn take(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
     const parts = try splitRowsAt(a, x, row_count);
     return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 1) else 0];
 }
 
-/// Drop rows from the front, or from the back for a negative count.
+/// Drop array rows or tuple elements from the front, or from the back for a negative count.
 pub fn drop(a: std.mem.Allocator, x: Value, row_count: Value) !Value {
     const parts = try splitRowsAt(a, x, row_count);
     return parts.tuple.?[if (row_count.data[0] < 0) @as(usize, 0) else 1];
