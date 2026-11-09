@@ -18,6 +18,12 @@ pub fn shapeMismatchIndexed(context: []const u8, values: []const Value, indices:
     return error.ShapeMismatch;
 }
 
+/// Report missing function operands separately from value argument arity.
+pub fn combinatorFunctionArguments(name: []const u8, expected: usize, actual: usize) error{ExpectedFunction} {
+    std.debug.print("ExpectedFunction: combinator |{s} expected {d} function arguments, got {d}.\n", .{ name, expected, actual });
+    return error.ExpectedFunction;
+}
+
 fn printDiagnosticValue(value: Value) void {
     if (value.tuple) |items| {
         std.debug.print("tuple (", .{});
@@ -134,7 +140,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             continue;
         }
         if (instruction == .combinator and (instruction.combinator == .d2 or instruction.combinator == .phi1)) {
-            if (index == 0 or index + 2 >= instructions.len) return error.ExpectedFunction;
+            if (index == 0 or index + 2 >= instructions.len) return combinatorFunctionArguments(@tagName(instruction.combinator), 3, @as(usize, @intFromBool(index > 0)) + @min(2, instructions.len - index - 1));
             const branch = instructions[index + 1];
             const combine = instructions[index + 2];
             const branch_arity: usize = if (instruction.combinator == .d2) 1 else 2;
@@ -150,7 +156,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             continue;
         }
         if (instruction == .combinator and instruction.combinator == .psi) {
-            if (index == 0 or index + 1 == instructions.len) return error.ExpectedFunction;
+            if (index == 0 or index + 1 == instructions.len) return combinatorFunctionArguments("psi", 2, @as(usize, @intFromBool(index > 0)) + @min(1, instructions.len - index - 1));
             const function = instructions[index + 1];
             if (functionArity(function) != 2) return error.WrongNumberOfArguments;
             const right = try evaluateScope(memory, instructions[0..index], y, y);
@@ -166,9 +172,9 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             const remaining = instructions[index + 1 ..];
             const temporary = if (result.tuple) |tuple| blk: {
                 if (tuple.len != 2) return error.WrongNumberOfArguments;
-                if (remaining.len < 1) return error.ExpectedFunction;
+                if (remaining.len < 1) return combinatorFunctionArguments("phi", 2, 1);
                 if (functionArity(remaining[0]) == 1) {
-                    if (remaining.len < 3) return error.ExpectedFunction;
+                    if (remaining.len < 3) return combinatorFunctionArguments("phi", 4, 1 + remaining.len);
                     if (functionArity(remaining[1]) != 1 or functionArity(remaining[2]) != 2) return error.WrongNumberOfArguments;
                     const left = try evaluateScope(memory, remaining[0..1], tuple[0], tuple[0]);
                     const right = try evaluateScope(memory, remaining[1..2], tuple[1], tuple[1]);
@@ -179,7 +185,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
                 skip = 1;
                 break :blk try evaluateScope(memory, remaining[0..1], tuple[0], tuple[1]);
             } else blk: {
-                if (remaining.len < 2) return error.ExpectedFunction;
+                if (remaining.len < 2) return combinatorFunctionArguments("phi", 3, 1 + remaining.len);
                 if (functionArity(remaining[0]) != 1 or functionArity(remaining[1]) != 2) return error.WrongNumberOfArguments;
                 const branch = try evaluateScope(memory, remaining[0..1], x, x);
                 skip = 2;
