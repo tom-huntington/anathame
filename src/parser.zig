@@ -602,8 +602,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             } });
         } else if (std.mem.eql(u8, name, "Sort.by")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
-            const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;
-            if (arity != 1) return error.WrongNumberOfArguments;
+            if (@import("runtime.zig").functionArity(operand) == null) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
                 operand,
                 .{ .primitive = "rise" },
