@@ -504,6 +504,20 @@ fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.z
     return @import("memory.zig").ReturnImpl(memory, checkpoint, result);
 }
 
+fn printPattern(pattern: @import("parser.zig").Pattern) void {
+    switch (pattern) {
+        .name => |name| std.debug.print("{s}", .{name}),
+        .items => |items| {
+            std.debug.print("[", .{});
+            for (items, 0..) |item, i| {
+                if (i > 0) std.debug.print(" ", .{});
+                printPattern(item);
+            }
+            std.debug.print("]", .{});
+        },
+    }
+}
+
 fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value) anyerror!void {
     switch (pattern) {
         .name => |name| {
@@ -514,9 +528,16 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
             try memory.bindings.put(a, name, value);
         },
         .items => |items| {
-            const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else return shapeMismatch("array or tuple required for pattern", &.{value});
+            const count = if (value.tuple) |tuple| tuple.len else if (value.shape.len > 0) value.shape[0] else {
+                std.debug.print("Pattern ", .{});
+                printPattern(pattern);
+                std.debug.print(" requires an array or tuple\n", .{});
+                return shapeMismatch("array or tuple required for pattern", &.{value});
+            };
             if (count != items.len) {
-                std.debug.print("Pattern expects {d} items, received {d}\n", .{ items.len, count });
+                std.debug.print("Pattern ", .{});
+                printPattern(pattern);
+                std.debug.print(" expects {d} items, received {d}\n", .{ items.len, count });
                 return shapeMismatch(@src().fn_name, &.{value});
             }
             for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try hofs.rowArgument(a, value, i));
