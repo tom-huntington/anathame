@@ -519,6 +519,11 @@ fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.z
 
 fn printPattern(pattern: @import("parser.zig").Pattern) void {
     switch (pattern) {
+        .extractor => |extractor| {
+            std.debug.print("<extractor>(", .{});
+            printPattern(extractor.pattern.*);
+            std.debug.print(")", .{});
+        },
         .name => |name| std.debug.print("{s}", .{name}),
         .rest => |name| std.debug.print("*{s}", .{name}),
         .items => |items| {
@@ -534,6 +539,10 @@ fn printPattern(pattern: @import("parser.zig").Pattern) void {
 
 fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value) anyerror!void {
     switch (pattern) {
+        .extractor => |extractor| {
+            const transformed = try evaluateScope(memory, &.{extractor.function}, value, .{});
+            try bindPattern(memory, a, extractor.pattern.*, transformed);
+        },
         .name, .rest => |name| {
             if (memory.bindings.contains(name)) {
                 std.debug.print("shadowed names not allowed\n", .{});

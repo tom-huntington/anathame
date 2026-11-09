@@ -48,7 +48,12 @@ const Macro = struct {
     names: std.StringHashMapUnmanaged(Instruction),
     operands: usize,
 };
-pub const Pattern = union(enum) { name: []const u8, rest: []const u8, items: []const Pattern };
+pub const Pattern = union(enum) {
+    name: []const u8,
+    rest: []const u8,
+    items: []const Pattern,
+    extractor: struct { function: Instruction, pattern: *const Pattern },
+};
 
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
@@ -306,6 +311,19 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             continue;
         }
         if (std.mem.eql(u8, token, "]")) return error.UnexpectedClose;
+        if (std.mem.endsWith(u8, token, "`")) {
+            lexer.offset -= token.len;
+            var local_names = try names.clone(a);
+            defer local_names.deinit(a);
+            const parameter = try parsePattern(a, lexer, &local_names, false);
+            if (parameter.extractor.pattern.* != .name) return error.InvalidSyntax;
+            try result.append(a, .{ .scope = .{
+                .arity = 1,
+                .parameters = try a.dupe(Pattern, &.{parameter}),
+                .instructions = try a.dupe(Instruction, &.{.{ .variable = parameter.extractor.pattern.name }}),
+            } });
+            continue;
+        }
         if (try valueExpression(a, lexer, token, names, 0)) |value| {
             try result.append(a, value);
             continue;
@@ -1056,6 +1074,20 @@ fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUn
 
 fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction), split_names: bool) anyerror!Pattern {
     var token = (try lexer.next()) orelse return error.InvalidSyntax;
+    if (std.mem.endsWith(u8, token, "`")) {
+        var function_lexer: Lexer = .{ .source = token[0 .. token.len - 1] };
+        const functions = try sequence(a, &function_lexer, null, false, false, names);
+        if (functions.len != 1 or isValue(functions[0])) return error.ExpectedFunction;
+        if (@import("runtime.zig").functionArity(functions[0]) != 1) return error.WrongNumberOfArguments;
+        const open = (try lexer.next()) orelse return error.InvalidSyntax;
+        if (!std.mem.eql(u8, open, "(")) return error.InvalidSyntax;
+        const inner = try a.create(Pattern);
+        inner.* = try parsePattern(a, lexer, names, false);
+        if (inner.* == .rest) return error.InvalidSyntax;
+        const close = (try lexer.next()) orelse return error.InvalidSyntax;
+        if (!std.mem.eql(u8, close, ")")) return error.InvalidSyntax;
+        return .{ .extractor = .{ .function = functions[0], .pattern = inner } };
+    }
     // Expose strand separators inside array patterns.
     if (if (split_names) std.mem.indexOfScalar(u8, token, '_') else null) |index| {
         lexer.offset -= token.len - index;
@@ -1091,10 +1123,25 @@ fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnm
 fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction)) ![]const Pattern {
     var look = lexer.*;
     var found = false;
+    var extractor_depth: usize = 0;
+    var extractor_open = false;
     while (try look.next()) |token| {
         if (std.mem.eql(u8, token, "->")) {
             found = true;
             break;
+        }
+        if (std.mem.endsWith(u8, token, "`")) {
+            extractor_open = true;
+            continue;
+        }
+        if (extractor_open and std.mem.eql(u8, token, "(")) {
+            extractor_depth += 1;
+            extractor_open = false;
+            continue;
+        }
+        if (extractor_depth > 0 and std.mem.eql(u8, token, ")")) {
+            extractor_depth -= 1;
+            continue;
         }
         if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",") and !std.mem.eql(u8, token, "_") and !std.mem.eql(u8, token, "*")) break;
     }
