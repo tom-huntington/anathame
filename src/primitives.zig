@@ -12,6 +12,7 @@ comptime {
     }
 }
 pub fn arity(name: []const u8) ?usize {
+    if (std.mem.eql(u8, name, "pad")) return 3;
     if (std.mem.eql(u8, name, "env")) return 1;
     if (std.mem.eql(u8, name, "deduplicate")) return 1;
     if (std.mem.eql(u8, name, "eye")) return 1;
@@ -331,6 +332,7 @@ pub const names = [_][]const u8{
     "xlsx",
 };
 pub fn known(name: []const u8) bool {
+    if (std.mem.eql(u8, name, "pad")) return true;
     if (lookup(name) != null) return true;
     for (names) |n| {
         if (std.mem.eql(u8, n, name)) return true;

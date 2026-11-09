@@ -382,6 +382,14 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
+        if (instruction == .pad) {
+            const fill = try evaluateScope(memory, &.{instruction.pad.*}, first_argument, second_argument);
+            const temporary = try @import("builtins/pad.zig").pad(memory.allocator(), first_argument, second_argument, fill);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .applied or instruction == .tuples) {
             const temporary = if (instruction == .applied)
                 try evaluateScope(memory, &.{instruction.applied.function.*}, first_argument, instruction.applied.argument)
@@ -447,6 +455,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .component => |c| functionArity(c.function.*),
         .primitive => |name| @import("primitives.zig").arity(name),
+        .pad => 2,
         .partial, .applied, .dynamic_applied, .cases => 1,
         .log, .logshape => |f| functionArity(f.*),
         .under => |u| functionArity(u.function.*),

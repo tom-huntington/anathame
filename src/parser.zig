@@ -10,6 +10,7 @@ pub const Instruction = union(enum) {
     dynamic_applied: struct { function: *const Instruction, argument: *const Instruction },
     cases: Value,
     primitive: []const u8,
+    pad: *const Instruction,
     partition: *const Instruction,
     sort_with: *const Instruction,
     under: struct { transform: *const Instruction, function: *const Instruction, inverse: []const u8 },
@@ -242,13 +243,20 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const selected_component = if (previous.* == .component) previous.component else null;
             if (selected_component) |c| previous.* = c.function.*;
             const name = if (previous.* == .primitive) previous.primitive else "";
-            if (previous.* != .primitive and previous.* != .scope) return error.ExpectedFunction;
+            if (previous.* != .primitive and previous.* != .scope and previous.* != .pad) return error.ExpectedFunction;
             if (previous.* == .scope and previous.scope.arity != 2) return error.WrongNumberOfArguments;
-            if (previous.* == .primitive and try @import("primitives.zig").requireArity(name) != 2) return error.WrongNumberOfArguments;
-            const function = try a.create(Instruction);
-            function.* = previous.*;
+            const is_pad = std.mem.eql(u8, name, "pad");
+            if (previous.* == .primitive and !is_pad and try @import("primitives.zig").requireArity(name) != 2) return error.WrongNumberOfArguments;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
             const parsed_argument = (try valueExpression(a, lexer, argument, names, 0)) orelse return error.ExpectedLiteral;
+            if (is_pad) {
+                const fill = try a.create(Instruction);
+                fill.* = parsed_argument;
+                previous.* = .{ .pad = fill };
+                continue;
+            }
+            const function = try a.create(Instruction);
+            function.* = previous.*;
             if (parsed_argument != .literal) {
                 const arg = try a.create(Instruction);
                 arg.* = parsed_argument;
@@ -767,6 +775,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             }
             try result.append(a, bound);
         } else {
+            if (instruction == .primitive and std.mem.eql(u8, name, "pad")) return error.WrongNumberOfArguments;
             if (instruction == .primitive or instruction == .partial) _ = try @import("primitives.zig").requireArity(name);
             try result.append(a, instruction);
         }

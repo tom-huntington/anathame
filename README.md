@@ -215,6 +215,12 @@ A scalar size requests a square matrix; `eye` on `3` returns the 3-by-3 identity
 For example, `prepend,50` maps `[1 2]` to `[50 1 2]`. For higher-rank arrays,
 the row's shape must match the array's trailing dimensions.
 
+`pad` extends the leading dimension of an array to a minimum size with a scalar
+fill value. Its arguments are array, size, and fill; the fill must always be
+partially applied first. `[1 2] |> pad,0,4` and `[1 2] 4 |> pad,0` both produce
+`[1 2 0 0]`. Sizes must be nonnegative integer scalars. Arrays already at least
+that size are unchanged; for matrices, padding adds rows of the fill value.
+
 Named constants can be literal values or evaluated pipelines: `a = 2 |> sq`
 binds `a` to `4`. For example, `ker = [3 3] 1 |> fill` constructs a constant
 array. Constants can reference earlier definitions and be used as partial
