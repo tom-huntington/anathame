@@ -222,14 +222,14 @@ pub fn booleanOp(function: *const @import("../parser.zig").Instruction) ?bool {
     return null;
 }
 
-/// Recognize a delta whose unchanged right argument is the accumulator.
-pub fn booleanDelta(function: *const @import("../parser.zig").Instruction) ?bool {
+/// Recognize a d combinator whose unchanged left argument is the accumulator.
+pub fn booleanD(function: *const @import("../parser.zig").Instruction) ?bool {
     if (function.* != .scope) return null;
     const scope = function.scope;
     if (scope.parameters.len != 0 or scope.default_arguments != null) return null;
     const body = scope.instructions;
-    if (body.len == 1) return booleanDelta(&body[0]);
-    if (body.len < 3 or body[body.len - 2] != .combinator or body[body.len - 2].combinator != .delta) return null;
+    if (body.len == 1) return booleanD(&body[0]);
+    if (body.len < 3 or body[body.len - 2] != .combinator or body[body.len - 2].combinator != .d) return null;
     return booleanOp(&body[body.len - 1]);
 }
 
@@ -306,14 +306,14 @@ pub fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *c
         for (if (seed != null) @as(usize, 0) else 1..width) |column| {
             if (exclusive) data[start + column] = accumulator;
             if (exclusive and column + 1 == width) break;
-            if (booleanAbsorbed(booleanDelta(function), .{ .data = (&accumulator)[0..1] })) {
+            if (booleanAbsorbed(booleanD(function), .{ .data = (&accumulator)[0..1] })) {
                 @memset(data[start + column .. start + width], accumulator);
                 break;
             }
             const checkpoint = memory.checkpoint();
             const acc: Value = .{ .data = (&accumulator)[0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
-            const result = try evaluateScope(memory, &.{function.*}, next, acc);
+            const result = try evaluateScope(memory, &.{function.*}, acc, next);
             if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });
             accumulator = result.data[0];
             if (!exclusive) data[start + column] = accumulator;
@@ -336,8 +336,8 @@ pub fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: 
     }
     if (x.shape.len == 0) {
         if (seed) |initial| {
-            if (booleanAbsorbed(booleanDelta(function), initial)) return initial;
-            const result = try evaluateScope(memory, &.{function.*}, x, initial);
+            if (booleanAbsorbed(booleanD(function), initial)) return initial;
+            const result = try evaluateScope(memory, &.{function.*}, initial, x);
             if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ExpectedScalar;
             return result;
         }
@@ -353,11 +353,11 @@ pub fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: 
         const start = row * width;
         data[row] = if (seed) |initial| initial.data[0] else x.data[start];
         for (if (seed != null) @as(usize, 0) else 1..width) |column| {
-            if (booleanAbsorbed(booleanDelta(function), .{ .data = data[row..][0..1] })) break;
+            if (booleanAbsorbed(booleanD(function), .{ .data = data[row..][0..1] })) break;
             const checkpoint = memory.checkpoint();
             const acc: Value = .{ .data = data[row..][0..1] };
             const next: Value = .{ .data = x.data[start + column ..][0..1] };
-            const result = try evaluateScope(memory, &.{function.*}, next, acc);
+            const result = try evaluateScope(memory, &.{function.*}, acc, next);
             if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return shapeMismatch("scalar result required in " ++ @src().fn_name, &.{ acc, result });
             data[row] = result.data[0];
             memory.restore(checkpoint);
