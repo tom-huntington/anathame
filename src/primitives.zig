@@ -11,7 +11,7 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "rise") or std.mem.eql(u8, name, "fall")) return 1;
     if (std.mem.eql(u8, name, "squeeze")) return 1;
     if (std.mem.eql(u8, name, "log.str")) return 1;
-    if (std.mem.eql(u8, name, "not")) return 1;
+    if (std.mem.eql(u8, name, "not") or std.mem.eql(u8, name, "negate")) return 1;
     if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
     if (std.mem.eql(u8, name, "transpose") or std.mem.eql(u8, name, "last.row")) return 1;

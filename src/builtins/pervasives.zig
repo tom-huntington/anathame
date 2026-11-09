@@ -40,17 +40,22 @@ pub fn abs(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return unary(a, x, .abs);
 }
 
+pub fn negate(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return unary(a, x, .negate);
+}
+
 /// Uiua not: subtract each element from one, preserving the array's shape.
 pub fn not(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return unary(a, x, .not);
 }
 
-fn unary(a: std.mem.Allocator, x: Value, comptime op: enum { floor, abs, not }) !Value {
+fn unary(a: std.mem.Allocator, x: Value, comptime op: enum { floor, abs, negate, not }) !Value {
     if (x.tuple != null) return error.InvalidInput;
     const data = try a.alloc(f64, x.data.len);
     for (x.data, data) |item, *output| output.* = switch (op) {
         .floor => @floor(item),
         .abs => @abs(item),
+        .negate => -item,
         .not => 1 - item,
     };
     return .{ .data = data, .shape = try a.dupe(usize, x.shape) };
