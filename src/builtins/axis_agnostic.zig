@@ -537,7 +537,7 @@ pub fn base(a: std.mem.Allocator, x: Value, bases: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
-/// Uiua join on the trailing axis, extending lower-rank cells when necessary.
+/// Uiua join: concatenate rows, extending lower-rank arguments to a full row.
 pub fn join(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.tuple != null or y.tuple != null) return error.ExpectedArray;
     const xr = x.shape.len;
@@ -547,39 +547,28 @@ pub fn join(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (yr < xr and yr == 1 and y.shape[0] == 0) return x;
     const rank = @max(1, @max(xr, yr));
     const larger = if (xr >= yr) x else y;
-    const prefix = larger.shape[0 .. rank - 1];
+    const row_shape = larger.shape[@min(1, larger.shape.len)..];
     if (xr == yr) {
-        if (xr > 0 and !std.mem.eql(usize, x.shape[0 .. xr - 1], y.shape[0 .. yr - 1]))
+        if (xr > 0 and !std.mem.eql(usize, x.shape[1..], y.shape[1..]))
             return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     } else {
         const smaller = if (xr < yr) x else y;
-        if (!std.mem.eql(usize, prefix[0..smaller.shape.len], smaller.shape))
+        if (!std.mem.endsWith(usize, row_shape, smaller.shape))
             return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     }
-    const x_width = if (xr == rank) x.shape[xr - 1] else 1;
-    const y_width = if (yr == rank) y.shape[yr - 1] else 1;
-    const width = try std.math.add(usize, x_width, y_width);
-    var groups: usize = 1;
-    for (prefix) |dim| groups = try std.math.mul(usize, groups, dim);
-    var x_repeats: usize = 1;
-    var y_repeats: usize = 1;
-    if (xr < rank) for (prefix[xr..]) |dim| {
-        x_repeats = try std.math.mul(usize, x_repeats, dim);
-    };
-    if (yr < rank) for (prefix[yr..]) |dim| {
-        y_repeats = try std.math.mul(usize, y_repeats, dim);
-    };
+    var row_size: usize = 1;
+    for (row_shape) |dim| row_size = try std.math.mul(usize, row_size, dim);
+    const x_rows = if (xr == rank) x.shape[0] else 1;
+    const y_rows = if (yr == rank) y.shape[0] else 1;
     const shape = try a.alloc(usize, rank);
     errdefer a.free(shape);
-    @memcpy(shape[0 .. rank - 1], prefix);
-    shape[rank - 1] = width;
-    const data = try a.alloc(f64, try std.math.mul(usize, groups, width));
-    for (0..groups) |group| {
-        const xi = if (xr == rank) group * x_width else group / x_repeats;
-        const yi = if (yr == rank) group * y_width else group / y_repeats;
-        @memcpy(data[group * width ..][0..x_width], x.data[xi..][0..x_width]);
-        @memcpy(data[group * width + x_width ..][0..y_width], y.data[yi..][0..y_width]);
-    }
+    shape[0] = try std.math.add(usize, x_rows, y_rows);
+    @memcpy(shape[1..], row_shape);
+    const x_size = try std.math.mul(usize, x_rows, row_size);
+    const data = try a.alloc(f64, try std.math.mul(usize, shape[0], row_size));
+    // Lower-rank arrays repeat cyclically to fill the missing row dimensions.
+    for (data[0..x_size], 0..) |*item, i| item.* = x.data[i % x.data.len];
+    for (data[x_size..], 0..) |*item, i| item.* = y.data[i % y.data.len];
     return .{ .data = data, .shape = shape };
 }
 
