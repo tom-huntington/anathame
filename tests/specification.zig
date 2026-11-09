@@ -46,6 +46,12 @@ test "Phi combinator" {
 }
 
 test "Combinators" {
+    try invalid_syntax("\\ mul");
+    try invalid_syntax("\\ sq mul");
+    try invalid_syntax("\\ Sort.by mul");
+    try invalid_syntax("f =\\\\ Unc mul\n\\ Sort.by f");
+    try expect_output("\\ Join mul", .{"3"}, "9");
+    try expect_output("\\ sq Join mul", .{"3"}, "81");
     // delta combinator 12.2 (f,g) = x,y -> g(f(x), y)
     // d combinator 12.2 (f,g) = x,y -> g(x, f(y))
     // psi combinator 12.2 (f,g) = x,y -> g(f(x), f(y))

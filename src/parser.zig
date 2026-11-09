@@ -378,6 +378,29 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
 }
 // Composition preserves the input arity; the other combinators declare it.
 fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
+    // Ordinary composition passes one result onward (B/B1). Only an
+    // explicit combinator may supply two arguments to a later function.
+    var available = declared;
+    var explicit_operands: usize = 0;
+    for (body, 0..) |instruction, index| {
+        if (instruction == .combinator) {
+            explicit_operands = switch (instruction.combinator) {
+                .b => 0,
+                .d2, .phi1 => 2,
+                .phi => if (index + 1 < body.len and @import("runtime.zig").functionArity(body[index + 1]) == 2) 1 else if (index + 2 < body.len and @import("runtime.zig").functionArity(body[index + 2]) == 2) 2 else 3,
+                else => 1,
+            };
+            available = if (instruction.combinator == .b) 1 else 2;
+            continue;
+        }
+        if (instruction == .scope) try validateCombinatorArity(instruction.scope.instructions, instruction.scope.arity);
+        if (explicit_operands > 0 and available == 2) {
+            explicit_operands -= 1;
+        } else if (@import("runtime.zig").functionArity(instruction)) |arity| {
+            if (arity > available) return error.WrongNumberOfArguments;
+        }
+        if (explicit_operands == 0) available = 1;
+    }
     var result_arity: ?usize = null;
     var combinator_name: []const u8 = "";
     for (body) |instruction| {
