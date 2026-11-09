@@ -2,6 +2,8 @@
 
 Requires Zig 0.17.
 
+`const` takes two arguments and returns its second argument unchanged.
+
 `logshape` prints the input shape and returns the value unchanged.
 `Logshape` wraps a function like `Log`, printing argument and result shapes.
 Shapes are printed as dimension lists, such as `[2 3]` or `[]` for scalars.

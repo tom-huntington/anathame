@@ -598,3 +598,7 @@ pub fn couple(a: std.mem.Allocator, x: Value, y: Value) !Value {
 pub fn id(_: std.mem.Allocator, x: Value, _: Value) !Value {
     return x;
 }
+
+pub fn @"const"(_: std.mem.Allocator, _: Value, y: Value) !Value {
+    return y;
+}
