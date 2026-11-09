@@ -214,6 +214,56 @@ pub fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
     return .{ .data = value.data[start..][0..width], .shape = shape };
 }
 
+/// Only bare boolean primitives can bypass operand evaluation.
+pub fn booleanOp(function: *const @import("../parser.zig").Instruction) ?bool {
+    if (function.* != .primitive) return null;
+    if (std.mem.eql(u8, function.primitive, "or")) return true;
+    if (std.mem.eql(u8, function.primitive, "and")) return false;
+    return null;
+}
+
+/// Fold each scalar lane independently, stopping input reads at its absorbing value.
+pub fn booleanFold(a: std.mem.Allocator, x: Value, seed: ?Value, axis: usize, final_only: bool, exclusive: bool, include_seed: bool, is_or: bool) !Value {
+    const width = x.shape[axis];
+    var lanes: usize = 1;
+    for (x.shape[axis + 1 ..]) |dim| lanes *= dim;
+    var count: usize = 1;
+    for (x.shape[0..axis]) |dim| count *= dim;
+    const output_width = if (final_only) 1 else width + @as(usize, @intFromBool(include_seed and !exclusive));
+    const shape = try a.alloc(usize, x.shape.len - @as(usize, @intFromBool(final_only)));
+    @memcpy(shape[0..axis], x.shape[0..axis]);
+    if (final_only) {
+        @memcpy(shape[axis..], x.shape[axis + 1 ..]);
+    } else {
+        shape[axis] = output_width;
+        @memcpy(shape[axis + 1 ..], x.shape[axis + 1 ..]);
+    }
+    const data = try a.alloc(f64, count * output_width * lanes);
+    const absorbing: f64 = if (is_or) 1 else 0;
+    for (0..count) |row| {
+        for (0..lanes) |lane| {
+            var acc = if (seed) |initial| initial.data[lane] else x.data[row * width * lanes + lane];
+            const out = row * output_width * lanes + lane;
+            if (!final_only and output_width > 0 and (seed == null or include_seed)) data[out] = acc;
+            const begin: usize = if (seed != null) 0 else 1;
+            const end = width - @as(usize, @intFromBool(exclusive and width > 0));
+            var column = begin;
+            while (column < end) : (column += 1) {
+                if (acc == absorbing) break;
+                const next = x.data[(row * width + column) * lanes + lane];
+                acc = @floatFromInt(@intFromBool(if (is_or) acc != 0 or next != 0 else acc != 0 and next != 0));
+                if (!final_only) data[out + (column + @as(usize, @intFromBool(include_seed))) * lanes] = acc;
+            }
+            if (final_only) {
+                data[out] = acc;
+            } else {
+                while (column < end) : (column += 1) data[out + (column + @as(usize, @intFromBool(include_seed))) * lanes] = acc;
+            }
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Left prefixes along each innermost vector, optionally starting from a seed.
 pub fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("../parser.zig").Instruction, exclusive: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
@@ -221,6 +271,12 @@ pub fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *c
     if (seed) |initial| {
         if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
     } else if (x.data.len == 0) return error.EmptyArray;
+    if (booleanOp(function)) |is_or| {
+        const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+        var result = try booleanFold(memory.allocator(), input, seed, input.shape.len - 1, false, exclusive, exclusive, is_or);
+        if (x.shape.len == 0) result.shape = x.shape;
+        return result;
+    }
     const a = memory.allocator();
     const data = try a.dupe(f64, x.data);
     const shape = try a.dupe(usize, x.shape);
@@ -252,6 +308,10 @@ pub fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: 
     if (seed) |initial| {
         if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
     } else if (x.data.len == 0) return error.EmptyArray;
+    if (booleanOp(function)) |is_or| {
+        const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+        return booleanFold(memory.allocator(), input, seed, input.shape.len - 1, true, false, false, is_or);
+    }
     if (x.shape.len == 0) {
         if (seed) |initial| {
             const result = try evaluateScope(memory, &.{function.*}, initial, x);
