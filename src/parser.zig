@@ -18,6 +18,7 @@ pub const Instruction = union(enum) {
     partials: *const Instruction,
     rows: *const Instruction,
     each: *const Instruction,
+    each_fill: *const Instruction,
     table: *const Instruction,
     flip: *const Instruction,
     join: *const Instruction,
@@ -746,6 +747,15 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 .{ .combinator = .sig },
                 .{ .primitive = "keep" },
             }) } });
+        } else if (std.mem.eql(u8, name, "Each.fill")) {
+            if (instruction != .partial) return error.WrongNumberOfArguments;
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) != 1) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            const bound = try a.create(Instruction);
+            bound.* = .{ .each_fill = function };
+            try result.append(a, .{ .applied = .{ .function = bound, .argument = instruction.partial.argument } });
         } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith") or std.mem.eql(u8, name, "Table")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;

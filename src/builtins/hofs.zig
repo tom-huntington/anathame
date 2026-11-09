@@ -139,10 +139,49 @@ pub fn switchValue(memory: *ReservedBumpAllocator, x: Value, condition: Value, b
 }
 
 /// Map tuple elements and stack equally shaped array results.
-pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
+pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction, fill: ?Value) anyerror!Value {
     if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
     const items = x.tuple orelse return error.ExpectedTuple;
     const a = memory.allocator();
+    if (fill) |value| {
+        if (value.tuple != null or value.shape.len != 0 or value.data.len != 1) return error.InvalidInput;
+        const results = try a.alloc(Value, items.len);
+        var shape: []usize = &.{};
+        for (items, results, 0..) |item, *result, i| {
+            result.* = try evaluateScope(memory, &.{function.*}, item, item);
+            if (result.tuple != null) return error.ExpectedArray;
+            // Align trailing axes, promoting lower-rank results with leading ones.
+            if (result.shape.len > shape.len) {
+                const expanded = try a.alloc(usize, result.shape.len);
+                @memset(expanded, 1);
+                @memcpy(expanded[expanded.len - shape.len ..], shape);
+                if (i == 0) @memcpy(expanded, result.shape);
+                shape = expanded;
+            }
+            const offset = shape.len - result.shape.len;
+            for (result.shape, 0..) |dimension, axis| shape[offset + axis] = @max(shape[offset + axis], dimension);
+        }
+        var cell_len: usize = 1;
+        for (shape) |dimension| cell_len = try std.math.mul(usize, cell_len, dimension);
+        const data = try a.alloc(f64, try std.math.mul(usize, items.len, cell_len));
+        @memset(data, value.data[0]);
+        for (results, 0..) |result, row| {
+            for (result.data, 0..) |element, index| {
+                var remaining = index;
+                var destination: usize = 0;
+                var stride: usize = 1;
+                var axis = result.shape.len;
+                while (axis > 0) {
+                    axis -= 1;
+                    destination += (remaining % result.shape[axis]) * stride;
+                    remaining /= result.shape[axis];
+                    stride *= shape[shape.len - result.shape.len + axis];
+                }
+                data[row * cell_len + destination] = element;
+            }
+        }
+        return .{ .data = data, .shape = try std.mem.concat(a, usize, &.{ &.{items.len}, shape }) };
+    }
     var data: std.ArrayList(f64) = .empty;
     var output_shape: ?[]const usize = null;
     for (items) |item| {

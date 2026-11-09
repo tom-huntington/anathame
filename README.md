@@ -409,3 +409,9 @@ along a new leading axis. For example, `(Each sum)` on `tup([1 2], [3 4 5])`
 returns `[3 12]`. Results must be arrays with identical shapes; unequal shapes
 report `ShapeMismatch`, and tuple results report `ExpectedArray`. An empty tuple
 produces `[]` without calling the function. The input must be a tuple.
+
+`Each.fill,0 f` pads mapped results with `0` to the largest size along each
+axis before stacking them. The scalar fill value must be partially applied.
+For example, `Each.fill,0 id` on `tup([1 2], [3 4 5])` returns
+`[1_2_0 3_4_5]`. Lower-rank results gain leading axes of size one, and
+padding extends the end of each axis. Tuple results still report `ExpectedArray`.

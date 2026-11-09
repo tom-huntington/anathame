@@ -366,9 +366,11 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
-        if (instruction == .scan or instruction == .partials or instruction == .rows or instruction == .table or instruction == .each) {
+        if (instruction == .scan or instruction == .partials or instruction == .rows or instruction == .table or instruction == .each or instruction == .each_fill) {
             const temporary = if (instruction == .each)
-                try hofs.each(memory, first_argument, instruction.each)
+                try hofs.each(memory, first_argument, instruction.each, null)
+            else if (instruction == .each_fill)
+                try hofs.each(memory, first_argument, instruction.each_fill, second_argument)
             else if (instruction == .rows)
                 try hofs.rows(memory, first_argument, second_argument, instruction.rows)
             else if (instruction == .table)
@@ -455,7 +457,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
     return switch (instruction) {
         .component => |c| functionArity(c.function.*),
         .primitive => |name| @import("primitives.zig").arity(name),
-        .pad => 2,
+        .pad, .each_fill => 2,
         .partial, .applied, .dynamic_applied, .cases => 1,
         .log, .logshape => |f| functionArity(f.*),
         .under => |u| functionArity(u.function.*),

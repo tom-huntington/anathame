@@ -13,6 +13,7 @@ comptime {
 }
 pub fn arity(name: []const u8) ?usize {
     if (std.mem.eql(u8, name, "pad")) return 3;
+    if (std.mem.eql(u8, name, "Each.fill")) return 2;
     if (std.mem.eql(u8, name, "env")) return 1;
     if (std.mem.eql(u8, name, "deduplicate")) return 1;
     if (std.mem.eql(u8, name, "eye")) return 1;
@@ -272,6 +273,7 @@ pub const names = [_][]const u8{
     "rows",
     "Rows",
     "Each",
+    "Each.fill",
     "Table",
     "Flip",
     "Join",
