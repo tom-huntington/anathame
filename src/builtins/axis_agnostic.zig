@@ -537,6 +537,52 @@ pub fn base(a: std.mem.Allocator, x: Value, bases: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
+/// Uiua join on the trailing axis, extending lower-rank cells when necessary.
+pub fn join(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    if (x.tuple != null or y.tuple != null) return error.ExpectedArray;
+    const xr = x.shape.len;
+    const yr = y.shape.len;
+    // Uiua's empty vector is an identity when joining different ranks.
+    if (xr < yr and xr == 1 and x.shape[0] == 0) return y;
+    if (yr < xr and yr == 1 and y.shape[0] == 0) return x;
+    const rank = @max(1, @max(xr, yr));
+    const larger = if (xr >= yr) x else y;
+    const prefix = larger.shape[0 .. rank - 1];
+    if (xr == yr) {
+        if (xr > 0 and !std.mem.eql(usize, x.shape[0 .. xr - 1], y.shape[0 .. yr - 1]))
+            return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
+    } else {
+        const smaller = if (xr < yr) x else y;
+        if (!std.mem.eql(usize, prefix[0..smaller.shape.len], smaller.shape))
+            return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
+    }
+    const x_width = if (xr == rank) x.shape[xr - 1] else 1;
+    const y_width = if (yr == rank) y.shape[yr - 1] else 1;
+    const width = try std.math.add(usize, x_width, y_width);
+    var groups: usize = 1;
+    for (prefix) |dim| groups = try std.math.mul(usize, groups, dim);
+    var x_repeats: usize = 1;
+    var y_repeats: usize = 1;
+    if (xr < rank) for (prefix[xr..]) |dim| {
+        x_repeats = try std.math.mul(usize, x_repeats, dim);
+    };
+    if (yr < rank) for (prefix[yr..]) |dim| {
+        y_repeats = try std.math.mul(usize, y_repeats, dim);
+    };
+    const shape = try a.alloc(usize, rank);
+    errdefer a.free(shape);
+    @memcpy(shape[0 .. rank - 1], prefix);
+    shape[rank - 1] = width;
+    const data = try a.alloc(f64, try std.math.mul(usize, groups, width));
+    for (0..groups) |group| {
+        const xi = if (xr == rank) group * x_width else group / x_repeats;
+        const yi = if (yr == rank) group * y_width else group / y_repeats;
+        @memcpy(data[group * width ..][0..x_width], x.data[xi..][0..x_width]);
+        @memcpy(data[group * width + x_width ..][0..y_width], y.data[yi..][0..y_width]);
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 pub fn couple(a: std.mem.Allocator, x: Value, y: Value) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     if (!std.mem.eql(usize, x.shape, y.shape)) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
