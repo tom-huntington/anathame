@@ -282,8 +282,9 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.appendSlice(a, try parse(a, try std.fmt.allocPrint(a, "select{s},{s}", .{ suffix, index })));
             continue;
         }
-        if (std.mem.eql(u8, token, "combinations")) {
-            try result.appendSlice(a, try parse(a, "Tuples,2 less"));
+        if (std.mem.eql(u8, token, "combinations") or std.mem.startsWith(u8, token, "combinations.")) {
+            const suffix = token["combinations".len..];
+            try result.appendSlice(a, try parse(a, try std.fmt.allocPrint(a, "Tuples{s},2 less", .{suffix})));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
