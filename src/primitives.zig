@@ -28,7 +28,7 @@ pub fn arity(name: []const u8) ?usize {
     if (std.mem.eql(u8, name, "reverse") or std.mem.eql(u8, name, "flatten")) return 1;
     if (std.mem.eql(u8, name, "base10") or std.mem.eql(u8, name, "radix10")) return 1;
     if (std.mem.eql(u8, name, "ints") or std.mem.eql(u8, name, "ints2d") or std.mem.eql(u8, name, "digits") or std.mem.eql(u8, name, "digits2d")) return 1;
-    if (std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) return 1;
+    if (std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) return 1;
     const dyadic = std.StaticStringMap(void).initComptime(.{
         .{ "Fold", {} },          .{ "Scan", {} },            .{ "Scan.exclusive", {} }, .{ "Partition", {} },
         .{ "Repeat", {} },        .{ "Repeat.check", {} },    .{ "Fix", {} },            .{ "Fix.check", {} },
@@ -270,6 +270,7 @@ pub const names = [_][]const u8{
     "round",
     "rows",
     "Rows",
+    "Each",
     "Table",
     "Flip",
     "Join",

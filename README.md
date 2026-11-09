@@ -387,3 +387,9 @@ increment =\ add,1
 
 On input `3`, this returns `25`. A dyadic HOF can be declared with `\\` or
 braces, for example `Combine = { F |phi1 G add }`.
+
+`Each f` applies a monadic function to each tuple element and stacks the results
+along a new leading axis. For example, `(Each sum)` on `tup([1 2], [3 4 5])`
+returns `[3 12]`. Results must be arrays with identical shapes; unequal shapes
+report `ShapeMismatch`, and tuple results report `ExpectedArray`. An empty tuple
+produces `[]` without calling the function. The input must be a tuple.

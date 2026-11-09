@@ -138,6 +138,24 @@ pub fn switchValue(memory: *ReservedBumpAllocator, x: Value, condition: Value, b
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
 }
 
+/// Map tuple elements and stack equally shaped array results.
+pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
+    if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
+    const items = x.tuple orelse return error.ExpectedTuple;
+    const a = memory.allocator();
+    var data: std.ArrayList(f64) = .empty;
+    var output_shape: ?[]const usize = null;
+    for (items) |item| {
+        const result = try evaluateScope(memory, &.{function.*}, item, item);
+        if (result.tuple != null) return error.ExpectedArray;
+        if (output_shape) |shape| {
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
+        } else output_shape = try a.dupe(usize, result.shape);
+        try data.appendSlice(a, result.data);
+    }
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{items.len}, output_shape orelse &.{} }) };
+}
+
 pub fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
     const arity = functionArity(function.*) orelse return error.WrongNumberOfArguments;
     if (arity != 1 and arity != 2) return error.WrongNumberOfArguments;
