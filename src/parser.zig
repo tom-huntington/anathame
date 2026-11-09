@@ -243,7 +243,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const name = if (previous.* == .primitive) previous.primitive else "";
             if (previous.* != .primitive and previous.* != .scope) return error.ExpectedFunction;
             if (previous.* == .scope and previous.scope.arity != 2) return error.WrongNumberOfArguments;
-            if (previous.* == .primitive and @import("primitives.zig").arity(name) != 2) return error.WrongNumberOfArguments;
+            if (previous.* == .primitive and try @import("primitives.zig").requireArity(name) != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = previous.*;
             const argument = (try lexer.next()) orelse return error.ExpectedLiteral;
@@ -448,16 +448,20 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
             explicit_operands -= 1;
         } else if (@import("runtime.zig").functionArity(instruction)) |arity| {
             if (arity > available) {
-                std.debug.print("WrongNumberOfArguments: combinator |{s}: expected {d} argument(s), actual {d}.\n", .{ active_combinator, arity, available });
-                std.debug.print("  Function: ", .{});
-                printArityInstruction(instruction);
-                std.debug.print("\n  Arguments: ", .{});
                 if (argument_source) |source| {
-                    std.debug.print("result of ", .{});
+                    std.debug.print("WrongNumberOfArguments: incompatible function operands for composition.\n  Function: B combinator (|b)\n  Arguments: ", .{});
                     printArityInstruction(source);
-                    std.debug.print(" (composition passes one result onward).\n", .{});
+                    std.debug.print(", ", .{});
+                    printArityInstruction(instruction);
+                    std.debug.print("\n  ", .{});
+                    printArityInstruction(instruction);
+                    std.debug.print(" expects {d} value argument(s), but composition passes one result from ", .{arity});
+                    printArityInstruction(source);
+                    std.debug.print(".\n", .{});
                 } else {
-                    std.debug.print("{d} input argument(s) from the enclosing function.\n", .{available});
+                    std.debug.print("WrongNumberOfArguments: function requires more value arguments than |{s} supplies.\n  Function: ", .{active_combinator});
+                    printArityInstruction(instruction);
+                    std.debug.print("\n  Expected: {d} value argument(s); supplied: {d} from the enclosing function or combinator.\n", .{ arity, available });
                 }
                 std.debug.print("  Argument values, types, and shapes are unknown during parsing.\n", .{});
                 return error.WrongNumberOfArguments;
@@ -760,7 +764,10 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 bound = .{ .applied = .{ .function = scope, .argument = instruction.partial.argument } };
             }
             try result.append(a, bound);
-        } else try result.append(a, instruction);
+        } else {
+            if (instruction == .primitive or instruction == .partial) _ = try @import("primitives.zig").requireArity(name);
+            try result.append(a, instruction);
+        }
         if (if (std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) null else component) |c| {
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);

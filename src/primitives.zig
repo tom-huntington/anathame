@@ -11,7 +11,7 @@ comptime {
         if (!std.mem.eql(u8, name, original)) @compileError("Inverse mapping must be an involution");
     }
 }
-pub fn arity(name: []const u8) usize {
+pub fn arity(name: []const u8) ?usize {
     if (std.mem.eql(u8, name, "env")) return 1;
     if (std.mem.eql(u8, name, "deduplicate")) return 1;
     if (std.mem.eql(u8, name, "eye")) return 1;
@@ -20,7 +20,7 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "where") or std.mem.eql(u8, name, "unwhere")) return 1;
     if (std.mem.eql(u8, name, "rise") or std.mem.eql(u8, name, "fall")) return 1;
     if (std.mem.eql(u8, name, "squeeze")) return 1;
-    if (std.mem.eql(u8, name, "log.str")) return 1;
+    if (std.mem.eql(u8, name, "log") or std.mem.eql(u8, name, "logshape") or std.mem.eql(u8, name, "log.str")) return 1;
     if (std.mem.eql(u8, name, "not") or std.mem.eql(u8, name, "negate")) return 1;
     if (std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "lexisort")) return 1;
     if (std.mem.eql(u8, name, "first") or std.mem.eql(u8, name, "second")) return 1;
@@ -28,7 +28,40 @@ pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "reverse") or std.mem.eql(u8, name, "flatten")) return 1;
     if (std.mem.eql(u8, name, "base10") or std.mem.eql(u8, name, "radix10")) return 1;
     if (std.mem.eql(u8, name, "ints") or std.mem.eql(u8, name, "ints2d") or std.mem.eql(u8, name, "digits") or std.mem.eql(u8, name, "digits2d")) return 1;
-    return if (std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) 1 else 2;
+    if (std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) return 1;
+    const dyadic = std.StaticStringMap(void).initComptime(.{
+        .{ "Fold", {} },          .{ "Scan", {} },            .{ "Scan.exclusive", {} }, .{ "Partition", {} },
+        .{ "Repeat", {} },        .{ "Repeat.check", {} },    .{ "Fix", {} },            .{ "Fix.check", {} },
+        .{ "Tuples", {} },        .{ "TuplesWith", {} },      .{ "Stencil", {} },        .{ "Table", {} },
+        .{ "Rows", {} },          .{ "Flip", {} },            .{ "Join", {} },           .{ "Switch", {} },
+        .{ "Filter", {} },        .{ "Sort.by", {} },         .{ "Sort.with", {} },      .{ "Unc", {} },
+        .{ "MapAccum", {} },      .{ "Log", {} },             .{ "Logshape", {} },       .{ "UnDer", {} },
+        .{ "add", {} },           .{ "mul", {} },             .{ "multiply", {} },       .{ "sub", {} },
+        .{ "subtract", {} },      .{ "and", {} },             .{ "or", {} },             .{ "div", {} },
+        .{ "divide", {} },        .{ "mod", {} },             .{ "modulo", {} },         .{ "eq", {} },
+        .{ "not_eq", {} },        .{ "max", {} },             .{ "maximum", {} },        .{ "min", {} },
+        .{ "less", {} },          .{ "less than", {} },       .{ "greater", {} },        .{ "greater than", {} },
+        .{ ">", {} },             .{ "pick", {} },            .{ "logl", {} },           .{ "logr", {} },
+        .{ "range", {} },         .{ "range_inclusive", {} }, .{ "in.closed", {} },      .{ "tuple", {} },
+        .{ "reshape", {} },       .{ "fill", {} },            .{ "full", {} },           .{ "base", {} },
+        .{ "join", {} },          .{ "couple", {} },          .{ "distance", {} },       .{ "quadrance", {} },
+        .{ "stride", {} },        .{ "stride.rows", {} },     .{ "count", {} },          .{ "take", {} },
+        .{ "drop", {} },          .{ "prepend", {} },         .{ "indexin", {} },        .{ "select", {} },
+        .{ "split", {} },         .{ "split.first", {} },     .{ "keep", {} },           .{ "radix", {} },
+        .{ "re.Matches", {} },    .{ "re.Findall", {} },      .{ "convolve.same", {} },  .{ "convolve.valid", {} },
+        .{ "convolve.full", {} },
+    });
+    if (dyadic.has(name)) return 2;
+    // Every registered product variant takes two arrays.
+    if (@import("builtins/products.zig").lookup(name) != null) return 2;
+    return null;
+}
+
+pub fn requireArity(name: []const u8) !usize {
+    return arity(name) orelse {
+        std.debug.print("MissingPrimitiveArity: primitive '{s}' has no entry in the arity table.\n", .{name});
+        return error.MissingPrimitiveArity;
+    };
 }
 // ASCII names snapshotted from uiua/site/primitives.json.
 pub const names = [_][]const u8{
