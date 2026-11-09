@@ -40,6 +40,7 @@ pub const Instruction = union(enum) {
 };
 // Macro bodies are parsed after their function operands have been substituted.
 const Macro = struct {
+    name: []const u8,
     source: []const u8,
     names: std.StringHashMapUnmanaged(Instruction),
     operands: usize,
@@ -93,11 +94,11 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             if (!std.mem.eql(u8, declaration, "(") and !std.mem.eql(u8, declaration, "{") and
                 !std.mem.eql(u8, declaration, "\\") and !std.mem.eql(u8, declaration, "\\\\")) return error.InvalidSyntax;
             const macro = try a.create(Macro);
-            macro.* = .{ .source = source_body, .names = try names.clone(a), .operands = if (has_g) 2 else 1 };
+            macro.* = .{ .name = name, .source = source_body, .names = try names.clone(a), .operands = if (has_g) 2 else 1 };
             try names.put(a, name, .{ .scope = .{ .arity = 0, .instructions = &.{}, .macro_definition = macro } });
             continue;
         }
-        var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset] };
+        var body_lexer: Lexer = .{ .source = source[body_start..lexer.offset], .function_name = name };
         const declaration = (try body_lexer.next()) orelse return error.InvalidSyntax;
         const is_function = std.mem.eql(u8, declaration, "(") or std.mem.eql(u8, declaration, "{") or
             std.mem.eql(u8, declaration, "\\") or std.mem.eql(u8, declaration, "\\\\");
@@ -193,11 +194,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         const monadic = std.mem.eql(u8, token, "(") or std.mem.eql(u8, token, "\\");
         const dyadic = std.mem.eql(u8, token, "{") or std.mem.eql(u8, token, "\\\\");
         if (monadic or dyadic) {
+            const function_start = lexer.offset - token.len;
             const is_implicit = token[0] == '\\';
             const end = if (is_implicit) close else if (monadic) ")" else "}";
             var local_names = try names.clone(a);
             defer local_names.deinit(a);
+            const parameters_start = lexer.offset;
             const parameters = try lambdaParameters(a, lexer, &local_names);
+            const parameters_end = lexer.offset;
             const body = try sequence(a, lexer, end, is_implicit, false, &local_names);
             if (body.len == 0) return error.InvalidSyntax;
             if (parameters.len == 0) {
@@ -209,7 +213,16 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const returns_function = parameters.len == 1 and body.len == 1 and
                 !isValue(body[0]) and @import("runtime.zig").functionArity(body[0]) == 1;
             if (returns_function) arity = 2;
-            if (parameters.len != 0 and parameters.len != arity and !returns_function) return error.WrongNumberOfArguments;
+            if (parameters.len != 0 and parameters.len != arity and !returns_function) {
+                std.debug.print("Wrong number of arguments in function '{s}': expected {d}, actual {d}.\nArguments (parameter patterns): {s}\nFunction: {s}\n", .{
+                    lexer.function_name orelse "<anonymous>",
+                    arity,
+                    parameters.len,
+                    std.mem.trim(u8, lexer.source[parameters_start .. parameters_end - 2], " \t\r\n"),
+                    std.mem.trim(u8, lexer.source[function_start..lexer.offset], " \t\r\n"),
+                });
+                return error.WrongNumberOfArguments;
+            }
             try validateCombinatorArity(body, if (returns_function) 1 else arity);
             try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = arity, .instructions = body } });
             continue;
@@ -566,7 +579,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 if (isValue(operand) or operand == .combinator or operand == .alternative) return error.ExpectedFunction;
                 try local_names.put(a, placeholder, operand);
             }
-            var body_lexer: Lexer = .{ .source = macro.source };
+            var body_lexer: Lexer = .{ .source = macro.source, .function_name = macro.name };
             const body = try sequence(a, &body_lexer, null, false, true, &local_names);
             if (body.len != 1 or body[0] != .scope or body[0].scope.macro_definition != null) return error.InvalidSyntax;
             instruction = body[0];

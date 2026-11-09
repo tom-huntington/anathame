@@ -2,6 +2,7 @@ const std = @import("std");
 pub const Lexer = struct {
     source: []const u8,
     offset: usize = 0,
+    function_name: ?[]const u8 = null,
     pub fn next(self: *Lexer) !?[]const u8 {
         while (self.offset < self.source.len and (std.ascii.isWhitespace(self.source[self.offset]) or self.source[self.offset] == ';')) self.offset += 1;
         if (self.offset == self.source.len) return null;
