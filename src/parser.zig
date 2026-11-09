@@ -45,7 +45,7 @@ const Macro = struct {
     names: std.StringHashMapUnmanaged(Instruction),
     operands: usize,
 };
-pub const Pattern = union(enum) { name: []const u8, items: []const Pattern };
+pub const Pattern = union(enum) { name: []const u8, rest: []const u8, items: []const Pattern };
 
 pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
     var lexer: Lexer = .{ .source = source };
@@ -1040,14 +1040,21 @@ fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnm
         lexer.offset -= token.len - index;
         token = token[0..index];
     }
+    const rest = std.mem.eql(u8, token, "*");
+    if (rest) token = (try lexer.next()) orelse return error.InvalidSyntax;
     if (std.mem.eql(u8, token, "[")) {
+        if (rest) return error.InvalidSyntax;
         var items: std.ArrayList(Pattern) = .empty;
         while (true) {
             const offset = lexer.offset;
             const next = (try lexer.next()) orelse return error.InvalidSyntax;
             if (std.mem.eql(u8, next, "]")) break;
             lexer.offset = offset;
-            try items.append(a, try parsePattern(a, lexer, names, true));
+            const item = try parsePattern(a, lexer, names, true);
+            if (item == .rest) {
+                for (items.items) |previous| if (previous == .rest) return error.InvalidSyntax;
+            }
+            try items.append(a, item);
         }
         return .{ .items = try items.toOwnedSlice(a) };
     }
@@ -1057,7 +1064,7 @@ fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnm
         std.mem.eql(u8, token, "split") or std.mem.eql(u8, token, "Pairwise") or
         std.mem.eql(u8, token, "combinations") or std.mem.eql(u8, token, "tup")) return shadowed();
     try names.put(a, token, .{ .variable = token });
-    return .{ .name = token };
+    return if (rest) .{ .rest = token } else .{ .name = token };
 }
 
 fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction)) ![]const Pattern {
@@ -1068,12 +1075,14 @@ fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashM
             found = true;
             break;
         }
-        if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",") and !std.mem.eql(u8, token, "_")) break;
+        if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",") and !std.mem.eql(u8, token, "_") and !std.mem.eql(u8, token, "*")) break;
     }
     if (!found) return &.{};
     var parameters: std.ArrayList(Pattern) = .empty;
     while (true) {
-        try parameters.append(a, try parsePattern(a, lexer, names, false));
+        const parameter = try parsePattern(a, lexer, names, false);
+        if (parameter == .rest) return error.InvalidSyntax;
+        try parameters.append(a, parameter);
         const separator = (try lexer.next()) orelse return error.InvalidSyntax;
         if (std.mem.eql(u8, separator, "->")) break;
         if (!std.mem.eql(u8, separator, ",")) return error.InvalidSyntax;

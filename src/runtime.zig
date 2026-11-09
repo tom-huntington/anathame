@@ -507,6 +507,7 @@ fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.z
 fn printPattern(pattern: @import("parser.zig").Pattern) void {
     switch (pattern) {
         .name => |name| std.debug.print("{s}", .{name}),
+        .rest => |name| std.debug.print("*{s}", .{name}),
         .items => |items| {
             std.debug.print("[", .{});
             for (items, 0..) |item, i| {
@@ -520,7 +521,7 @@ fn printPattern(pattern: @import("parser.zig").Pattern) void {
 
 fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @import("parser.zig").Pattern, value: Value) anyerror!void {
     switch (pattern) {
-        .name => |name| {
+        .name, .rest => |name| {
             if (memory.bindings.contains(name)) {
                 std.debug.print("shadowed names not allowed\n", .{});
                 return error.ShadowedNamesNotAllowed;
@@ -534,13 +535,33 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
                 std.debug.print(" requires an array or tuple\n", .{});
                 return shapeMismatch("array or tuple required for pattern", &.{value});
             };
-            if (count != items.len) {
+            var rest_index: ?usize = null;
+            for (items, 0..) |item, i| {
+                if (item == .rest) {
+                    if (rest_index != null) return error.InvalidSyntax;
+                    rest_index = i;
+                }
+            }
+            const required = items.len - @intFromBool(rest_index != null);
+            if (if (rest_index != null) count < required else count != required) {
                 std.debug.print("Pattern ", .{});
                 printPattern(pattern);
                 std.debug.print(" expects {d} items, received {d}\n", .{ items.len, count });
                 return shapeMismatch(@src().fn_name, &.{value});
             }
-            for (items, 0..) |item, i| try bindPattern(memory, a, item, if (value.tuple) |tuple| tuple[i] else try hofs.rowArgument(a, value, i));
+            for (items, 0..) |item, i| {
+                const index = if (rest_index != null and i > rest_index.?) count - (items.len - i) else i;
+                const bound = if (item == .rest) blk: {
+                    const end = count - (items.len - i - 1);
+                    if (value.tuple) |tuple| break :blk Value{ .tuple = tuple[index..end] };
+                    const shape = try a.dupe(usize, value.shape);
+                    shape[0] = end - index;
+                    var width: usize = 1;
+                    for (value.shape[1..]) |dimension| width *= dimension;
+                    break :blk Value{ .shape = shape, .data = value.data[index * width .. end * width] };
+                } else if (value.tuple) |tuple| tuple[index] else try hofs.rowArgument(a, value, index);
+                try bindPattern(memory, a, item, bound);
+            }
         },
     }
 }

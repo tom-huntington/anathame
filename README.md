@@ -336,6 +336,10 @@ Lambdas name their arguments before `->`: `(x -> x |> add,1)` or
 `{x, y -> x y |> add}`. The backslash scope forms accept the same headers.
 Patterns destructure array rows or tuple elements, including nested patterns:
 `{[a b], c -> a c |> couple tuple,b}` returns a tuple containing `[a c]` and `b`.
+Use one starred name to capture the remaining rows or tuple elements:
+`\[first *middle last] -> middle`. The remainder preserves its array shape
+or tuple type and may be empty. Tuple values support the same bracket patterns,
+including nested patterns.
 `tuple` constructs a pair of arbitrary values; `second` selects the second
 array row or tuple element.
 
