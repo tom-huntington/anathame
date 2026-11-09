@@ -202,8 +202,16 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             const parameters_start = lexer.offset;
             const parameters = try lambdaParameters(a, lexer, &local_names);
             const parameters_end = lexer.offset;
+            var body_lookahead = lexer.*;
+            const body_token = (try body_lookahead.next()) orelse return error.InvalidSyntax;
+            const explicit_body = std.mem.eql(u8, body_token, "(") or std.mem.eql(u8, body_token, "{") or
+                std.mem.eql(u8, body_token, "\\") or std.mem.eql(u8, body_token, "\\\\");
             const body = try sequence(a, lexer, end, is_implicit, false, &local_names);
             if (body.len == 0) return error.InvalidSyntax;
+            // Parameterized bodies are value expressions unless they declare a function scope.
+            if (parameters.len != 0 and !explicit_body) {
+                for (body) |instruction| if (!isValue(instruction)) return error.ExpectedLiteral;
+            }
             if (parameters.len == 0) {
                 for (body) |instruction| if (instruction == .literal) return error.ExpectedFunction;
             }
