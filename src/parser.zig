@@ -376,6 +376,24 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
     if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
     return bindFunctions(a, result.items, !root);
 }
+fn printArityInstruction(instruction: Instruction) void {
+    switch (instruction) {
+        .primitive, .variable => |name| std.debug.print("{s}", .{name}),
+        .partial => |partial| std.debug.print("{s} (partially applied)", .{partial.name}),
+        .component => |component| printArityInstruction(component.function.*),
+        .scope => |scope| {
+            std.debug.print("(", .{});
+            for (scope.instructions, 0..) |child, i| {
+                if (i > 0) std.debug.print(" ", .{});
+                printArityInstruction(child);
+            }
+            std.debug.print(")", .{});
+        },
+        .combinator => |combinator| std.debug.print("|{s}", .{@tagName(combinator)}),
+        else => std.debug.print("{s}", .{@tagName(instruction)}),
+    }
+}
+
 // Composition preserves the input arity; the other combinators declare it.
 fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     // Ordinary composition passes one result onward (B/B1). Only an
@@ -383,8 +401,10 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     var available = declared;
     var explicit_operands: usize = 0;
     var active_combinator: []const u8 = "b";
+    var argument_source: ?Instruction = null;
     for (body, 0..) |instruction, index| {
         if (instruction == .combinator) {
+            argument_source = null;
             active_combinator = @tagName(instruction.combinator);
             explicit_operands = switch (instruction.combinator) {
                 .b => 0,
@@ -401,12 +421,24 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
         } else if (@import("runtime.zig").functionArity(instruction)) |arity| {
             if (arity > available) {
                 std.debug.print("WrongNumberOfArguments: combinator |{s}: expected {d} argument(s), actual {d}.\n", .{ active_combinator, arity, available });
+                std.debug.print("  Function: ", .{});
+                printArityInstruction(instruction);
+                std.debug.print("\n  Arguments: ", .{});
+                if (argument_source) |source| {
+                    std.debug.print("result of ", .{});
+                    printArityInstruction(source);
+                    std.debug.print(" (composition passes one result onward).\n", .{});
+                } else {
+                    std.debug.print("{d} input argument(s) from the enclosing function.\n", .{available});
+                }
+                std.debug.print("  Argument values, types, and shapes are unknown during parsing.\n", .{});
                 return error.WrongNumberOfArguments;
             }
         }
         if (explicit_operands == 0) {
             available = 1;
             active_combinator = "b";
+            argument_source = instruction;
         }
     }
     var result_arity: ?usize = null;
