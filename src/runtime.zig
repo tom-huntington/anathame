@@ -566,19 +566,24 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
     }
 }
 
-/// Split the selected length-two axis, preserving the remaining array shape.
+/// Split the selected axis into two arguments, grouping items after the first.
 fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser.zig").Instruction, x: Value, dimensions: ?usize) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     const pair = if (x.tuple) |tuple| blk: {
         if (dimensions != null and dimensions.? != 0) return error.InvalidAxis;
-        if (tuple.len != 2) return error.WrongNumberOfArguments;
-        break :blk [2]Value{ tuple[0], tuple[1] };
+        if (tuple.len < 2) return error.WrongNumberOfArguments;
+        break :blk [2]Value{ tuple[0], if (tuple.len == 2) tuple[1] else .{ .tuple = tuple[1..] } };
     } else blk: {
         if (x.shape.len == 0) return error.WrongNumberOfArguments;
         const rank = dimensions orelse x.shape.len - 1;
         if (rank >= x.shape.len) return error.InvalidAxis;
-        if (x.shape[x.shape.len - rank - 1] != 2) return error.WrongNumberOfArguments;
+        const count = x.shape[x.shape.len - rank - 1];
+        if (count < 2) return error.WrongNumberOfArguments;
         const axial = @import("builtins/axial.zig");
+        if (count > 2) {
+            const parts = try axial.unconsComponents(memory.allocator(), x, rank);
+            break :blk [2]Value{ parts.tuple.?[0], parts.tuple.?[1] };
+        }
         break :blk [2]Value{
             try axial.selectComponents(memory.allocator(), x, .{ .data = &.{0} }, rank),
             try axial.selectComponents(memory.allocator(), x, .{ .data = &.{1} }, rank),
