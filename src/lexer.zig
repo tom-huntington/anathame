@@ -89,6 +89,10 @@ pub const Lexer = struct {
         if (std.mem.indexOfScalar(u8, "[],(){}_*=", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
+            if (b == '`') {
+                self.offset += 1;
+                break;
+            }
             if ((b == '+' or b == '-') and self.offset > start and (self.source[self.offset - 1] == 'e' or self.source[self.offset - 1] == 'E') and (std.ascii.isDigit(c) or c == '-')) continue;
             if (b == '+' or b == '-' or b == '/' or b == '<' or b == '>' or
                 (b == '&' and std.mem.startsWith(u8, self.source[self.offset..], "&&"))) break;

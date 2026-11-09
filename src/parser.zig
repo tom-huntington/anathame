@@ -1079,13 +1079,17 @@ fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnm
         const functions = try sequence(a, &function_lexer, null, false, false, names);
         if (functions.len != 1 or isValue(functions[0])) return error.ExpectedFunction;
         if (@import("runtime.zig").functionArity(functions[0]) != 1) return error.WrongNumberOfArguments;
-        const open = (try lexer.next()) orelse return error.InvalidSyntax;
-        if (!std.mem.eql(u8, open, "(")) return error.InvalidSyntax;
+        const inner_start = lexer.offset;
+        const next = (try lexer.next()) orelse return error.InvalidSyntax;
+        const grouped = std.mem.eql(u8, next, "(");
+        if (!grouped) lexer.offset = inner_start;
         const inner = try a.create(Pattern);
-        inner.* = try parsePattern(a, lexer, names, false);
+        inner.* = try patternAtom(a, lexer, names, split_names);
         if (inner.* == .rest) return error.InvalidSyntax;
-        const close = (try lexer.next()) orelse return error.InvalidSyntax;
-        if (!std.mem.eql(u8, close, ")")) return error.InvalidSyntax;
+        if (grouped) {
+            const close = (try lexer.next()) orelse return error.InvalidSyntax;
+            if (!std.mem.eql(u8, close, ")")) return error.InvalidSyntax;
+        }
         return .{ .extractor = .{ .function = functions[0], .pattern = inner } };
     }
     // Expose strand separators inside array patterns.
@@ -1139,6 +1143,7 @@ fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashM
             extractor_open = false;
             continue;
         }
+        extractor_open = false;
         if (extractor_depth > 0 and std.mem.eql(u8, token, ")")) {
             extractor_depth -= 1;
             continue;

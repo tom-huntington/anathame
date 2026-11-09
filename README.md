@@ -359,13 +359,13 @@ including nested patterns.
 `tuple` constructs a pair of arbitrary values; `second` selects the second
 array row or tuple element.
 
-An extractor `f` followed by a backtick and a parenthesized pattern applies
+An extractor `f` followed by a backtick and a pattern applies
 the unary function `f` to the incoming value before binding that pattern.
-For example, ``[3 2] |> \[sq`(a) b] -> [a b]`` returns `[9 2]`.
+For example, ``[3 2] |> \[sq`a b] -> [a b]`` returns `[9 2]`.
 Extractors can nest and wrap array patterns, such as
-``\reverse`([a b]) -> [a b]``. Named unary functions work too.
-The shorthand ``4 |> \sq`(a)`` returns `16`; an explicit body can use
-``4 |> \sq`(a) -> a+1`` to return `17`.
+``\reverse`[a b] -> [a b]``. Named unary functions work too.
+The shorthand ``4 |> \sq`a`` returns `16`; an explicit body can use
+``4 |> \sq`a -> a+1`` to return `17`.
 The backtick marks an inverse in the pattern: binding applies `f` forward.
 
 Arguments are written into one lookup table shared by calls within an evaluation.

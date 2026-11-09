@@ -520,9 +520,8 @@ fn callScope(memory: *ReservedBumpAllocator, scope: @FieldType(@import("parser.z
 fn printPattern(pattern: @import("parser.zig").Pattern) void {
     switch (pattern) {
         .extractor => |extractor| {
-            std.debug.print("<extractor>(", .{});
+            std.debug.print("<extractor>`", .{});
             printPattern(extractor.pattern.*);
-            std.debug.print(")", .{});
         },
         .name => |name| std.debug.print("{s}", .{name}),
         .rest => |name| std.debug.print("*{s}", .{name}),
