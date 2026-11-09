@@ -382,8 +382,10 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     // explicit combinator may supply two arguments to a later function.
     var available = declared;
     var explicit_operands: usize = 0;
+    var active_combinator: []const u8 = "b";
     for (body, 0..) |instruction, index| {
         if (instruction == .combinator) {
+            active_combinator = @tagName(instruction.combinator);
             explicit_operands = switch (instruction.combinator) {
                 .b => 0,
                 .d2, .phi1 => 2,
@@ -397,9 +399,15 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
         if (explicit_operands > 0 and available == 2) {
             explicit_operands -= 1;
         } else if (@import("runtime.zig").functionArity(instruction)) |arity| {
-            if (arity > available) return error.WrongNumberOfArguments;
+            if (arity > available) {
+                std.debug.print("WrongNumberOfArguments: combinator |{s}: expected {d} argument(s), actual {d}.\n", .{ active_combinator, arity, available });
+                return error.WrongNumberOfArguments;
+            }
         }
-        if (explicit_operands == 0) available = 1;
+        if (explicit_operands == 0) {
+            available = 1;
+            active_combinator = "b";
+        }
     }
     var result_arity: ?usize = null;
     var combinator_name: []const u8 = "";
@@ -421,7 +429,7 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
         }
     }
     if (result_arity) |arity| if (arity != declared) {
-        std.debug.print("WrongNumberOfArguments: combinator |{s} has arity {d}, but the enclosing function declares {d} argument(s).\n", .{ combinator_name, arity, declared });
+        std.debug.print("WrongNumberOfArguments: combinator |{s}: expected {d} argument(s), actual {d}.\n", .{ combinator_name, arity, declared });
         return error.WrongNumberOfArguments;
     };
 }
