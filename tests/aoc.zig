@@ -152,9 +152,12 @@ test "day 8" {
     try environment.set(allocator, "num_closest", input_env.@"1");
     defer environment.remove(allocator, "num_closest") catch unreachable;
 
+    // if (true) return error.SkipZigTest;
     try expected_result(input_env.@"0",
         \\ all_edges =\ length iota combinations
         \\ num_closest = "num_closest" |> env
-        \\ \ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix.check mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
-    , "40", @src());
+        \\ part1 =\ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
+        \\ part2 =\ ints2d \ Join Table quadrance (Fix mul.mat.min.max flatten Reduce max |sig indexin.mat) |sig select first Unc mul
+        \\ \ part1 ** part2
+    , "[40 25272]", @src());
 }
