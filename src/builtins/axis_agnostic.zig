@@ -294,20 +294,23 @@ pub fn where(a: std.mem.Allocator, value: Value, _: Value) !Value {
     errdefer a.free(data);
     var offset: usize = 0;
     for (value.data, 0..) |count, index| {
-        for (0..try natural(count)) |_| {
-            if (rank <= 1) {
-                data[offset] = @floatFromInt(if (rank == 0) 0 else index);
-            } else {
-                var remaining = index;
-                var axis = rank;
-                while (axis > 0) {
-                    axis -= 1;
-                    data[offset + axis] = @floatFromInt(remaining % value.shape[axis]);
-                    remaining /= value.shape[axis];
-                }
+        const repetitions = try natural(count);
+        if (repetitions == 0) continue;
+        const row = data[offset..][0..width];
+        if (rank <= 1) {
+            row[0] = @floatFromInt(index);
+        } else {
+            var remaining = index;
+            var axis = rank;
+            while (axis > 0) {
+                axis -= 1;
+                row[axis] = @floatFromInt(remaining % value.shape[axis]);
+                remaining /= value.shape[axis];
             }
-            offset += width;
         }
+        // Decode each coordinate once, then copy it for repeated occurrences.
+        for (1..repetitions) |repetition| @memcpy(data[offset + repetition * width ..][0..width], row);
+        offset += repetitions * width;
     }
     const shape = try a.alloc(usize, if (rank <= 1) 1 else 2);
     shape[0] = total;
@@ -336,7 +339,9 @@ pub fn unwhere(a: std.mem.Allocator, value: Value, _: Value) !Value {
     for (0..rows) |row| {
         var index: usize = 0;
         for (shape, 0..) |dim, axis| {
-            index = index * dim + (natural(value.data[if (coordinates) row * rank + axis else row]) catch unreachable);
+            // All indices were validated while inferring the shape above.
+            const coordinate: usize = @intFromFloat(value.data[if (coordinates) row * rank + axis else row]);
+            index = index * dim + coordinate;
         }
         data[index] += 1;
     }

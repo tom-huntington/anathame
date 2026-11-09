@@ -42,6 +42,16 @@ along axis -2; `.grids` (or `.mat`) selects matrix items along axis -3.
 `.outer` selects the leading axis, regardless of rank. Earlier axes are processed
 independently. Type suffixes such as `.c`, `.r3`, and `.c.rows` also work.
 
+`where` and `unwhere` operate on the whole array, independently of axis selection,
+following Uiua. `where` repeats each index by its nonnegative integer count:
+`[0 2 1]` becomes `[1 1 2]`. For higher-rank arrays it returns coordinate rows
+in leading-to-trailing axis order: `[0_2 1_0]` becomes `[0_1 0_1 1_0]`.
+A scalar count produces that many zero indices.
+`unwhere` counts scalar or vector indices, or rows of a coordinate matrix,
+including duplicates and unsorted indices. Each result dimension is one greater
+than the largest coordinate on that axis, so trailing zeros are not recovered
+by a `where unwhere` round trip. Both reject negative or fractional inputs.
+
 `first` and `last` alias `select.r,0` and `select.r,-1`, selecting the first or
 last element of each trailing vector. `first.rows` and `last.rows` select whole
 rows; `first.outer` and `last.outer` select along the leading axis.
