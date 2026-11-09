@@ -179,7 +179,7 @@ test "day 9" {
         \\ proj =\ area negate
         \\ normalize =\ UnDer transpose sort
         \\ optimize =\ Sort.by proj
-        \\ \ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) \\ green -> Scan,0 { ([[p q] [r s]] -> green |> Fold,1 { ([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not |d and }) |d or }
+        \\ \ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) Log  \\ green ->\ Scan.mat,0 { ([[p q] [r s]] -> green |> Fold.mat,1 { ([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not |d and }) |d or }
         //
     , null, @src());
 }
