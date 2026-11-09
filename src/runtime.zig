@@ -261,17 +261,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
         }
         if (instruction == .unc) {
             if (functionArity(instruction.unc.*) != 2) return error.WrongNumberOfArguments;
-            const pair = if (first_argument.tuple) |tuple| blk: {
-                if (tuple.len != 2) return error.WrongNumberOfArguments;
-                break :blk [2]Value{ tuple[0], tuple[1] };
-            } else blk: {
-                if (first_argument.shape.len == 0 or first_argument.shape[0] != 2) return error.WrongNumberOfArguments;
-                break :blk [2]Value{
-                    try hofs.rowArgument(memory.allocator(), first_argument, 0),
-                    try hofs.rowArgument(memory.allocator(), first_argument, 1),
-                };
-            };
-            const temporary = try evaluateScope(memory, &.{instruction.unc.*}, pair[0], pair[1]);
+            const temporary = try uncOperation(memory, instruction.unc, first_argument, 0);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -501,6 +491,27 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
     }
 }
 
+/// Split the selected length-two axis, preserving the remaining array shape.
+fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser.zig").Instruction, x: Value, dimensions: ?usize) anyerror!Value {
+    if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+    const pair = if (x.tuple) |tuple| blk: {
+        if (dimensions != null and dimensions.? != 0) return error.InvalidAxis;
+        if (tuple.len != 2) return error.WrongNumberOfArguments;
+        break :blk [2]Value{ tuple[0], tuple[1] };
+    } else blk: {
+        if (x.shape.len == 0) return error.WrongNumberOfArguments;
+        const rank = dimensions orelse x.shape.len - 1;
+        if (rank >= x.shape.len) return error.InvalidAxis;
+        if (x.shape[x.shape.len - rank - 1] != 2) return error.WrongNumberOfArguments;
+        const axial = @import("builtins/axial.zig");
+        break :blk [2]Value{
+            try axial.selectComponents(memory.allocator(), x, .{ .data = &.{0} }, rank),
+            try axial.selectComponents(memory.allocator(), x, .{ .data = &.{1} }, rank),
+        };
+    };
+    return evaluateScope(memory, &.{function.*}, pair[0], pair[1]);
+}
+
 /// Component dimensions are trailing storage dimensions, after the operated axis.
 fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
     const selection = c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "select");
@@ -510,6 +521,12 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
             !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
         return @import("builtins/axial.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, c.dimensions);
+    }
+    if (c.function.* == .unc) {
+        if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
+        if (x.tuple == null and (x.shape.len < c.type_shape.len or
+            !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
+        return uncOperation(memory, c.function.unc, x, c.dimensions);
     }
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len < c.type_shape.len or
