@@ -190,8 +190,8 @@ copy avoidance. No input mutation or ownership flags are used.
 Higher-order functions start with capitals: `Partition id` groups positive
 marker runs and applies `id` to each group. `Partials add` computes inclusive
 prefix sums along the innermost dimension independently: `[[1 2 3] [4 5 6]]`
-becomes `[[1 3 6] [4 9 15]]`. Partials passes the accumulator first and the next
-scalar second to its binary function, which must return a scalar. Scalars
+becomes `[[1 3 6] [4 9 15]]`. Partials passes the next scalar first and the accumulator
+second to its binary function, which must return a scalar. Scalars
 keep their shape; Partials requires non-empty input.
 `Scan add` takes an array and a scalar seed: `[1 2 3]` with seed `10`
 produces `[11 13 16]`. It preserves the input shape, including empty arrays,
@@ -248,8 +248,10 @@ or `0` otherwise. For example, `Sort.with less` sorts ascending and
 must be non-empty. Scalars remain scalars.
 `Fold add` takes an array first and a scalar seed second: `[1 2 3]` with
 seed `10` produces `16`. Each innermost vector starts from the seed;
-empty vectors return the seed. `sum` aliases `Fold,0 add`, so empty sums return `0`. Both pass the accumulator first and the next
-scalar second to their operand, which must return a scalar.
+empty vectors return the seed. `sum` aliases `Fold,0 add`, so empty sums return `0`. Both pass the next scalar first and the accumulator
+second to their operand, which must return a scalar.
+
+For all four operations, `f |delta or` and `f |delta and` skip `f` once the accumulator reaches `1` or `0`, respectively. Scans repeat that value for the remaining prefixes. Component-axis operations stop when every accumulator element has reached the absorbing value.
 
 `Stencil,3 sum` applies `sum` to overlapping windows of three leading-axis
 rows. With a unary operand, `Stencil` without a bound size is dyadic and

@@ -588,8 +588,9 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
                 const checkpoint = memory.checkpoint();
                 var accumulator: Value = if (seeded) y else .{ .data = x.data[start..][0..cell_size], .shape = cell_shape };
                 for (if (seeded) @as(usize, 0) else 1..width) |j| {
+                    if (hofs.booleanAbsorbed(hofs.booleanDelta(function), accumulator)) break;
                     const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
-                    const result = try evaluateScope(memory, &.{function.*}, accumulator, next);
+                    const result = try evaluateScope(memory, &.{function.*}, next, accumulator);
                     accumulator = try @import("memory.zig").ReturnImpl(memory, checkpoint, result);
                 }
                 if (accumulator.tuple != null) return error.ShapeMismatch;
@@ -624,10 +625,19 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
             const output_start = i * output_width * cell_size;
             if (!final_only and output_width > 0) @memcpy(data[output_start..][0..cell_size], accumulator);
             for (if (seeded) @as(usize, 0) else 1..width - @as(usize, if (exclusive and width > 0) 1 else 0)) |j| {
+                if (hofs.booleanAbsorbed(hofs.booleanDelta(function), .{ .data = accumulator, .shape = cell_shape })) {
+                    if (!final_only) {
+                        for (j..width - @as(usize, if (exclusive and width > 0) 1 else 0)) |remaining| {
+                            const offset = output_start + (remaining + @as(usize, if (seeded) 1 else 0)) * cell_size;
+                            @memcpy(data[offset..][0..cell_size], accumulator);
+                        }
+                    }
+                    break;
+                }
                 const checkpoint = memory.checkpoint();
                 const acc: Value = .{ .data = accumulator, .shape = cell_shape };
                 const next: Value = .{ .data = x.data[start + j * cell_size ..][0..cell_size], .shape = cell_shape };
-                const result = try evaluateScope(memory, &.{function.*}, acc, next);
+                const result = try evaluateScope(memory, &.{function.*}, next, acc);
                 if (result.tuple != null or !std.mem.eql(usize, result.shape, cell_shape) or result.data.len != cell_size) return error.ShapeMismatch;
                 @memcpy(accumulator, result.data);
                 memory.restore(checkpoint);
