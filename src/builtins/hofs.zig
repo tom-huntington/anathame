@@ -282,12 +282,71 @@ pub fn booleanFold(a: std.mem.Allocator, x: Value, seed: ?Value, axis: usize, fi
     return .{ .data = data, .shape = shape };
 }
 
+/// Seeded folds keep accumulator values independent of input cell shape.
+pub fn seededFold(memory: *ReservedBumpAllocator, x: Value, seed: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool, exclusive: bool, include_seed: bool) anyerror!Value {
+    if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
+    if (x.tuple != null or seed.tuple != null) return error.ExpectedArray;
+    const a = memory.allocator();
+    const cell_shape = x.shape[axis + 1 ..];
+    if (std.mem.eql(usize, seed.shape, cell_shape)) {
+        if (booleanOp(function)) |is_or| return booleanFold(a, x, seed, axis, final_only, exclusive, include_seed or exclusive, is_or);
+    }
+    var cell_size: usize = 1;
+    for (cell_shape) |dim| cell_size *= dim;
+    var count: usize = 1;
+    for (x.shape[0..axis]) |dim| count *= dim;
+    const width = x.shape[axis];
+    const output_width = if (final_only) 1 else width + @as(usize, if (include_seed and !exclusive) 1 else 0);
+    var data: std.ArrayList(f64) = .empty;
+    var result_shape: ?[]const usize = if (final_only) null else seed.shape;
+    for (0..count) |i| {
+        var accumulator = if (final_only) seed else Value{ .data = try a.dupe(f64, seed.data), .shape = seed.shape };
+        const lane_checkpoint = memory.checkpoint();
+        for (0..width) |j| {
+            if (final_only and booleanAbsorbed(booleanD(function), accumulator)) break;
+            if (!final_only and (exclusive or (include_seed and j == 0))) try data.appendSlice(a, accumulator.data);
+            const checkpoint = memory.checkpoint();
+            if (!booleanAbsorbed(booleanD(function), accumulator) and !(exclusive and j + 1 == width)) {
+                const next: Value = .{ .data = x.data[(i * width + j) * cell_size ..][0..cell_size], .shape = cell_shape };
+                const result = try evaluateScope(memory, &.{function.*}, accumulator, next);
+                if (final_only) {
+                    accumulator = try @import("../memory.zig").ReturnImpl(memory, lane_checkpoint, result);
+                } else {
+                    if (result.tuple != null or !std.mem.eql(usize, result.shape, seed.shape) or result.data.len != seed.data.len) return error.ShapeMismatch;
+                    @memcpy(@constCast(accumulator.data), result.data);
+                    memory.restore(checkpoint);
+                }
+            }
+            if (accumulator.tuple != null) return error.ExpectedArray;
+            if (!final_only) {
+                if (!std.mem.eql(usize, accumulator.shape, seed.shape)) return error.ShapeMismatch;
+                if (!exclusive) try data.appendSlice(a, accumulator.data);
+            }
+        }
+        if (final_only) {
+            if (result_shape) |expected| {
+                if (!std.mem.eql(usize, expected, accumulator.shape)) return error.ShapeMismatch;
+            } else result_shape = accumulator.shape;
+            try data.appendSlice(a, accumulator.data);
+        } else if (width == 0 and include_seed and !exclusive) try data.appendSlice(a, seed.data);
+    }
+    const trailing_shape = result_shape orelse seed.shape;
+    const shape = if (final_only)
+        try std.mem.concat(a, usize, &.{ x.shape[0..axis], trailing_shape })
+    else
+        try std.mem.concat(a, usize, &.{ x.shape[0..axis], &.{output_width}, trailing_shape });
+    return .{ .data = try data.toOwnedSlice(a), .shape = shape };
+}
+
 /// Left prefixes along each innermost vector, optionally starting from a seed.
 pub fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *const @import("../parser.zig").Instruction, exclusive: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
     if (seed) |initial| {
-        if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
+        const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+        var result = try seededFold(memory, input, initial, function, input.shape.len - 1, false, exclusive, false);
+        if (x.shape.len == 0) result.shape = result.shape[1..];
+        return result;
     } else if (x.data.len == 0) return error.EmptyArray;
     if (booleanOp(function)) |is_or| {
         const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
@@ -328,7 +387,8 @@ pub fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: 
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null) return error.ExpectedArray;
     if (seed) |initial| {
-        if (initial.tuple != null or initial.shape.len != 0 or initial.data.len != 1) return error.ExpectedScalar;
+        const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+        return seededFold(memory, input, initial, function, input.shape.len - 1, true, false, false);
     } else if (x.data.len == 0) return error.EmptyArray;
     if (booleanOp(function)) |is_or| {
         const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;

@@ -584,7 +584,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (body.len != 1 or body[0] != .scope or body[0].scope.macro_definition != null) return error.InvalidSyntax;
             instruction = body[0];
         }
-        const component = if (instruction == .component) instruction.component else null;
+        var component = if (instruction == .component) instruction.component else null;
         if (component) |c| instruction = c.function.*;
         const dynamic = if (instruction == .dynamic_applied and instruction.dynamic_applied.function.* == .primitive) instruction.dynamic_applied else null;
         if (dynamic) |application| instruction = .{ .partial = .{ .name = application.function.primitive, .argument = .{ .data = &.{0} } } };
@@ -739,12 +739,12 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 tuple_function.?.* = mapper;
             }
             var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
+            // Bind the component axis before applying the seed.
             if (component) |c| {
-                if (std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
-                    const selected = try a.create(Instruction);
-                    selected.* = bound;
-                    bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
-                }
+                const selected = try a.create(Instruction);
+                selected.* = bound;
+                bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                component = null;
             }
             if (instruction == .partial) {
                 const scope = try a.create(Instruction);

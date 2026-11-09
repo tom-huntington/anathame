@@ -614,7 +614,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else if (is_scan) c.function.scan.function else c.function.partials;
         if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
         if (!seeded and width == 0) return error.EmptyArray;
-        if (seeded and (y.tuple != null or !std.mem.eql(usize, y.shape, cell_shape))) return error.ShapeMismatch;
+        if (seeded) return hofs.seededFold(memory, x, y, function, axis, final_only, is_scan and c.function.scan.exclusive, true);
         if (hofs.booleanOp(function)) |is_or| return hofs.booleanFold(a, x, if (seeded) y else null, axis, final_only, is_scan and c.function.scan.exclusive, seeded, is_or);
         if (final_only and count > 0) {
             var data: std.ArrayList(f64) = .empty;
