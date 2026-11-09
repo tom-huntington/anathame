@@ -236,6 +236,11 @@ select the cells to compare lexicographically: `sort.rows` sorts rows,
 axis. Scalar elements are the default. Any axes before the
 selected axis are processed independently; the array shape is preserved.
 
+`UnDer f g` applies `f`, then `g`, then the inverse of `f`. Currently only
+`transpose` has a registered inverse (itself). For example,
+`UnDer transpose sort` sorts each column of a matrix. A dyadic `g` receives
+both inputs transformed by `f`; the result is transformed back once.
+
 `Sort.by f` aliases `(f rise |sig select)`: `f` produces ascending keys
 for the leading-axis rows, which are then reordered by those keys.
 `Sort.with p` stably sorts leading-axis rows using a dyadic predicate:

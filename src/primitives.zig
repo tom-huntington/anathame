@@ -1,6 +1,16 @@
 const std = @import("std");
 const Value = @import("runtime.zig").Value;
 pub const Function = *const fn (std.mem.Allocator, Value, Value) anyerror!Value;
+pub const inverses = std.StaticStringMap([]const u8).initComptime(.{
+    .{ "transpose", "transpose" },
+});
+
+comptime {
+    for (inverses.keys(), inverses.values()) |name, inverse| {
+        const original = inverses.get(inverse) orelse @compileError("Missing inverse mapping");
+        if (!std.mem.eql(u8, name, original)) @compileError("Inverse mapping must be an involution");
+    }
+}
 pub fn arity(name: []const u8) usize {
     if (std.mem.eql(u8, name, "env")) return 1;
     if (std.mem.eql(u8, name, "deduplicate")) return 1;
@@ -275,7 +285,7 @@ pub const names = [_][]const u8{
     "tuples",
     "type",
     "un",
-    "under",
+    "UnDer",
     "unique",
     "utf8",
     "validate",

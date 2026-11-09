@@ -326,6 +326,20 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
+        if (instruction == .under) {
+            const under = instruction.under;
+            const transformed_x = try evaluateScope(memory, &.{under.transform.*}, first_argument, .{});
+            const transformed_y = if (functionArity(under.function.*) == 2)
+                try evaluateScope(memory, &.{under.transform.*}, second_argument, .{})
+            else
+                Value{};
+            const modified = try evaluateScope(memory, &.{under.function.*}, transformed_x, transformed_y);
+            const temporary = try evaluateScope(memory, &.{.{ .primitive = under.inverse }}, modified, .{});
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .sort_with) {
             const temporary = try hofs.sortWith(memory, first_argument, instruction.sort_with);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -433,6 +447,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .primitive => |name| @import("primitives.zig").arity(name),
         .partial, .applied, .dynamic_applied, .cases => 1,
         .log, .logshape => |f| functionArity(f.*),
+        .under => |u| functionArity(u.function.*),
         .tuples => 2,
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,

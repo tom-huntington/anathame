@@ -12,6 +12,7 @@ pub const Instruction = union(enum) {
     primitive: []const u8,
     partition: *const Instruction,
     sort_with: *const Instruction,
+    under: struct { transform: *const Instruction, function: *const Instruction, inverse: []const u8 },
     scan: struct { function: *const Instruction, exclusive: bool = false },
     partials: *const Instruction,
     rows: *const Instruction,
@@ -579,7 +580,26 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             .partial => |partial| partial.name,
             else => "",
         };
-        if (std.mem.eql(u8, name, "Switch")) {
+        if (std.mem.eql(u8, name, "UnDer")) {
+            const transform = result.pop() orelse return error.ExpectedFunction;
+            const function = result.pop() orelse return error.ExpectedFunction;
+            if (transform != .primitive) return error.NoInverse;
+            const inverse = @import("primitives.zig").inverses.get(transform.primitive) orelse return error.NoInverse;
+            const arity = @import("runtime.zig").functionArity(function) orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(transform) != 1 or (arity != 1 and arity != 2)) return error.WrongNumberOfArguments;
+            if (instruction == .partial and arity != 2) return error.WrongNumberOfArguments;
+            const transform_ptr = try a.create(Instruction);
+            transform_ptr.* = transform;
+            const function_ptr = try a.create(Instruction);
+            function_ptr.* = function;
+            var bound: Instruction = .{ .under = .{ .transform = transform_ptr, .function = function_ptr, .inverse = inverse } };
+            if (instruction == .partial) {
+                const under = try a.create(Instruction);
+                under.* = bound;
+                bound = .{ .applied = .{ .function = under, .argument = instruction.partial.argument } };
+            }
+            try result.append(a, bound);
+        } else if (std.mem.eql(u8, name, "Switch")) {
             const yes = result.pop() orelse return error.ExpectedFunction;
             const no = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(yes) != 1 or @import("runtime.zig").functionArity(no) != 1) return error.WrongNumberOfArguments;
