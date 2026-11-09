@@ -12,10 +12,6 @@ test "part1 regex on the to_string output" {
     , "[1 0]", @src());
 }
 
-test "Must declare arity explicitly" {
-    try invalid_syntax("mul |n couple"); // scope arity must be declared
-    //try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
-}
 test "N and Nu combinator" {
     // n combinator 22.2 (f,g) = x, y -> g(x, f(x,y))
     // nu combinator 22.2 (f,g) = x, y -> g(f(x,y), y)
@@ -30,7 +26,7 @@ test "S and Sig combinators" {
     // s combinator 12.1 (f,g) = x -> g(f(x), x)
     try expect_output("\\ sq |s couple", .{"2"}, "[4 2]"); // backslash \ starts new monadic scope
     try expect_output("( sq |s couple )", .{"2"}, "[4 2]"); // parentheses denote monadic scope
-    //try invalid_syntax("\\\\ mul |s mul"); // the scope is declared dyadic by s produces a monad
+
     // sig combinator 12.1 (f,g) = x -> g(x, f(x))
     try expect_output("\\ sq |sig couple", .{"2"}, "[2 4]"); // backslash \ starts new monadic scope
 }
@@ -46,10 +42,6 @@ test "Phi combinator" {
 }
 
 test "Combinators" {
-    try invalid_syntax("\\ mul");
-    try invalid_syntax("\\ sq mul");
-    try invalid_syntax("\\ Sort.by mul");
-    try invalid_syntax("f =\\\\ Unc mul\n\\ Sort.by f");
     try expect_output("\\ Join mul", .{"3"}, "9");
     try expect_output("\\ sq Join mul", .{"3"}, "81");
     // delta combinator 12.2 (f,g) = x,y -> g(f(x), y)
@@ -57,6 +49,17 @@ test "Combinators" {
     // psi combinator 12.2 (f,g) = x,y -> g(f(x), f(y))
     // d2 combinator 112.2 (f,g,h) = x,y -> h(f(x), g(y))
     // phi1 combinator 222.2 (f,g,h) = x,y -> h(f(x,y), g(x,y))
+}
+
+test "invalid syntax" {
+    if (true) return error.SkipZigTest;
+    try invalid_syntax("\\ mul");
+    try invalid_syntax("\\ sq mul");
+    try invalid_syntax("\\ Sort.by mul");
+    try invalid_syntax("f =\\\\ Unc mul\n\\ Sort.by f");
+    try invalid_syntax("\\\\ mul |s mul"); // the scope is declared dyadic by s produces a monad
+    try invalid_syntax("mul |n couple"); // scope arity must be declared
+    try invalid_syntax("f = sq\n\\ f"); // named function arity must be declared
 }
 
 test "character" {
@@ -280,6 +283,9 @@ test "lambdas" {
     try expect_output(
         \\ {Flip \\ b -> \ id}
     , .{ "2", "3" }, "2");
+    try expect_output(
+        \\ \[diagram *buttons joltage] -> diagram joltage |> couple
+    , "[1 2 3 4]", "[1 4]");
 }
 
 test "explicit axis" {

@@ -183,3 +183,19 @@ test "day 9" {
         \\ \ part1 ** part2
     , "[50 24]", @src());
 }
+
+// incidence matrix
+// Characteristic vector or indicator vector
+
+test "day 10" {
+    const example =
+        \\$ [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
+        \\$ [...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
+        \\$ [.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}
+    ;
+    try expected_result(example,
+        //\\ \ Partition,@\n \ part1
+        \\ \ split,@\n first split,@ \[diagram *buttons joltage] -> 1
+        //not_eq,@ |sig Partition (digits length)
+    , null, @src());
+}
