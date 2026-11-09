@@ -161,3 +161,25 @@ test "day 8" {
         \\ \ part1 ** part2
     , "[40 25272]", @src());
 }
+
+test "day 9" {
+    const example =
+        \\$ 7,1
+        \\$ 11,1
+        \\$ 11,7
+        \\$ 9,7
+        \\$ 9,5
+        \\$ 2,5
+        \\$ 2,3
+        \\$ 7,3
+    ;
+    try expected_result(example,
+        \\ area =\ Unc.vec {sub abs} add,1 Unc mul
+        \\ part1 =\ ints2d combinations.rows area Reduce max
+        \\ proj =\ area negate
+        \\ normalize =\ UnDer transpose sort
+        \\ optimize =\ Sort.by proj
+        \\ \ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) \\ green -> Scan,0 { ([[p q] [r s]] -> green |> Fold,1 { ([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not |d and }) |d or }
+        //
+    , null, @src());
+}
