@@ -469,3 +469,48 @@ pub fn repeat(memory: *ReservedBumpAllocator, x: Value, y: Value, r: @FieldType(
     if (r.second != null) return @import("../primitives.zig").lookup("couple").?(memory.allocator(), left, right);
     return left;
 }
+
+/// Stable leading-axis sort using a strict comes-before predicate on rows.
+pub fn sortWith(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
+    if (x.tuple != null) return error.InvalidInput;
+    if (x.shape.len == 0 or x.shape[0] < 2) return x;
+    const a = memory.allocator();
+    const count = x.shape[0];
+    const indices = try a.alloc(usize, count);
+    const scratch = try a.alloc(usize, count);
+    for (indices, 0..) |*index, i| index.* = i;
+    var run: usize = 1;
+    while (run < count) : (run *= 2) {
+        var start: usize = 0;
+        while (start < count) : (start += 2 * run) {
+            const middle = @min(start + run, count);
+            const end = @min(start + 2 * run, count);
+            var left = start;
+            var right = middle;
+            for (scratch[start..end]) |*target| {
+                const take_right = left < middle and right < end and blk: {
+                    const checkpoint = memory.checkpoint();
+                    defer memory.restore(checkpoint);
+                    const rhs = try rowArgument(a, x, indices[right]);
+                    const lhs = try rowArgument(a, x, indices[left]);
+                    const comparison = try evaluateScope(memory, &.{function.*}, rhs, lhs);
+                    if (comparison.tuple != null or comparison.shape.len != 0 or comparison.data.len != 1) return error.InvalidInput;
+                    if (comparison.data[0] != 0 and comparison.data[0] != 1) return error.InvalidInput;
+                    break :blk comparison.data[0] == 1;
+                };
+                if (left == middle or take_right) {
+                    target.* = indices[right];
+                    right += 1;
+                } else {
+                    target.* = indices[left];
+                    left += 1;
+                }
+            }
+        }
+        @memcpy(indices, scratch);
+    }
+    const width = x.data.len / count;
+    const data = try a.alloc(f64, x.data.len);
+    for (indices, 0..) |source, target| @memcpy(data[target * width ..][0..width], x.data[source * width ..][0..width]);
+    return .{ .data = data, .shape = x.shape };
+}

@@ -232,6 +232,8 @@ pub const names = [_][]const u8{
     "Join",
     "Switch",
     "Filter",
+    "Sort.by",
+    "Sort.with",
     "Unc",
     "Scan",
     "Partials",

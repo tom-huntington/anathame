@@ -232,6 +232,13 @@ select the cells to compare lexicographically: `sort.rows` sorts rows,
 axis. Scalar elements are the default. Any axes before the
 selected axis are processed independently; the array shape is preserved.
 
+`Sort.by f` aliases `(f rise |sig select)`: `f` produces ascending keys
+for the leading-axis rows, which are then reordered by those keys.
+`Sort.with p` stably sorts leading-axis rows using a dyadic predicate:
+`p(left, right)` must return scalar `1` when left comes before right,
+or `0` otherwise. For example, `Sort.with less` sorts ascending and
+`Sort.with greater` sorts descending. Equal items retain their input order.
+
 `Reduce add` folds each innermost vector from left to right;
 `[[1 2] [3 4]]` becomes `[3 7]`. Its operand must be dyadic and its input
 must be non-empty. Scalars remain scalars.

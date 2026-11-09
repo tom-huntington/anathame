@@ -183,6 +183,8 @@ test "Aliases" {
     try test_alias("Stencil,2 add", "{Stencil add},2");
     try test_alias("total", "(flatten sum)");
     try test_alias("rsub", "{Flip sub}");
+    try test_alias("Sort.by Unc mul", "(Unc mul rise |sig select)");
+    try expect_output("\\ Sort.by Unc mul", .{"[1_5 1_3 1_2]"}, .{"[1_2 1_3 1_5]"});
 }
 
 test "Regex" {

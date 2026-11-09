@@ -11,6 +11,7 @@ pub const Instruction = union(enum) {
     cases: Value,
     primitive: []const u8,
     partition: *const Instruction,
+    sort_with: *const Instruction,
     scan: struct { function: *const Instruction, exclusive: bool = false },
     partials: *const Instruction,
     rows: *const Instruction,
@@ -598,6 +599,21 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 .fixed = fixed,
                 .check = std.mem.endsWith(u8, name, ".check"),
             } });
+        } else if (std.mem.eql(u8, name, "Sort.by")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) == null) return error.ExpectedFunction;
+            try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
+                operand,
+                .{ .primitive = "rise" },
+                .{ .combinator = .sig },
+                .{ .primitive = "select" },
+            }) } });
+        } else if (std.mem.eql(u8, name, "Sort.with")) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            try result.append(a, .{ .sort_with = function });
         } else if (std.mem.eql(u8, name, "Filter")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
