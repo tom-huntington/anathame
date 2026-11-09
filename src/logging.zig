@@ -52,3 +52,29 @@ pub fn printIteration(iteration: usize) !void {
     try output.interface.print("{d}\n", .{iteration});
     try output.interface.flush();
 }
+
+/// Print argument or result shapes using the same labels as value logging.
+pub fn printShapes(x: Value, y: ?Value, prefix: ?[]const u8) !void {
+    @import("console.zig").init();
+    var buffer: [4096]u8 = undefined;
+    var output = std.Io.File.Writer.init(.stdout(), std.Io.Threaded.global_single_threaded.io(), &buffer);
+    const writer = &output.interface;
+    if (prefix) |label| try writer.writeAll(label);
+    if (y != null) try writer.writeAll("left arg:\n");
+    try writeShape(writer, x);
+    if (y) |right| {
+        try writer.writeAll("\nright arg:\n");
+        try writeShape(writer, right);
+    }
+    try writer.writeAll("\n");
+    try writer.flush();
+}
+
+fn writeShape(writer: *std.Io.Writer, value: Value) !void {
+    try writer.writeAll("[");
+    for (value.shape, 0..) |dimension, i| {
+        if (i > 0) try writer.writeAll(" ");
+        try writer.print("{d}", .{dimension});
+    }
+    try writer.writeAll("]");
+}

@@ -95,6 +95,12 @@ pub fn log(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return x;
 }
 
+/// Print a value's shape and return it unchanged.
+pub fn logshape(_: std.mem.Allocator, x: Value, _: Value) !Value {
+    try @import("../logging.zig").printShapes(x, null, null);
+    return x;
+}
+
 /// Print both arguments and return the right argument unchanged.
 pub fn logr(a: std.mem.Allocator, x: Value, y: Value) !Value {
     try @import("../logging.zig").printArguments(a, x, y, false, null);

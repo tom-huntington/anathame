@@ -273,14 +273,19 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
-        if (instruction == .log) {
-            const function = instruction.log.*;
-            _ = if (functionArity(function) == 2)
-                try @import("builtins/axis_agnostic.zig").logl(memory.allocator(), first_argument, second_argument)
-            else
-                try @import("builtins/axis_agnostic.zig").log(memory.allocator(), first_argument, second_argument);
+        if (instruction == .log or instruction == .logshape) {
+            const shapes = instruction == .logshape;
+            const function = if (shapes) instruction.logshape.* else instruction.log.*;
+            if (shapes) {
+                try @import("logging.zig").printShapes(first_argument, if (functionArity(function) == 2) second_argument else null, null);
+            } else {
+                _ = if (functionArity(function) == 2)
+                    try @import("builtins/axis_agnostic.zig").logl(memory.allocator(), first_argument, second_argument)
+                else
+                    try @import("builtins/axis_agnostic.zig").log(memory.allocator(), first_argument, second_argument);
+            }
             const temporary = try evaluateScope(memory, &.{function}, first_argument, second_argument);
-            try @import("logging.zig").printResult(memory.allocator(), temporary);
+            if (shapes) try @import("logging.zig").printShapes(temporary, null, "result:\n") else try @import("logging.zig").printResult(memory.allocator(), temporary);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -427,7 +432,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .component => |c| functionArity(c.function.*),
         .primitive => |name| @import("primitives.zig").arity(name),
         .partial, .applied, .dynamic_applied, .cases => 1,
-        .log => |f| functionArity(f.*),
+        .log, .logshape => |f| functionArity(f.*),
         .tuples => 2,
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,

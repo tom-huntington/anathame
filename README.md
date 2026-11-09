@@ -2,6 +2,10 @@
 
 Requires Zig 0.17.
 
+`logshape` prints the input shape and returns the value unchanged.
+`Logshape` wraps a function like `Log`, printing argument and result shapes.
+Shapes are printed as dimension lists, such as `[2 3]` or `[]` for scalars.
+
 `env` reads an environment variable as one language literal: `"num_closest" |> env`
 returns the number `10` when its value is `10`. Arrays such as `[1 2 3]` and
 quoted strings such as `"hello"` are also accepted. Plain unquoted text is not

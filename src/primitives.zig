@@ -241,6 +241,7 @@ pub const names = [_][]const u8{
     "Fold",
     "MapAccum",
     "Log",
+    "Logshape",
     "Repeat",
     "Repeat.check",
     "Fix",

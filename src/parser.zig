@@ -21,6 +21,7 @@ pub const Instruction = union(enum) {
     switch_fn: struct { yes: *const Instruction, no: *const Instruction },
     unc: *const Instruction,
     log: *const Instruction,
+    logshape: *const Instruction,
     reduce: *const Instruction,
     fold: *const Instruction,
     map_accum: struct { map: *const Instruction, update: *const Instruction },
@@ -542,13 +543,13 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 flipped.* = bound;
                 try result.append(a, .{ .applied = .{ .function = flipped, .argument = instruction.partial.argument } });
             } else try result.append(a, bound);
-        } else if (std.mem.eql(u8, name, "Log")) {
+        } else if (std.mem.eql(u8, name, "Log") or std.mem.eql(u8, name, "Logshape")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             const arity = @import("runtime.zig").functionArity(operand) orelse return error.ExpectedFunction;
             if (instruction == .partial and arity != 2) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = operand;
-            var bound: Instruction = .{ .log = function };
+            var bound: Instruction = if (std.mem.eql(u8, name, "Logshape")) .{ .logshape = function } else .{ .log = function };
             if (instruction == .partial) {
                 const logged = try a.create(Instruction);
                 logged.* = bound;
