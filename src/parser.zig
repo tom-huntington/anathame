@@ -987,9 +987,27 @@ fn shadowed() error{ShadowedNamesNotAllowed} {
     return error.ShadowedNamesNotAllowed;
 }
 
+// A strand adds an array level: [x_y u_v] matches [[x y] [u v]].
 fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction), split_names: bool) anyerror!Pattern {
+    const first = try patternAtom(a, lexer, names, split_names);
+    if (!split_names) return first;
+    var items: std.ArrayList(Pattern) = .empty;
+    while (true) {
+        const offset = lexer.offset;
+        const separator = try lexer.next();
+        if (separator == null or !std.mem.eql(u8, separator.?, "_")) {
+            lexer.offset = offset;
+            break;
+        }
+        if (items.items.len == 0) try items.append(a, first);
+        try items.append(a, try patternAtom(a, lexer, names, true));
+    }
+    return if (items.items.len == 0) first else .{ .items = try items.toOwnedSlice(a) };
+}
+
+fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnmanaged(Instruction), split_names: bool) anyerror!Pattern {
     var token = (try lexer.next()) orelse return error.InvalidSyntax;
-    // Underscores separate names in patterns, while ordinary identifiers retain them.
+    // Expose strand separators inside array patterns.
     if (if (split_names) std.mem.indexOfScalar(u8, token, '_') else null) |index| {
         lexer.offset -= token.len - index;
         token = token[0..index];
@@ -1000,7 +1018,6 @@ fn parsePattern(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUn
             const offset = lexer.offset;
             const next = (try lexer.next()) orelse return error.InvalidSyntax;
             if (std.mem.eql(u8, next, "]")) break;
-            if (std.mem.eql(u8, next, "_")) continue;
             lexer.offset = offset;
             try items.append(a, try parsePattern(a, lexer, names, true));
         }
@@ -1023,7 +1040,7 @@ fn lambdaParameters(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashM
             found = true;
             break;
         }
-        if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",")) break;
+        if (!validName(token) and !std.mem.eql(u8, token, "[") and !std.mem.eql(u8, token, "]") and !std.mem.eql(u8, token, ",") and !std.mem.eql(u8, token, "_")) break;
     }
     if (!found) return &.{};
     var parameters: std.ArrayList(Pattern) = .empty;

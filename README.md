@@ -347,10 +347,12 @@ Variable arguments to `|>` and partial applications such as `add,x` are resolved
 when the lambda runs.
 
 Lambda bodies can return a value directly, such as
-`([[x y] [u_v]] -> x<y && u<v)` or `([a b] -> [1 b])`, or pass
+`([[x y] [u v]] -> x<y && u<v)` or `([a b] -> [1 b])`, or pass
 values to a function with `|>`. Function bodies declare their arity with
 `\`, `(...)`, `\\`, or `{...}`. Within bracketed parameter patterns,
-underscores separate items just like spaces.
+underscores construct strands: `[x_y u_v]` matches `[[x y] [u v]]`.
+`[[x y] [u_v]]` has mismatched row structure and fails to match a rectangular
+two-by-two array.
 
 Value expressions support `<`, `>`, `&&`, `||`, `+`, `-`, `*`, and `/` with named lambda variables
 and constants wherever a value is accepted, including partial arguments,
