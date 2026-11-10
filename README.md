@@ -122,8 +122,9 @@ slice. The input must have at least as many axes as the kernel.
 overlaps with zero padding. Empty input axes remain empty in all modes.
 `same` crops the full result starting at floor((kernel size - 1) / 2) per axis.
 For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
-`reverse` reverses the trailing axis: `[1_2_3 4_5_6]` becomes
-`[3_2_1 6_5_4]`. Scalars and empty arrays are unchanged.
+`reverse` reverses the trailing axis of an array. For example, `[1_2_3 4_5_6]`
+becomes `[3_2_1 6_5_4]`. On tuples it reverses the leading axis, moving each
+top-level element intact. Scalars and empty arrays or tuples are unchanged.
 `deduplicate` keeps the first occurrence of each value in each trailing-axis
 vector, preserving order. For example, `[2_1_2 4_4_3]` becomes `[2_1 4_3]`.
 Scalars and empty arrays are unchanged. NaNs compare equal, as do signed zeros.

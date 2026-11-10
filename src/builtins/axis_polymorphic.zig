@@ -159,9 +159,13 @@ pub fn @"last.row"(a: std.mem.Allocator, x: Value, _: Value) !Value {
     return .{ .data = data, .shape = shape };
 }
 
-/// Reverse the trailing axis, preserving the order of all outer axes.
+/// Reverse the trailing axis of an array or the outermost elements of a tuple.
 pub fn reverse(a: std.mem.Allocator, x: Value, _: Value) !Value {
-    if (x.tuple != null) return error.ExpectedArray;
+    if (x.tuple) |items| {
+        const reversed = try a.dupe(Value, items);
+        std.mem.reverse(Value, reversed);
+        return .{ .tuple = reversed };
+    }
     const data = try a.dupe(f64, x.data);
     const width = if (x.shape.len == 0) 1 else x.shape[x.shape.len - 1];
     if (width > 1) {
