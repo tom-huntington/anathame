@@ -212,3 +212,22 @@ test "day 10" {
         //not_eq,@ |sig Partition (digits length)
     , "7", @src());
 }
+
+test "day 11" {
+    const example =
+        \\$ aaa: you hhh
+        \\$ you: bbb ccc
+        \\$ bbb: ddd eee
+        \\$ ccc: ddd eee fff
+        \\$ ddd: ggg
+        \\$ eee: out
+        \\$ fff: out
+        \\$ ggg: out
+        \\$ hhh: ccc fff iii
+        \\$ iii: out
+    ;
+    try expected_result(example,
+        \\ part1 =\
+        \\ \ part1
+    , "539", @src());
+}
