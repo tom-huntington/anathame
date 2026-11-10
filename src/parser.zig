@@ -827,8 +827,10 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             map_ptr.* = map;
             var bound: Instruction = .{ .map_accum = .{ .map = map_ptr, .update = update_ptr } };
             if (instruction == .partial) {
+                const dyadic = try a.create(Instruction);
+                dyadic.* = bound;
                 const function = try a.create(Instruction);
-                function.* = bound;
+                function.* = .{ .flip = dyadic };
                 bound = .{ .applied = .{ .function = function, .argument = instruction.partial.argument } };
             }
             try result.append(a, bound);

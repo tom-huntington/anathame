@@ -90,8 +90,8 @@ pub fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, funct
 }
 
 /// Map each row with the current accumulator. Without a separate update
-/// function, the mapper returns a tuple of the output and next accumulator.
-pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functions: @FieldType(@import("../parser.zig").Instruction, "map_accum")) anyerror!Value {
+/// function, the mapper returns a tuple of the next accumulator and output.
+pub fn mapAccum(memory: *ReservedBumpAllocator, initial: Value, x: Value, functions: @FieldType(@import("../parser.zig").Instruction, "map_accum")) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
     const count = if (x.shape.len == 0) 1 else x.shape[0];
@@ -100,12 +100,12 @@ pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functi
     var output_shape: ?[]const usize = null;
     for (0..@max(count, 1)) |i| {
         const row = try rowArgument(a, x, i);
-        const result = try evaluateScope(memory, &.{functions.map.*}, row, accumulator);
+        const result = try evaluateScope(memory, &.{functions.map.*}, accumulator, row);
         const mapped = if (functions.update == null) blk: {
             const pair = result.tuple orelse return error.ExpectedTuple;
             if (pair.len != 2) return error.WrongNumberOfArguments;
-            accumulator = pair[1];
-            break :blk pair[0];
+            accumulator = pair[0];
+            break :blk pair[1];
         } else result;
         if (mapped.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
@@ -113,7 +113,7 @@ pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functi
         } else output_shape = try a.dupe(usize, mapped.shape);
         if (count != 0) try data.appendSlice(a, mapped.data);
         if (i + 1 < count) {
-            if (functions.update) |update| accumulator = try evaluateScope(memory, &.{update.*}, row, accumulator);
+            if (functions.update) |update| accumulator = try evaluateScope(memory, &.{update.*}, accumulator, row);
         }
     }
     const axes: []const usize = if (x.shape.len == 0) &.{} else &.{count};

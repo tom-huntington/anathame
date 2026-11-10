@@ -247,7 +247,7 @@ test "High order functions (hofs)" {
 
     try expect_output(
         \\\\ MapAccum couple mul
-    , .{ "[2 3 5]", "7" }, "[2_7 3_14 5_42]");
+    , .{ "7", "[2 3 5]" }, "[7_2 14_3 42_5]");
 
     try expect_output("\\\\ sub", .{ "1", "2" }, "-1");
     try expect_output("\\\\ Flip sub", .{ "1", "2" }, "1");
