@@ -62,7 +62,7 @@ test "day 4" {
 }
 
 test "day 5" {
-    try expected_result(
+    const example =
         \\$ 3-5
         \\$ 10-14
         \\$ 16-20
@@ -74,11 +74,14 @@ test "day 5" {
         \\$ 11
         \\$ 17
         \\$ 32
-    ,
+    ;
+    _ = example;
+    const input = @embedFile("day5input.txt");
+    try expected_result(input,
         \\ part1 =\ split.first,"\n\n" |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
         \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.vec MapAccum,0 {m, [a b] -> a m |> max rsub,b+1 max,0  } {m, [a b] -> b m |> add,1 |delta max } sum
         \\ \ part1 ** part2
-    , "[3 14]", @src());
+    , "[640 365804144481581]", @src());
 }
 
 test "day 6" {
