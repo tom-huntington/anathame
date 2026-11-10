@@ -54,13 +54,13 @@ pub fn invalid_syntax(code: []const u8) !void {
     return error.ExpectedInvalidSyntax;
 }
 
-pub fn literal_eval(code: []const u8, expected: anytype) !void {
+pub fn value_expression(code: []const u8, expected: anytype) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const instructions = try language.parser.parse(a, code);
-    if (instructions.len != 1 or instructions[0] != .literal) return error.ExpectedLiteral;
-    const value = instructions[0].literal;
+    if (instructions.len != 1) return error.ExpectedValueExpression;
+    const value = if (instructions[0] == .literal) instructions[0].literal else try language.runtime.evaluateConstant(a, instructions[0]);
     try language.runtime.expectOutput(a, value.tuple orelse &.{value}, expected);
 }
 

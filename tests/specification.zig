@@ -1,6 +1,6 @@
 const test_alias = @import("helpers.zig").test_alias;
 const test_aliases = @import("helpers.zig").test_aliases;
-const literal_eval = @import("helpers.zig").literal_eval;
+const value_expression = @import("helpers.zig").value_expression;
 const expect_output = @import("helpers.zig").expect_output;
 const invalid_syntax = @import("helpers.zig").invalid_syntax;
 const expected_result = @import("helpers.zig").expected_result;
@@ -63,12 +63,12 @@ test "invalid syntax" {
 }
 
 test "character" {
-    try literal_eval("@a", "97");
-    try literal_eval("@ ", "32");
+    try value_expression("@a", "97");
+    try value_expression("@ ", "32");
 }
 
 test "strings" {
-    try literal_eval(
+    try value_expression(
         \\"ab"
     , "[97 98]");
 
@@ -77,12 +77,12 @@ test "strings" {
     }, "[0 1 0 1]");
 
     // multi line strings
-    try literal_eval(
+    try value_expression(
         \\$ a
         \\$ b
         \\$ c
     , "[97 10 98 10 99]");
-    try literal_eval(
+    try value_expression(
         \\$ "a"
     , "[34 97 34]");
 
@@ -105,13 +105,15 @@ test "Partial application" {
 }
 
 test "reverse function application" {
-    try expect_output(
-        \\ 2 3 |> \\ mul |n couple
-    , .{}, "[2 6]");
+    try value_expression("2.sq", "4");
+
+    try value_expression(
+        \\ 2 3 |> mul |n couple
+    , "[2 6]");
 
     // when we have |> at top level it specifies default arguments
     try expect_output(
-        \\ 2 3 |> \\ mul |n couple
+        \\ 2 3 |> mul |n couple
     , .{ "5", "7" }, "[5 35]");
 }
 
@@ -142,7 +144,7 @@ test "Partition" {
 }
 
 test "tuple literal" {
-    try literal_eval(
+    try value_expression(
         \\ tup( 1, [2 3] )
     , .{ "1", "[2 3]" });
 }
@@ -266,9 +268,9 @@ test "tuples" {
 test "fill and full" {
     // same as uiua reshape
     try expect_output("\\\\ fill", .{ "[2 2]", "0" }, "[0_0 0_0]");
-    try literal_eval("zeros = [2 2] 0 |> fill\nzeros", "[0_0 0_0]");
+    try value_expression("zeros = [2 2] 0 |> fill\nzeros", "[0_0 0_0]");
     try expect_output("\\\\ fill", .{ "0", "[2 2]" }, "[0_0 0_0]");
-    try literal_eval("zeros = 0 [2 2] |> full\nzeros", "[0_0 0_0]"); // arguments reversed
+    try value_expression("zeros = 0 [2 2] |> full\nzeros", "[0_0 0_0]"); // arguments reversed
 }
 
 test "lambdas" {
