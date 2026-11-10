@@ -813,7 +813,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 .{ .map_fold = .{ .function = function, .identity = identity } }
             else
                 .{ .map_scan = .{ .function = function, .identity = identity } });
-        } else if (std.mem.eql(u8, name, "MapAccum") or std.mem.eql(u8, name, "MapAccum.tuple")) {
+        } else if (std.mem.eql(u8, name, "MapAccum") or std.mem.eql(u8, name, "Mapaccum")) {
             const map = result.pop() orelse return error.ExpectedFunction;
             const update_ptr = if (std.mem.eql(u8, name, "MapAccum")) blk: {
                 const update = result.pop() orelse return error.ExpectedFunction;
