@@ -12,6 +12,7 @@ comptime {
     }
 }
 pub fn arity(name: []const u8) ?usize {
+    if (std.mem.eql(u8, name, "InnerProduct") or std.mem.eql(u8, name, "dot_product")) return 2;
     if (std.mem.eql(u8, name, "pad")) return 3;
     if (std.mem.eql(u8, name, "Each.fill")) return 2;
     if (std.mem.eql(u8, name, "env")) return 1;
@@ -288,6 +289,8 @@ pub const names = [_][]const u8{
     "Reduce",
     "Fold",
     "MapAccum",
+    "InnerProduct",
+    "dot_product",
     "MapScan",
     "MapFold",
     "Log",

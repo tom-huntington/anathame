@@ -14,11 +14,11 @@ quoted strings such as `"hello"` are also accepted. Plain unquoted text is not
 a string literal. `parse` separately converts Unicode character data into a
 single number (including decimals), rather than parsing general literals.
 
-`innerproduct.op1.op2` contracts the last axis of its first argument with the
+`InnerProduct op1 op2` contracts the last axis of its first argument with the
 first axis of its second, combining pairs with `op2` and reducing with `op1`.
 The contracted dimensions must match; remaining axes form the result shape.
 Both operators accept `add`, `mul`, `min`, `max`, `and`, or `or`.
-`mul.mat` aliases `innerproduct.add.mul`; `mul.mat.op1.op2` selects a real
+`dot_product` and `mul.mat` alias `InnerProduct add mul`; `mul.mat.op1.op2` selects a real
 semiring: `add.mul` (also the default), `or.and` for boolean reachability,
 `min.add` for shortest-path costs, `max.add` for longest-path costs,
 `min.max` for minimax paths, or `max.min` for maximum-capacity paths.
@@ -27,7 +27,8 @@ and cache tiling, following [Fast MMM on CPU](https://siboehm.com/articles/22/Fa
 Use a release build (`zig build -Doptimize=ReleaseFast`) for performance.
 Empty contractions use the reduction
 identity (0, 1, positive infinity, or negative infinity as appropriate).
-`innerproduct` also defaults to `add.mul`.
+For example, `{ InnerProduct add mul }` or `{ dot_product }` on `[1 2 3]`
+and `[4 5 6]` returns `32`.
 
 `mul.c` multiplies complex numbers represented by a trailing `[real imaginary]`
 pair, broadcasting over matching leading axes like real multiplication.

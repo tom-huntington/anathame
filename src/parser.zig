@@ -643,7 +643,18 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             .partial => |partial| partial.name,
             else => "",
         };
-        if (std.mem.eql(u8, name, "UnDer")) {
+        if (std.mem.eql(u8, name, "InnerProduct") or std.mem.eql(u8, name, "dot_product")) {
+            const alias = std.mem.eql(u8, name, "dot_product");
+            const reduce = if (alias) Instruction{ .primitive = "add" } else result.pop() orelse return error.ExpectedFunction;
+            const combine = if (alias) Instruction{ .primitive = "mul" } else result.pop() orelse return error.ExpectedFunction;
+            if (reduce != .primitive or combine != .primitive) return error.ExpectedFunction;
+            const product_name = try std.fmt.allocPrint(a, "InnerProduct.{s}.{s}", .{ reduce.primitive, combine.primitive });
+            if (@import("builtins/products.zig").lookup(product_name) == null) return error.ExpectedMonoid;
+            try result.append(a, if (instruction == .partial)
+                .{ .partial = .{ .name = product_name, .argument = instruction.partial.argument } }
+            else
+                .{ .primitive = product_name });
+        } else if (std.mem.eql(u8, name, "UnDer")) {
             const transform = result.pop() orelse return error.ExpectedFunction;
             const function = result.pop() orelse return error.ExpectedFunction;
             if (transform != .primitive) return error.NoInverse;
