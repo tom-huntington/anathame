@@ -147,16 +147,34 @@ pub fn switchValue(memory: *ReservedBumpAllocator, x: Value, condition: Value, b
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape.? }) };
 }
 
-/// Map tuple elements and stack equally shaped array results.
-pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction, fill: ?Value) anyerror!Value {
+/// Map tuple elements or trailing array components and stack the results.
+pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction, fill: ?Value, dimensions: usize) anyerror!Value {
     if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
-    const items = x.tuple orelse return error.ExpectedTuple;
+    if (x.tuple != null) return eachItems(memory, x, function, fill);
+
     const a = memory.allocator();
+    const split = x.shape.len - dimensions;
+    const frame = x.shape[0..split];
+    var count: usize = 1;
+    for (frame) |dimension| count = try std.math.mul(usize, count, dimension);
+
+    // Flatten the frame so each component is a contiguous row.
+    const shape = try std.mem.concat(a, usize, &.{ &.{count}, x.shape[split..] });
+    const stacked = try eachItems(memory, .{ .data = x.data, .shape = shape }, function, fill);
+    return .{ .data = stacked.data, .shape = try std.mem.concat(a, usize, &.{ frame, stacked.shape[1..] }) };
+}
+
+fn eachItems(memory: *ReservedBumpAllocator, items: Value, function: *const @import("../parser.zig").Instruction, fill: ?Value) anyerror!Value {
+    const a = memory.allocator();
+    const count = if (items.tuple) |tuple| tuple.len else items.shape[0];
+    // Probe an empty array frame with one zero-filled component to learn the result shape.
+    const probes = if (items.tuple != null) count else @max(count, 1);
     if (fill) |value| {
         if (value.tuple != null or value.shape.len != 0 or value.data.len != 1) return error.InvalidInput;
-        const results = try a.alloc(Value, items.len);
+        const results = try a.alloc(Value, probes);
         var shape: []usize = &.{};
-        for (items, results, 0..) |item, *result, i| {
+        for (results, 0..) |*result, i| {
+            const item = if (items.tuple) |tuple| tuple[i] else try rowArgument(a, items, i);
             result.* = try evaluateScope(memory, &.{function.*}, item, item);
             if (result.tuple != null) return error.ExpectedArray;
             // Align trailing axes, promoting lower-rank results with leading ones.
@@ -172,9 +190,9 @@ pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("
         }
         var cell_len: usize = 1;
         for (shape) |dimension| cell_len = try std.math.mul(usize, cell_len, dimension);
-        const data = try a.alloc(f64, try std.math.mul(usize, items.len, cell_len));
+        const data = try a.alloc(f64, try std.math.mul(usize, count, cell_len));
         @memset(data, value.data[0]);
-        for (results, 0..) |result, row| {
+        for (results[0..count], 0..) |result, row| {
             for (result.data, 0..) |element, index| {
                 var remaining = index;
                 var destination: usize = 0;
@@ -189,19 +207,20 @@ pub fn each(memory: *ReservedBumpAllocator, x: Value, function: *const @import("
                 data[row * cell_len + destination] = element;
             }
         }
-        return .{ .data = data, .shape = try std.mem.concat(a, usize, &.{ &.{items.len}, shape }) };
+        return .{ .data = data, .shape = try std.mem.concat(a, usize, &.{ &.{count}, shape }) };
     }
     var data: std.ArrayList(f64) = .empty;
     var output_shape: ?[]const usize = null;
-    for (items) |item| {
+    for (0..probes) |i| {
+        const item = if (items.tuple) |tuple| tuple[i] else try rowArgument(a, items, i);
         const result = try evaluateScope(memory, &.{function.*}, item, item);
         if (result.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
-            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), result });
+            if (!std.mem.eql(usize, shape, result.shape)) return shapeMismatch("each", &.{ firstResult(data.items, shape), result });
         } else output_shape = try a.dupe(usize, result.shape);
-        try data.appendSlice(a, result.data);
+        if (i < count) try data.appendSlice(a, result.data);
     }
-    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{items.len}, output_shape orelse &.{} }) };
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, output_shape orelse &.{} }) };
 }
 
 pub fn rows(memory: *ReservedBumpAllocator, x: Value, y: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {

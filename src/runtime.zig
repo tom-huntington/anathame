@@ -405,9 +405,9 @@ fn evaluateScopeImpl(memory: *ReservedBumpAllocator, instructions: []const @impo
         }
         if (instruction == .scan or instruction == .partials or instruction == .rows or instruction == .table or instruction == .each or instruction == .each_fill) {
             const temporary = if (instruction == .each)
-                try hofs.each(memory, first_argument, instruction.each, null)
+                try hofs.each(memory, first_argument, instruction.each, null, 0)
             else if (instruction == .each_fill)
-                try hofs.each(memory, first_argument, instruction.each_fill, second_argument)
+                try hofs.each(memory, first_argument, instruction.each_fill, second_argument, 0)
             else if (instruction == .rows)
                 try hofs.rows(memory, first_argument, second_argument, instruction.rows)
             else if (instruction == .table)
@@ -691,6 +691,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         return @import("builtins/axis_polymorphic.zig").sortComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))
         return @import("builtins/axis_polymorphic.zig").deduplicateComponents(memory.allocator(), x, dimensions);
+    if (c.function.* == .each) return hofs.each(memory, x, c.function.each, null, dimensions);
     if (c.function.* == .find) return hofs.find(memory, x, c.function.find, dimensions);
     if (c.function.* == .tuples) return hofs.tuples(memory, x, y, c.function.tuples, dimensions);
     if (c.function.* == .map_scan or c.function.* == .map_fold) return hofs.mapScan(memory, x, c.function.*, dimensions);

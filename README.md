@@ -469,7 +469,13 @@ braces, for example `Combine = { F |phi1 G add }`.
 along a new leading axis. For example, `(Each sum)` on `tup([1 2], [3 4 5])`
 returns `[3 12]`. Results must be arrays with identical shapes; unequal shapes
 report `ShapeMismatch`, and tuple results report `ExpectedArray`. An empty tuple
-produces `[]` without calling the function. The input must be a tuple.
+produces `[]` without calling the function.
+
+On arrays, bare `Each f` maps scalar elements along the trailing axis. The
+result shape is the input shape followed by the shape returned by `f`.
+Component suffixes select larger items. For example, `Each.vec sum` on
+`[1_2_3 4_5_6]` sums the trailing vectors and returns `[6 15]`. An empty
+array frame uses one zero-filled component to determine the result shape.
 
 `Each.fill,0 f` pads mapped results with `0` to the largest size along each
 axis before stacking them. The scalar fill value must be partially applied.
