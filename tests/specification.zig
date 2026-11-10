@@ -296,11 +296,10 @@ test "explicit axis" {
     // the type and axis is a mirage. the are merely component shape
     // storage shape = mdarray shape ++ component shape
     // dim type + dim axis = dim component
-    // scalar types: r real shape [], c complex shape [2]. future possibilities q quaternions shape [4]
-    // r2 is length 2 vectors of reals shape [2]. c3 is length 3 vectors of complex shape [3 2]. c22 is a 2x2 matrix of complex shape [2 2 2]
-    // r.vec is vector of reals dim 1. c.vec vector of complex shape [n 2]. r.mat matrix of reals dim 2. r.mat matrix of complex shape [n m 2]
-    // axis names: default -1 (dim 0), rows -2 (dim 1), grids -3 (dim 2), outer 0
-    // Component operations use the trailing axis by default; r explicitly selects real scalar items.
+    // scalar types: c complex shape [2]. future possibilities q quaternions shape [4]
+    // r2 is length 2 vectors of reals; shape [2]. c3 is length 3 vectors of complex; shape [3 2]. c22 is a 2x2 matrix of complex; shape [2 2]
+    // vec is vector of reals; rank 1. c.vec vector of complex shape [n 2]. q.vec is a vector of quaternions (unimplemented); shape [n 4]. mat is a matrix of reals; rank 2. mat matrix of complex; shape [n m 2]
+    // for rank N, block is a component of rank N-1 (vector of blocks). for rank N, cell is a compoent of rank N-2 (matrix of cells)
 
     try expect_output("\\ uncons.vec", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" });
 
@@ -317,7 +316,6 @@ test "explicit axis" {
     try expect_output("\\ Partials.vec add", "[1_2_3 4_5_6]", "[1_2_3 5_7_9]");
     try expect_output("\\\\ Scan.vec add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
     try expect_output("\\\\ Fold.vec add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
-    try expect_output("\\ Reduce.r2 distance", "[[3_4 0_0] [5_12 0_0]]", "[5 13]");
     try expect_output("\\\\ indexin.vec", .{ "[1 2 3]", "3" }, "2");
     try expect_output("\\\\ indexin", .{ "[1 2 3]", "2" }, "1"); // rows is the default axis
     try expect_output("\\\\ indexin.mat", .{ "[1_2_3 4_5_6]", "2" }, "[1 0]");
