@@ -280,9 +280,9 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
                 try @import("logging.zig").printShapes(first_argument, if (functionArity(function) == 2) second_argument else null, null);
             } else {
                 _ = if (functionArity(function) == 2)
-                    try @import("builtins/axis_agnostic.zig").logl(memory.allocator(), first_argument, second_argument)
+                    try @import("builtins/axis_monomorphic.zig").logl(memory.allocator(), first_argument, second_argument)
                 else
-                    try @import("builtins/axis_agnostic.zig").log(memory.allocator(), first_argument, second_argument);
+                    try @import("builtins/axis_monomorphic.zig").log(memory.allocator(), first_argument, second_argument);
             }
             const temporary = try evaluateScope(memory, &.{function}, first_argument, second_argument);
             if (shapes) try @import("logging.zig").printShapes(temporary, null, "result:\n") else try @import("logging.zig").printResult(memory.allocator(), temporary);
@@ -607,14 +607,14 @@ fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser
         if (rank >= x.shape.len) return error.InvalidAxis;
         const count = x.shape[x.shape.len - rank - 1];
         if (count < 2) return error.WrongNumberOfArguments;
-        const axial = @import("builtins/axial.zig");
+        const axis_polymorphic = @import("builtins/axis_polymorphic.zig");
         if (count > 2) {
-            const parts = try axial.unconsComponents(memory.allocator(), x, rank);
+            const parts = try axis_polymorphic.unconsComponents(memory.allocator(), x, rank);
             break :blk [2]Value{ parts.tuple.?[0], parts.tuple.?[1] };
         }
         break :blk [2]Value{
-            try axial.selectComponents(memory.allocator(), x, .{ .data = &.{0} }, rank),
-            try axial.selectComponents(memory.allocator(), x, .{ .data = &.{1} }, rank),
+            try axis_polymorphic.selectComponents(memory.allocator(), x, .{ .data = &.{0} }, rank),
+            try axis_polymorphic.selectComponents(memory.allocator(), x, .{ .data = &.{1} }, rank),
         };
     };
     return evaluateScope(memory, &.{function.*}, pair[0], pair[1]);
@@ -634,7 +634,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         if (x.tuple == null and (x.shape.len < c.type_shape.len or
             !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
-        return @import("builtins/axial.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, selected_dimensions);
+        return @import("builtins/axis_polymorphic.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, selected_dimensions);
     }
     if (c.function.* == .unc) {
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
@@ -649,12 +649,12 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     const dimensions = selected_dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if ((c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "indexin")) or
         (c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "indexin")))
-        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, selected_dimensions orelse x.shape.len);
+        return @import("builtins/axis_polymorphic.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, selected_dimensions orelse x.shape.len);
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
-        return @import("builtins/axial.zig").sortComponents(memory.allocator(), x, dimensions);
+        return @import("builtins/axis_polymorphic.zig").sortComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))
-        return @import("builtins/axial.zig").deduplicateComponents(memory.allocator(), x, dimensions);
+        return @import("builtins/axis_polymorphic.zig").deduplicateComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .tuples) return hofs.tuples(memory, x, y, c.function.tuples, dimensions);
     if (c.function.* == .map_scan or c.function.* == .map_fold) return hofs.mapScan(memory, x, c.function.*, dimensions);
     const a = memory.allocator();
@@ -747,5 +747,5 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         }
         return .{ .data = data, .shape = shape };
     }
-    return @import("builtins/axial.zig").unconsComponents(a, x, dimensions);
+    return @import("builtins/axis_polymorphic.zig").unconsComponents(a, x, dimensions);
 }

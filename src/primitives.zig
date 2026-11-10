@@ -350,7 +350,7 @@ pub fn known(name: []const u8) bool {
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
     if (@import("builtins/products.zig").lookup(name)) |function| return function;
-    if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_agnostic.zig").arrayShape;
+    if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_monomorphic.zig").arrayShape;
     if (std.mem.startsWith(u8, name, "convolve.")) {
         inline for (comptime std.meta.declarations(@import("builtins/convolve_builtins.zig"))) |decl| {
             if (std.mem.eql(u8, name[9..], decl)) return &@field(@import("builtins/convolve_builtins.zig"), decl);
@@ -364,9 +364,9 @@ pub fn lookup(name: []const u8) ?Function {
         return null;
     }
     const pervasives = @import("builtins/pervasives.zig");
-    const axial = @import("builtins/axial.zig");
-    const axis_agnostic = @import("builtins/axis_agnostic.zig");
-    inline for (.{ pervasives, axial, axis_agnostic }) |implementations| {
+    const axis_polymorphic = @import("builtins/axis_polymorphic.zig");
+    const axis_monomorphic = @import("builtins/axis_monomorphic.zig");
+    inline for (.{ pervasives, axis_polymorphic, axis_monomorphic }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
             if (comptime std.mem.eql(u8, decl, "unconsComponents") or std.mem.eql(u8, decl, "selectComponents") or std.mem.eql(u8, decl, "indexinComponents") or std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
@@ -377,7 +377,7 @@ pub fn lookup(name: []const u8) ?Function {
     if (std.mem.eql(u8, name, "maximum")) return &pervasives.max;
     if (std.mem.eql(u8, name, "absolute value")) return &pervasives.abs;
     if (std.mem.eql(u8, name, "divide")) return &pervasives.div;
-    if (std.mem.eql(u8, name, "identity")) return &axis_agnostic.id;
+    if (std.mem.eql(u8, name, "identity")) return &axis_monomorphic.id;
     if (std.mem.eql(u8, name, "multiply")) return &pervasives.mul;
     if (std.mem.eql(u8, name, "subtract")) return &pervasives.sub;
     if (std.mem.eql(u8, name, "modulo")) return &pervasives.mod;

@@ -211,7 +211,7 @@ pub fn parse(a: std.mem.Allocator, x: Value, _: Value) !Value {
 /// Extract contiguous runs of ASCII digits along the trailing axis, skipping empty rows.
 pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     if (x.tuple != null) return error.InvalidInput;
-    if (x.shape.len <= 1) return @import("axis_agnostic.zig").extractNumbers(a, x, false, true);
+    if (x.shape.len <= 1) return @import("axis_monomorphic.zig").extractNumbers(a, x, false, true);
     const cell_width = x.shape[x.shape.len - 1];
     var cells: usize = 1;
     for (x.shape[0 .. x.shape.len - 1]) |dim| cells = try std.math.mul(usize, cells, dim);
@@ -221,7 +221,7 @@ pub fn ints(a: std.mem.Allocator, x: Value, _: Value) !Value {
     var rows: usize = 0;
     var first_row: usize = 0;
     for (0..cells) |i| {
-        const row = try @import("axis_agnostic.zig").extractNumbers(a, .{
+        const row = try @import("axis_monomorphic.zig").extractNumbers(a, .{
             .data = x.data[i * cell_width ..][0..cell_width],
             .shape = &.{cell_width},
         }, false, true);

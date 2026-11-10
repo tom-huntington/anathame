@@ -35,8 +35,8 @@ pair, broadcasting over matching leading axes like real multiplication.
 `mul.c.mat` remains unimplemented.
 
 Builtin implementations live in `src/builtins/`: `pervasives.zig` for
-elementwise operations, `axial.zig` for axis-dependent operations,
-`axis_agnostic.zig` for other value operations, and `hofs.zig` for
+elementwise operations, `axis_polymorphic.zig` for axis-polymorphic operations that accept a component specifier,
+`axis_monomorphic.zig` for axis-monomorphic operations, and `hofs.zig` for
 higher-order functions. Convolution and regex helpers have separate
 modules there. `src/primitives.zig` registers builtin names, aliases, and arities.
 Component suffixes describe the items being operated on. Scalar items are the
