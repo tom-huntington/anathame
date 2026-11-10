@@ -714,8 +714,8 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             function.* = operand;
             try result.append(a, .{ .unc = function });
         } else if (std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold")) {
-            const mapper = result.pop() orelse return error.ExpectedFunction;
             const operation = result.pop() orelse return error.ExpectedFunction;
+            const mapper = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(mapper) != 1 or @import("runtime.zig").functionArity(operation) != 2) return error.WrongNumberOfArguments;
             const identity = @import("builtins/hofs.zig").monoidIdentity(&operation) orelse return error.ExpectedMonoid;
             const function = try a.create(Instruction);
