@@ -104,8 +104,8 @@ test "Partial application" {
     try expect_output("\\ sub,2", .{"3"}, "1"); // partial application binds second argument
 }
 
-test "reverse function application" {
-    try value_expression("2.sq", "4");
+test "function application" {
+    try value_expression("sq(2)", "4");
 
     try value_expression(
         \\ 2 3 |> mul |n couple

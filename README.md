@@ -458,3 +458,9 @@ axis before stacking them. The scalar fill value must be partially applied.
 For example, `Each.fill,0 id` on `tup([1 2], [3 4 5])` returns
 `[1_2_0 3_4_5]`. Lower-rank results gain leading axes of size one, and
 padding extends the end of each axis. Tuple results still report `ExpectedArray`.
+
+Value expressions call functions with C-style syntax: `sq(2)`, `sub(5, 2)`,
+and `sq(add(x, 1))`. Arguments are comma-separated and may contain value
+expressions. Write the opening parenthesis directly after the function name.
+Reverse application such as `2.sq` is no longer supported; function modifiers
+such as `mul.mat` retain their existing meaning.

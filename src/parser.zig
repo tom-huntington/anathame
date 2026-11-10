@@ -934,23 +934,6 @@ fn foldValue(a: std.mem.Allocator, value: Instruction) anyerror!Instruction {
 }
 
 fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction), minimum: u8) anyerror!?Instruction {
-    // Split only a recognized value prefix. Function dots remain owned by the
-    // function parser (axis modifiers and overload selection).
-    if (std.mem.indexOfScalar(u8, token, '.')) |_| {
-        if ((try literal(a, token)) == null and names.get(token) == null) {
-            var end = token.len;
-            while (std.mem.lastIndexOfScalar(u8, token[0..end], '.')) |dot| {
-                const prefix = token[0..dot];
-                if (prefix.len == 0) break;
-                const named = names.get(prefix);
-                if ((named != null and isValue(named.?)) or (try literal(a, prefix)) != null) {
-                    lexer.offset -= token.len - dot;
-                    return valueExpression(a, lexer, prefix, names, minimum);
-                }
-                end = dot;
-            }
-        }
-    }
     var left: Instruction = blk: {
         if (std.mem.eql(u8, token, "[") or std.mem.eql(u8, token, "tup")) {
             const is_tuple = std.mem.eql(u8, token, "tup");
@@ -985,6 +968,31 @@ fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names
             }
             break :blk try foldValue(a, .{ .aggregate = .{ .items = try items.toOwnedSlice(a), .tuple = is_tuple } });
         }
+        // Calls are value atoms; keep spaced parentheses available to function trains.
+        if (!std.mem.eql(u8, token, "tup")) {
+            var look = lexer.*;
+            const open = try look.next();
+            if (open != null and std.mem.eql(u8, open.?, "(") and look.offset - 1 == lexer.offset) {
+                var function_lexer: Lexer = .{ .source = token };
+                const body = try sequence(a, &function_lexer, null, false, true, names);
+                if (body.len != 1 or isValue(body[0])) return error.ExpectedFunction;
+                lexer.* = look;
+                var arguments: std.ArrayList(Instruction) = .empty;
+                var next = (try lexer.next()) orelse return error.InvalidSyntax;
+                if (!std.mem.eql(u8, next, ")")) {
+                    while (true) {
+                        try arguments.append(a, (try valueExpression(a, lexer, next, names, 0)) orelse return error.ExpectedLiteral);
+                        const separator = (try lexer.next()) orelse return error.InvalidSyntax;
+                        if (std.mem.eql(u8, separator, ")")) break;
+                        if (!std.mem.eql(u8, separator, ",")) return error.InvalidSyntax;
+                        next = (try lexer.next()) orelse return error.ExpectedLiteral;
+                    }
+                }
+                if (arguments.items.len != @import("runtime.zig").functionArity(body[0])) return error.WrongNumberOfArguments;
+                try validateCombinatorArity(body, arguments.items.len);
+                break :blk try foldValue(a, .{ .expression = .{ .arguments = try arguments.toOwnedSlice(a), .body = body } });
+            }
+        }
         if (names.get(token)) |v| {
             if (!isValue(v)) return null;
             break :blk v;
@@ -995,14 +1003,6 @@ fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names
         const offset = lexer.offset;
         const op = (try lexer.next()) orelse break;
         const adjacent = lexer.offset - op.len == offset;
-        if (adjacent and op.len > 1 and op[0] == '.') {
-            var function_lexer: Lexer = .{ .source = op[1..] };
-            const body = try sequence(a, &function_lexer, null, false, true, names);
-            if (body.len != 1 or isValue(body[0])) return error.ExpectedFunction;
-            try validateCombinatorArity(body, 1);
-            left = try foldValue(a, .{ .expression = .{ .arguments = try a.dupe(Instruction, &.{left}), .body = body } });
-            continue;
-        }
         const precedence: u8 = if (std.mem.eql(u8, op, "_")) 1 else if (std.mem.eql(u8, op, "||")) 2 else if (std.mem.eql(u8, op, "&&")) 3 else if (std.mem.eql(u8, op, "<") or std.mem.eql(u8, op, ">")) 4 else if (std.mem.eql(u8, op, "+") or std.mem.eql(u8, op, "-")) 5 else if (std.mem.eql(u8, op, "/") or std.mem.eql(u8, op, "*")) 6 else 0;
         // A signed numeric token immediately following an atom is subtraction.
         const signed = adjacent and op.len > 1 and op[0] == '-' and op[1] != '>';

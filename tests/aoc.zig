@@ -199,7 +199,7 @@ test "day 10" {
     try expected_result(input,
         \\ p =\ eq,@# drop,1 drop,-1
         \\ Find =\ MapScan.vec or F indexin,1
-        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] incidences.length |> cartesian_pow Sort.by sum \ Find (mul.mat,incidences mod,2 eq,diagram all) |sig pick sum
+        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find (mul.mat,incidences mod,2 eq,diagram all) |sig pick sum
         \\ \ split,@\n Each compute sum
 
         //not_eq,@ |sig Partition (digits length)
