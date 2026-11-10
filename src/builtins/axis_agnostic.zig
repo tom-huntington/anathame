@@ -42,8 +42,31 @@ pub fn cartesian_pow(a: std.mem.Allocator, x: Value, exponent: Value) !Value {
 
 /// Pick a cell by leading-axis coordinates, or a batch of coordinate vectors.
 /// The last index axis holds coordinates; preceding axes shape the batch.
+/// Tuple coordinates descend into elements; batches produce nested tuples.
 pub fn pick(a: std.mem.Allocator, source: Value, indices: Value) !Value {
-    if (source.tuple != null or indices.tuple != null) return error.ExpectedArray;
+    if (indices.tuple != null) return error.ExpectedArray;
+    if (source.tuple) |items| {
+        if (indices.shape.len > 1) {
+            const selected = try a.alloc(Value, indices.shape[0]);
+            errdefer a.free(selected);
+            var width: usize = 1;
+            for (indices.shape[1..]) |dim| width = try std.math.mul(usize, width, dim);
+            for (selected, 0..) |*item, i| {
+                item.* = try pick(a, source, .{
+                    .data = indices.data[i * width ..][0..width],
+                    .shape = indices.shape[1..],
+                });
+            }
+            return .{ .tuple = selected };
+        }
+        if (indices.data.len == 0) return source;
+        const selected = items[try selectionIndex(indices.data[0], items.len)];
+        if (indices.data.len == 1) return selected;
+        return pick(a, selected, .{
+            .data = indices.data[1..],
+            .shape = &.{indices.data.len - 1},
+        });
+    }
     const depth = if (indices.shape.len == 0) @as(usize, 1) else indices.shape[indices.shape.len - 1];
     if (depth > source.shape.len) return error.InvalidInput;
     const batch = indices.shape[0..indices.shape.len -| 1];

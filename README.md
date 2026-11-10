@@ -62,6 +62,13 @@ Bare `select` and `second` (`select,1`) retain leading-axis selection.
 Scalar selection also unwraps tuple elements. The legacy `last.row` remains
 available and leaves scalars and vectors unchanged.
 
+`pick` follows a coordinate vector through leading array axes or tuple elements.
+For example, `pick,[1 -1]` on `tup(10,[20 30])` returns `30`.
+Scalar coordinates select one row or tuple element; negative coordinates count
+from the end. An empty coordinate vector returns the source unchanged.
+The last index axis holds coordinates and preceding axes form a batch.
+Batches on tuple sources return tuples, nested for additional batch axes.
+
 `uncons` splits each trailing vector into its first element and remaining elements.
 For `[1_2_3 4_5_6]` it returns the pair `[1 4]` and `[2_3 5_6]`.
 `uncons.rows` splits off a whole row; `uncons.outer` splits off a leading-axis item.
