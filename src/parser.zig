@@ -177,6 +177,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 for (result.items) |item| if (!isValue(item)) return error.ExpectedLiteral;
                 const body = try sequence(a, lexer, close, implicit, root, names);
                 if (body.len == 0) return error.ExpectedFunction;
+                try validateCombinatorArity(body, result.items.len);
                 return a.dupe(Instruction, &.{.{ .expression = .{ .arguments = try result.toOwnedSlice(a), .body = body } }});
             }
             const arguments = try a.alloc(Value, result.items.len);
@@ -472,9 +473,11 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
             continue;
         }
         if (instruction == .scope) try validateCombinatorArity(instruction.scope.instructions, instruction.scope.arity);
+        // A literal pipeline supplies its own arguments, independent of this scope.
+        const self_supplied = instruction == .scope and instruction.scope.default_arguments != null;
         if (explicit_operands > 0 and available == 2) {
             explicit_operands -= 1;
-        } else if (@import("runtime.zig").functionArity(instruction)) |arity| {
+        } else if (if (self_supplied) null else @import("runtime.zig").functionArity(instruction)) |arity| {
             if (arity > available) {
                 if (argument_source) |source| {
                     std.debug.print("WrongNumberOfArguments: incompatible function operands for composition.\n  Function: B combinator (|b)\n  Arguments: ", .{});
