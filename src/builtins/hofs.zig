@@ -91,7 +91,7 @@ pub fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, funct
 
 /// Map each row with the current accumulator. Without a separate update
 /// function, the mapper returns a tuple of the next accumulator and output.
-pub fn mapAccum(memory: *ReservedBumpAllocator, initial: Value, x: Value, functions: @FieldType(@import("../parser.zig").Instruction, "map_accum")) anyerror!Value {
+pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functions: @FieldType(@import("../parser.zig").Instruction, "map_accum")) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
     const count = if (x.shape.len == 0) 1 else x.shape[0];

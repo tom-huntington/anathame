@@ -365,10 +365,10 @@ stdout before each call. For example, `Log add` prints both arguments and
 returns their sum; `Log sq` prints one argument and returns its square.
 `Log,7 add` binds the second argument to `7` and logs both arguments.
 
-`MapAccum f g` takes an initial accumulator and an array. For each leading-axis
+`MapAccum f g` takes an array and an initial accumulator. For each leading-axis
 row, it collects `f accumulator row` and uses `g accumulator row` as the
 accumulator for the next row. For example, `{ MapAccum couple mul }` on
-`7 [2 3 5]` produces `[7_2 14_3 42_5]`.
+`[2 3 5] 7` produces `[7_2 14_3 42_5]`.
 `Mapaccum f` takes the same arguments and calls `f accumulator row` to get a
 tuple `(next accumulator, mapped value)`. Both forms return only the mapped
 array. `MapAccum,7 f g` and `Mapaccum,7 f` bind the initial accumulator.
