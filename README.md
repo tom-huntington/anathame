@@ -295,7 +295,7 @@ prefixes with a known dyadic monoid `op`. For example, `MapScan sq add` maps
 positive infinity, and negative infinity, respectively. Empty inputs stay empty;
 the identity is not included in the output. Like `Partials`, the default axis is
 the innermost vector; `.rows` and other component axes are supported, with
-same-shaped mapped cells. `MapScan f or/and` skips `f` once the accumulator is
+mapped cells of a consistent output shape, which may differ from the input cell shape. `MapScan f or/and` skips `f` once the accumulator is
 absorbed, repeating the final value for the remaining prefixes. It shares the
 seeded-fold helper used by `Scan` and `Fold`.
 

@@ -287,12 +287,8 @@ pub fn mapScan(memory: *ReservedBumpAllocator, x: Value, operation: @import("../
     const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
     if (dimensions >= input.shape.len) return error.InvalidComponent;
     const axis = input.shape.len - dimensions - 1;
-    const cell_shape = input.shape[axis + 1 ..];
-    var size: usize = 1;
-    for (cell_shape) |dim| size *= dim;
-    const data = try memory.allocator().alloc(f64, size);
-    @memset(data, operation.map_scan.identity);
-    var result = try seededFold(memory, input, .{ .data = data, .shape = cell_shape }, operation.map_scan.function, axis, false, false, false);
+    const identity: Value = .{ .data = &.{operation.map_scan.identity} };
+    var result = try seededFoldImpl(memory, input, identity, operation.map_scan.function, axis, false, false, false, true);
     if (x.shape.len == 0) result.shape = result.shape[1..];
     return result;
 }
@@ -367,6 +363,12 @@ pub fn booleanFold(a: std.mem.Allocator, x: Value, seed: ?Value, axis: usize, fi
 
 /// Seeded folds keep accumulator values independent of input cell shape.
 pub fn seededFold(memory: *ReservedBumpAllocator, x: Value, seed: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool, exclusive: bool, include_seed: bool) anyerror!Value {
+    return seededFoldImpl(memory, x, seed, function, axis, final_only, exclusive, include_seed, false);
+}
+
+// MapScan learns the accumulator shape from the first mapped cell, independently
+// of the input cell shape. Ordinary seeded folds retain their explicit seed shape.
+fn seededFoldImpl(memory: *ReservedBumpAllocator, x: Value, seed: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool, exclusive: bool, include_seed: bool, mapped: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     if (x.tuple != null or seed.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
@@ -381,7 +383,7 @@ pub fn seededFold(memory: *ReservedBumpAllocator, x: Value, seed: Value, functio
     const width = x.shape[axis];
     const output_width = if (final_only) 1 else width + @as(usize, if (include_seed and !exclusive) 1 else 0);
     var data: std.ArrayList(f64) = .empty;
-    var result_shape: ?[]const usize = if (final_only) null else seed.shape;
+    var result_shape: ?[]const usize = if (final_only or mapped) null else seed.shape;
     for (0..count) |i| {
         var accumulator = if (final_only) seed else Value{ .data = try a.dupe(f64, seed.data), .shape = seed.shape };
         const lane_checkpoint = memory.checkpoint();
@@ -395,14 +397,23 @@ pub fn seededFold(memory: *ReservedBumpAllocator, x: Value, seed: Value, functio
                 if (final_only) {
                     accumulator = try @import("../memory.zig").ReturnImpl(memory, lane_checkpoint, result);
                 } else {
-                    if (result.tuple != null or !std.mem.eql(usize, result.shape, seed.shape) or result.data.len != seed.data.len) return error.ShapeMismatch;
-                    @memcpy(@constCast(accumulator.data), result.data);
-                    memory.restore(checkpoint);
+                    if (result.tuple != null) return error.ExpectedArray;
+                    if (mapped and j == 0) {
+                        if (result_shape) |expected| {
+                            if (!std.mem.eql(usize, expected, result.shape)) return error.ShapeMismatch;
+                        }
+                        accumulator = try @import("../memory.zig").ReturnImpl(memory, checkpoint, result);
+                        result_shape = accumulator.shape;
+                    } else {
+                        if (!std.mem.eql(usize, result.shape, accumulator.shape) or result.data.len != accumulator.data.len) return error.ShapeMismatch;
+                        @memcpy(@constCast(accumulator.data), result.data);
+                        memory.restore(checkpoint);
+                    }
                 }
             }
             if (accumulator.tuple != null) return error.ExpectedArray;
             if (!final_only) {
-                if (!std.mem.eql(usize, accumulator.shape, seed.shape)) return error.ShapeMismatch;
+                if (!std.mem.eql(usize, accumulator.shape, result_shape orelse seed.shape)) return error.ShapeMismatch;
                 if (!exclusive) try data.appendSlice(a, accumulator.data);
             }
         }

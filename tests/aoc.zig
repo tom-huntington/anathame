@@ -197,7 +197,7 @@ test "day 10" {
     const input = @embedFile("d10input.txt");
     try expected_result(input,
         \\ p =\ eq,@# drop,1 drop,-1
-        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] incidences.length |> cartesian_pow Sort.by sum \ Scan.rows,0 {(mul.mat,incidences mod,2 eq,diagram all) |d or} indexin,1 sub,1 |sig pick sum
+        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] incidences.length |> cartesian_pow Sort.by sum \ MapScan.rows (mul.mat,incidences mod,2 eq,diagram all) or indexin,1 sub,1 |sig pick sum
         \\ \ split,@\n Each compute sum
 
         //not_eq,@ |sig Partition (digits length)
