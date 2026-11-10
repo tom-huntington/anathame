@@ -438,6 +438,12 @@ definition names or value parameters. A TitleCase definition must use `F`; using
 `G` makes it consume two function operands, in `F`, `G` order. Snake-case
 definitions cannot use either placeholder.
 
+User-defined functions can use `.comp` as a component placeholder, for example
+`Find =\ MapScan.comp or F indexin,1`. Calling `Find.mat` substitutes `.mat`
+for `.comp`; calling bare `Find` removes `.comp`, using the underlying
+operation's default. This also works in ordinary functions, and the suffix can
+include multiple component parts such as `.r2.vec`.
+
 HOFs expand like macros at parse time, using definitions visible where they were
 declared. They retain the explicit value arity syntax of ordinary functions.
 Operands may be primitives, named functions, grouped functions, or other HOF

@@ -92,19 +92,21 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
         var placeholders: Lexer = .{ .source = source_body };
         var has_f = false;
         var has_g = false;
+        var has_comp = false;
         while (try placeholders.next()) |token| {
             has_f = has_f or std.mem.eql(u8, token, "F");
             has_g = has_g or std.mem.eql(u8, token, "G");
+            has_comp = has_comp or hasComponentPlaceholder(token);
         }
         const is_hof = std.ascii.isUpper(name[0]);
         if (is_hof != has_f or (has_g and !has_f)) return error.InvalidFunctionName;
-        if (is_hof) {
+        if (is_hof or has_comp) {
             var declaration_lexer: Lexer = .{ .source = source_body };
             const declaration = (try declaration_lexer.next()) orelse return error.InvalidSyntax;
             if (!std.mem.eql(u8, declaration, "(") and !std.mem.eql(u8, declaration, "{") and
                 !std.mem.eql(u8, declaration, "\\") and !std.mem.eql(u8, declaration, "\\\\")) return error.InvalidSyntax;
             const macro = try a.create(Macro);
-            macro.* = .{ .name = name, .source = source_body, .names = try names.clone(a), .operands = if (has_g) 2 else 1 };
+            macro.* = .{ .name = name, .source = source_body, .names = try names.clone(a), .operands = if (has_g) 2 else if (has_f) 1 else 0 };
             try names.put(a, name, .{ .scope = .{ .arity = 0, .instructions = &.{}, .macro_definition = macro } });
             continue;
         }
@@ -135,6 +137,49 @@ pub fn parseProgram(a: std.mem.Allocator, source: []const u8) !Instruction {
     const instructions = try parse(a, source);
     if (instructions.len != 1 or instructions[0] != .scope) return error.InvalidSyntax;
     return instructions[0];
+}
+
+// Substitute only dotted placeholder segments in identifier tokens, preserving literals.
+fn hasComponentPlaceholder(token: []const u8) bool {
+    if (token.len == 0 or !std.ascii.isAlphabetic(token[0])) return false;
+    var parts = std.mem.splitScalar(u8, token, '.');
+    _ = parts.next();
+    while (parts.next()) |part| {
+        if (std.mem.eql(u8, part, "comp")) return true;
+    }
+    return false;
+}
+
+fn sourceHasComponentPlaceholder(source: []const u8) bool {
+    var lexer: Lexer = .{ .source = source };
+    while (lexer.next() catch return false) |token| {
+        if (hasComponentPlaceholder(token)) return true;
+    }
+    return false;
+}
+
+fn substituteComponent(a: std.mem.Allocator, source: []const u8, suffix: []const u8) ![]const u8 {
+    var output: std.ArrayList(u8) = .empty;
+    var lexer: Lexer = .{ .source = source };
+    var copied: usize = 0;
+    while (try lexer.next()) |token| {
+        if (!hasComponentPlaceholder(token)) continue;
+        const start = lexer.offset - token.len;
+        try output.appendSlice(a, source[copied..start]);
+        var parts = std.mem.splitScalar(u8, token, '.');
+        try output.appendSlice(a, parts.next().?);
+        while (parts.next()) |part| {
+            if (std.mem.eql(u8, part, "comp")) {
+                try output.appendSlice(a, suffix);
+            } else {
+                try output.append(a, '.');
+                try output.appendSlice(a, part);
+            }
+        }
+        copied = lexer.offset;
+    }
+    try output.appendSlice(a, source[copied..]);
+    return output.toOwnedSlice(a);
 }
 
 fn validName(name: []const u8) bool {
@@ -331,8 +376,27 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             try result.append(a, value);
             continue;
         }
-        if (names.get(token)) |function| {
-            try result.append(a, function);
+        const definition_dot = std.mem.indexOfScalar(u8, token, '.');
+        const definition_name = token[0 .. definition_dot orelse token.len];
+        if (names.get(definition_name)) |function| {
+            if (function == .scope and function.scope.macro_definition != null) {
+                const original = function.scope.macro_definition.?;
+                if (definition_dot != null and !sourceHasComponentPlaceholder(original.source)) return error.InvalidComponent;
+                const specialized = try a.create(Macro);
+                specialized.* = original.*;
+                specialized.source = try substituteComponent(a, original.source, if (definition_dot) |dot| token[dot..] else "");
+                if (specialized.operands == 0) {
+                    var body_lexer: Lexer = .{ .source = specialized.source, .function_name = specialized.name };
+                    try result.appendSlice(a, try sequence(a, &body_lexer, null, false, true, &specialized.names));
+                } else {
+                    var selected = function;
+                    selected.scope.macro_definition = specialized;
+                    try result.append(a, selected);
+                }
+            } else {
+                if (definition_dot != null) return error.InvalidComponent;
+                try result.append(a, function);
+            }
             continue;
         }
         if (std.mem.eql(u8, token, "first") or std.mem.eql(u8, token, "last") or std.mem.eql(u8, token, "second") or std.mem.startsWith(u8, token, "first.") or (std.mem.startsWith(u8, token, "last.") and !std.mem.eql(u8, token, "last.row"))) {
