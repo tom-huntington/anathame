@@ -894,7 +894,8 @@ fn tuple(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnm
 
 // Strands stack equally shaped literals along a new leading axis.
 fn isValue(value: Instruction) bool {
-    return value == .literal or value == .variable or value == .expression or value == .aggregate;
+    return value == .literal or value == .variable or value == .expression or value == .aggregate or
+        (value == .scope and value.scope.default_arguments != null);
 }
 
 fn foldValue(a: std.mem.Allocator, value: Instruction) anyerror!Instruction {
