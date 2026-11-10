@@ -76,7 +76,7 @@ test "day 5" {
         \\$ 32
     ,
         \\ part1 =\ split.first,"\n\n" |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
-        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.rows MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
+        \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.vec MapAccum,0 {[a b], m -> a m |> max rsub,b+1 max,0  } { second add,1 |delta max } sum
         \\ \ part1 ** part2
     , "[3 14]", @src());
 }
@@ -115,9 +115,9 @@ test "day 7" {
         \\$ ...............
     ,
         \\ Step =\\ mul convolve.same,[1 0 1] |phi1 { not |d mul } F
-        \\ part1 =\\ Scan.exclusive.rows Step or |n mul
-        \\ part2 =\\ Fold.rows Step add
-        \\ \ split,@\n stride.rows,2 not_eq,@. \ uncons.rows Unc Flip \\ part1 ** part2 total
+        \\ part1 =\\ Scan.exclusive.vec Step or |n mul
+        \\ part2 =\\ Fold.vec Step add
+        \\ \ split,@\n stride.vec,2 not_eq,@. \ uncons.vec Unc Flip \\ part1 ** part2 total
     , "[21 40]", @src());
 }
 
@@ -156,7 +156,7 @@ test "day 8" {
     try expected_result(input_env.@"0",
         \\ all_edges =\ length iota combinations
         \\ num_closest = "num_closest" |> env
-        \\ part1 =\ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.rows sum sort take,-3 Reduce mul
+        \\ part1 =\ ints2d \ all_edges |sig select Reduce.r3 distance rise take,num_closest |phi all_edges Flip select adjacency_matrix \ transpose |s or \ shape eye |s or \ Fix mul.mat.or.and deduplicate.vec sum sort take,-3 Reduce mul
         \\ part2 =\ ints2d \ Join Table quadrance (Fix mul.mat.min.max flatten Reduce max |sig indexin.mat) |sig select first Unc mul
         \\ \ part1 ** part2
     , "[40 25272]", @src());
@@ -175,12 +175,12 @@ test "day 9" {
     ;
     try expected_result(example,
         \\ area =\ Unc.vec {sub abs} add,1 Unc mul
-        \\ part1 =\ ints2d combinations.rows area Reduce max
+        \\ part1 =\ ints2d combinations.vec area Reduce max
         \\ proj =\ area negate
         \\ normalize =\ UnDer transpose sort
         \\ optimize =\ Sort.by proj
         \\ Find =\ MapScan.mat or F indexin,1
-        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) \\ green ->\ Find ([[p q] [r s]] -> green |> MapFold.mat and (([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not)  ) |sig pick area
+        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.vec optimize normalize) \\ green ->\ Find ([[p q] [r s]] -> green |> MapFold.mat and (([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not)  ) |sig pick area
         \\ \ part1 ** part2
     , "[50 24]", @src());
 }
@@ -198,7 +198,7 @@ test "day 10" {
     const input = @embedFile("d10input.txt");
     try expected_result(input,
         \\ p =\ eq,@# drop,1 drop,-1
-        \\ Find =\ MapScan.rows or F indexin,1
+        \\ Find =\ MapScan.vec or F indexin,1
         \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] incidences.length |> cartesian_pow Sort.by sum \ Find (mul.mat,incidences mod,2 eq,diagram all) |sig pick sum
         \\ \ split,@\n Each compute sum
 

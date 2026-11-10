@@ -166,7 +166,7 @@ test "builtins" {
     try expect_output("\\\\ in.closed", .{ "[0 1 2 3 4 5]", "[1 3]" }, "[0 1 1 1 0 0]");
 
     try expect_output("\\ stride,2", "[1 2 3 4 5 6]", "[1 3 5]");
-    try expect_output("\\ stride.rows,2", "[1_2 3_4 5_6]", "[1_2 5_6]");
+    try expect_output("\\ stride.vec,2", "[1_2 3_4 5_6]", "[1_2 5_6]");
 
     try expect_output("\\\\ distance", .{ "[3 4]", "[0 0]" }, "5"); // trailing axis convention
     try expect_output("\\ unwhere", "[3_4 2_1 0_3]", "[0_0_0_1_0 0_0_0_0_0 0_1_0_0_0 0_0_0_0_1]");
@@ -262,7 +262,7 @@ test "tuples" {
     try expect_output("\\\\ TuplesWith less couple", .{ "[0 1 2 3]", "2" }, "[0_1 0_2 0_3 1_2 1_3 2_3]");
     try expect_output("\\\\ TuplesWith less couple", .{ "[0_1_2_3 4_5_6_7]", "2" }, "[[0_1 0_2 0_3 1_2 1_3 2_3] [4_5 4_6 4_7 5_6 5_7 6_7]]"); // trailing axis convention
     try test_aliases(&.{ "combinations", "Tuples,2 less", "TuplesWith,2 less couple", "{TuplesWith less couple},2" });
-    try test_aliases(&.{ "combinations.vec", "combinations.rows", "Tuples.rows,2 less" });
+    try test_aliases(&.{ "combinations.vec", "Tuples.vec,2 less" });
 }
 
 test "fill and full" {
@@ -302,23 +302,23 @@ test "explicit axis" {
     // axis names: default -1 (dim 0), rows -2 (dim 1), grids -3 (dim 2), outer 0
     // Component operations use the trailing axis by default; r explicitly selects real scalar items.
 
-    try expect_output("\\ uncons.rows", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" });
+    try expect_output("\\ uncons.vec", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" });
 
     try expect_output("\\ uncons.c", "[1_2 3_4 5_6]", .{ "[1 2]", "[3_4 5_6]" }); // 1 scalar dimension
-    try expect_output("\\ uncons.c.rows", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
-    try expect_output("\\ uncons.outer", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
+    try expect_output("\\ uncons.c.vec", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
+    try expect_output("\\ uncons.block", "[[1_2 3_4] [5_6 7_8]]", .{ "[1_2 3_4]", "[[5_6 7_8]]" });
     try expect_output("\\ uncons.c", "[[1_2 3_4 9_9] [5_6 7_8 0_0]]", .{ "[1_2 5_6]", "[[3_4 9_9] [7_8 0_0]]" });
 
-    try expect_output("\\ Reduce.rows add", "[1_2_3 4_5_6]", "[5 7 9]");
+    try expect_output("\\ Reduce.vec add", "[1_2_3 4_5_6]", "[5 7 9]");
     try expect_output("\\ Reduce.c add", "[1_2 3_4]", "[4 6]");
-    try expect_output("\\ Reduce.c.rows add", "[[1_2 3_4] [1_2 3_4]]", "[2_4 6_8]");
+    try expect_output("\\ Reduce.c.vec add", "[[1_2 3_4] [1_2 3_4]]", "[2_4 6_8]");
     try expect_output("\\ Reduce add", "[1_2_3 4_5_6]", "[6 15]");
 
-    try expect_output("\\ Partials.rows add", "[1_2_3 4_5_6]", "[1_2_3 5_7_9]");
-    try expect_output("\\\\ Scan.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
-    try expect_output("\\\\ Fold.rows add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
+    try expect_output("\\ Partials.vec add", "[1_2_3 4_5_6]", "[1_2_3 5_7_9]");
+    try expect_output("\\\\ Scan.vec add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[1_1_1 2_3_4 6_8_10]");
+    try expect_output("\\\\ Fold.vec add", .{ "[1_2_3 4_5_6]", "[1 1 1]" }, "[6 8 10]");
     try expect_output("\\ Reduce.r2 distance", "[[3_4 0_0] [5_12 0_0]]", "[5 13]");
-    try expect_output("\\\\ indexin.rows", .{ "[1 2 3]", "3" }, "2");
+    try expect_output("\\\\ indexin.vec", .{ "[1 2 3]", "3" }, "2");
     try expect_output("\\\\ indexin", .{ "[1 2 3]", "2" }, "1"); // rows is the default axis
     try expect_output("\\\\ indexin.mat", .{ "[1_2_3 4_5_6]", "2" }, "[1 0]");
 }

@@ -39,10 +39,12 @@ elementwise operations, `axial.zig` for axis-dependent operations,
 higher-order functions. Convolution and regex helpers have separate
 modules there. `src/primitives.zig` registers builtin names, aliases, and arities.
 Component suffixes describe the items being operated on. Scalar items are the
-default, so no `.els` suffix is needed. `.rows` (or `.vec`) selects vector items
-along axis -2; `.grids` (or `.mat`) selects matrix items along axis -3.
-`.outer` selects the leading axis, regardless of rank. Earlier axes are processed
-independently. Type suffixes such as `.c`, `.r3`, and `.c.rows` also work.
+default, so no `.els` suffix is needed. `.vec` selects vector items
+along axis -2; `.mat` selects matrix items along axis -3.
+`.block` selects rank N - 1 items along the leading axis of a rank N array.
+`.cell` selects rank N - 2 items along the second axis, leaving a matrix of cells
+(the array must have at least two axes). Earlier axes are processed
+independently. Type suffixes such as `.c`, `.r3`, and `.c.vec` also work.
 
 `where` and `unwhere` operate on the whole array, independently of axis selection,
 following Uiua. `where` repeats each index by its nonnegative integer count:
@@ -55,9 +57,9 @@ than the largest coordinate on that axis, so trailing zeros are not recovered
 by a `where unwhere` round trip. Both reject negative or fractional inputs.
 
 `first` and `last` alias `select.r,0` and `select.r,-1`, selecting the first or
-last element of each trailing vector. `first.rows` and `last.rows` select whole
-rows; `first.outer` and `last.outer` select along the leading axis.
-`select` accepts the same component suffixes, for example `select.rows,1`.
+last element of each trailing vector. `first.vec` and `last.vec` select whole
+rows; `first.block` and `last.block` select along the leading axis.
+`select` accepts the same component suffixes, for example `select.vec,1`.
 Bare `select` and `second` (`select,1`) retain leading-axis selection.
 Scalar selection also unwraps tuple elements. The legacy `last.row` remains
 available and leaves scalars and vectors unchanged.
@@ -71,13 +73,13 @@ Batches on tuple sources return tuples, nested for additional batch axes.
 
 `uncons` splits each trailing vector into its first element and remaining elements.
 For `[1_2_3 4_5_6]` it returns the pair `[1 4]` and `[2_3 5_6]`.
-`uncons.rows` splits off a whole row; `uncons.outer` splits off a leading-axis item.
+`uncons.vec` splits off a whole row; `uncons.block` splits off a leading-axis item.
 
-`indexin` retains its search-domain suffixes: the default, `.rows`, and `.vec`
+`indexin` retains its search-domain suffixes: the default and `.vec`
 search within trailing vectors. `.mat` searches within trailing matrices and
 returns coordinate pairs, with the innermost axis first. For example, searching
 `[1_2_3 4_5_6]` for `2` with `indexin.mat` returns `[1 0]`.
-`.outer` searches the entire array. Earlier haystack dimensions are processed
+`.block` searches the entire array. Earlier haystack dimensions are processed
 independently. These suffixes describe the search domain, unlike the item
 components used by `first`, `last`, `uncons`, and `sort`.
 
@@ -120,12 +122,12 @@ For example, `{ convolve.full }` on `[1 2 3]` and `[1 2]` gives `[1 4 7 6]`.
 vector, preserving order. For example, `[2_1_2 4_4_3]` becomes `[2_1 4_3]`.
 Scalars and empty arrays are unchanged. NaNs compare equal, as do signed zeros.
 Different unique counts across vectors report `ShapeMismatch`.
-`deduplicate.rows` removes repeated whole rows along axis -2 in each outer cell.
+`deduplicate.vec` removes repeated whole rows along axis -2 in each outer cell.
 For example, `[1_2 3_4 1_2]` becomes `[1_2 3_4]`. The general component and
-axis selectors are supported, including `.c`, `.grids`, and `.outer`.
+axis selectors are supported, including `.c`, `.mat`, and `.block`.
 
 `stride,2` keeps every second element along the trailing axis, starting with
-the first: `[1 2 3 4 5 6]` becomes `[1 3 5]`. `stride.rows,2` does the
+the first: `[1 2 3 4 5 6]` becomes `[1 3 5]`. `stride.vec,2` does the
 same along axis -2 in each outer cell: `[1_2 3_4 5_6]` becomes `[1_2 5_6]`.
 The step must be a positive integer scalar. Values without the selected axis
 are unchanged; empty axes remain empty.
@@ -262,8 +264,8 @@ Function choices run in source order, with the last choice varying fastest:
 its complete composition runs before the results are stacked.
 
 `sort` sorts each innermost vector in ascending order. Component suffixes
-select the cells to compare lexicographically: `sort.rows` sorts rows,
-`sort.r3` sorts three-element vectors, and `sort.outer` sorts the leading
+select the cells to compare lexicographically: `sort.vec` sorts rows,
+`sort.r3` sorts three-element vectors, and `sort.block` sorts the leading
 axis. Scalar elements are the default. Any axes before the
 selected axis are processed independently; the array shape is preserved.
 
@@ -294,7 +296,7 @@ prefixes with a known dyadic monoid `op`. For example, `MapScan add sq` maps
 `and`, `or`, `min`, and `max` (`maximum`), with identities `0`, `1`, `1`, `0`,
 positive infinity, and negative infinity, respectively. Empty inputs stay empty;
 the identity is not included in the output. Like `Partials`, the default axis is
-the innermost vector; `.rows` and other component axes are supported, with
+the innermost vector; `.vec` and other component axes are supported, with
 mapped cells of a consistent output shape, which may differ from the input cell shape. `MapScan or/and f` skips `f` once the accumulator is
 absorbed, repeating the final value for the remaining prefixes. It shares the
 seeded-fold helper used by `Scan` and `Fold`.

@@ -102,7 +102,7 @@ pub fn stride(a: std.mem.Allocator, x: Value, step: Value) !Value {
 }
 
 /// Keep every nth row along axis -2 in each outer cell.
-pub fn @"stride.rows"(a: std.mem.Allocator, x: Value, step: Value) !Value {
+pub fn @"stride.vec"(a: std.mem.Allocator, x: Value, step: Value) !Value {
     return strideAxis(a, x, step, 2);
 }
 

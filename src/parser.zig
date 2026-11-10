@@ -2,7 +2,7 @@ const std = @import("std");
 const Lexer = @import("lexer.zig").Lexer;
 const Value = @import("runtime.zig").Value;
 pub const Instruction = union(enum) {
-    component: struct { function: *const Instruction, dimensions: ?usize, type_shape: []const usize = &.{} },
+    component: struct { function: *const Instruction, dimensions: ?usize, leading_axes: usize = 1, type_shape: []const usize = &.{} },
     literal: Value,
     variable: []const u8,
     aggregate: struct { items: []const Instruction, tuple: bool = false },
@@ -273,7 +273,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 if (selected_component) |c| {
                     const selected = try a.create(Instruction);
                     selected.* = previous.*;
-                    previous.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                    previous.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
                 }
                 continue;
             }
@@ -295,7 +295,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 for (choices.items) |*choice| {
                     const selected = try a.create(Instruction);
                     selected.* = choice.*;
-                    choice.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                    choice.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
                 }
             }
             previous.* = if (choices.items.len == 1) choices.items[0] else .{ .choices = try choices.toOwnedSlice(a) };
@@ -386,7 +386,8 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                 var axis_dimension: usize = 0;
                 var has_type = false;
                 var has_axis = false;
-                var outer = false;
+                var relative = false;
+                var leading_axes: usize = 1;
                 var exclusive = false;
                 while (parts.next()) |part| {
                     if (std.mem.eql(u8, part, "exclusive")) {
@@ -408,11 +409,11 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;
                         axis_dimension = if (std.mem.eql(u8, part, "vec")) 1 else 2;
-                    } else if (std.mem.eql(u8, part, "rows") or std.mem.eql(u8, part, "grids") or std.mem.eql(u8, part, "outer")) {
+                    } else if (std.mem.eql(u8, part, "block") or std.mem.eql(u8, part, "cell")) {
                         if (has_axis) return error.InvalidComponent;
                         has_axis = true;
-                        outer = std.mem.eql(u8, part, "outer");
-                        axis_dimension = if (std.mem.eql(u8, part, "rows")) 1 else if (std.mem.eql(u8, part, "grids")) 2 else 0;
+                        relative = true;
+                        leading_axes = if (std.mem.eql(u8, part, "block")) 1 else 2;
                     } else return error.InvalidComponent;
                 }
                 const function = try a.create(Instruction);
@@ -421,7 +422,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
                     try result.append(a, function.*);
                     continue;
                 }
-                try result.append(a, .{ .component = .{ .function = function, .dimensions = if (outer) null else type_dimension + axis_dimension, .type_shape = type_shape } });
+                try result.append(a, .{ .component = .{ .function = function, .dimensions = if (relative) null else type_dimension + axis_dimension, .leading_axes = leading_axes, .type_shape = type_shape } });
                 continue;
             }
         }
@@ -813,7 +814,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (component) |c| {
                 const selected = try a.create(Instruction);
                 selected.* = bound;
-                bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                bound = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
                 component = null;
             }
             if (instruction == .partial) {
@@ -831,7 +832,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const bound = &result.items[result.items.len - 1];
             const function = try a.create(Instruction);
             function.* = bound.*;
-            bound.* = .{ .component = .{ .function = function, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+            bound.* = .{ .component = .{ .function = function, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
         }
         if (dynamic) |application| {
             const bound = &result.items[result.items.len - 1];
@@ -847,7 +848,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (bound_component) |c| {
                 const selected = try a.create(Instruction);
                 selected.* = function.*;
-                function.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .type_shape = c.type_shape } };
+                function.* = .{ .component = .{ .function = selected, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
             }
             bound.* = .{ .dynamic_applied = .{ .function = function, .argument = application.argument } };
         }

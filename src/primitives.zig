@@ -48,7 +48,7 @@ pub fn arity(name: []const u8) ?usize {
         .{ "range", {} },         .{ "range_inclusive", {} }, .{ "in.closed", {} },      .{ "tuple", {} },
         .{ "reshape", {} },       .{ "fill", {} },            .{ "full", {} },           .{ "base", {} },
         .{ "join", {} },          .{ "couple", {} },          .{ "distance", {} },       .{ "quadrance", {} },
-        .{ "stride", {} },        .{ "stride.rows", {} },     .{ "count", {} },          .{ "take", {} },
+        .{ "stride", {} },        .{ "stride.vec", {} },     .{ "count", {} },          .{ "take", {} },
         .{ "drop", {} },          .{ "prepend", {} },         .{ "indexin", {} },        .{ "select", {} },
         .{ "split", {} },         .{ "split.first", {} },     .{ "keep", {} },           .{ "radix", {} },
         .{ "re.Matches", {} },    .{ "re.Findall", {} },      .{ "convolve.same", {} },  .{ "convolve.valid", {} },

@@ -622,28 +622,34 @@ fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser
 
 /// Component dimensions are trailing storage dimensions, after the operated axis.
 fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("parser.zig").Instruction, "component"), x: Value, y: Value) anyerror!Value {
+    // Relative components leave a vector of blocks or a matrix of cells.
+    // Keep block's null rank for leading-axis tuple/scalar selection.
+    const selected_dimensions: ?usize = if (c.dimensions) |rank| rank else if (c.leading_axes == 1) null else blk: {
+        if (x.tuple != null or x.shape.len < c.leading_axes + c.type_shape.len) return error.InvalidAxis;
+        break :blk x.shape.len - c.leading_axes;
+    };
     const selection = c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "select");
     const bound_selection = c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "select");
     if (selection or bound_selection) {
         if (x.tuple == null and (x.shape.len < c.type_shape.len or
             !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
-        return @import("builtins/axial.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, c.dimensions);
+        return @import("builtins/axial.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, selected_dimensions);
     }
     if (c.function.* == .unc) {
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
         if (x.tuple == null and (x.shape.len < c.type_shape.len or
             !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
-        return uncOperation(memory, c.function.unc, x, c.dimensions);
+        return uncOperation(memory, c.function.unc, x, selected_dimensions);
     }
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len < c.type_shape.len or
         !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape)) return error.ShapeMismatch;
     if (x.shape.len <= c.type_shape.len) return error.InvalidAxis;
-    const dimensions = c.dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
+    const dimensions = selected_dimensions orelse if (x.shape.len > 0) x.shape.len - 1 else 0;
     if ((c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "indexin")) or
         (c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "indexin")))
-        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, c.dimensions orelse x.shape.len);
+        return @import("builtins/axial.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, selected_dimensions orelse x.shape.len);
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
         return @import("builtins/axial.zig").sortComponents(memory.allocator(), x, dimensions);
