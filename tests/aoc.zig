@@ -32,14 +32,20 @@ test "day 2" {
 }
 
 test "day 3" {
-    try expected_result(
+    const example =
         \\$ 987654321111111
         \\$ 811111111111119
         \\$ 234234234234278
         \\$ 818181911112111
-    ,
-        \\ \ digits2d reverse combinations radix,10 Reduce max sum
-    , "357", @src());
+    ;
+    //_ = example;
+    //const input = @embedFile("d3input.txt");
+    try expected_result(example,
+        \\ part1 =\ digits2d reverse combinations radix,10 Reduce max sum
+        \\ fn =\\ remaining, numb  -> remaining |> drop,-numb Reduce max ~> |sig indexin add,1 |sig drop
+        \\ part2 =\ digits2d Each.vec \ ({Flip Mapaccum {fn reverse} },reverse(iota(12)) ) reverse radix,10
+        \\ \ part1 ** (part2 sum)
+    , "[357 3121910778619]", @src());
 }
 
 test "day 4" {
@@ -75,13 +81,13 @@ test "day 5" {
         \\$ 17
         \\$ 32
     ;
-    _ = example;
-    const input = @embedFile("day5input.txt");
-    try expected_result(input,
+    //_ = example;
+    //const input = @embedFile("day5input.txt");
+    try expected_result(example,
         \\ part1 =\ split.first,"\n\n" |phi (ints reshape,[inf 2] ) ints Table Flip in.closed \ transpose Reduce or sum
         \\ part2 =\ split.first,"\n\n" first ints reshape,[inf 2] sort.vec MapAccum,0 {m, [a b] -> a m |> max rsub,b+1 max,0  } {m, [a b] -> b m |> add,1 |delta max } sum
         \\ \ part1 ** part2
-    , "[640 365804144481581]", @src());
+    , "[3 14]", @src());
 }
 
 test "day 6" {
@@ -196,13 +202,13 @@ test "day 10" {
         \\$ [...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
         \\$ [.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}
     ;
-    _ = example;
-    const input = @embedFile("d10input.txt");
-    try expected_result(input,
+    //_ = example;
+    //const input = @embedFile("d10input.txt");
+    try expected_result(example,
         \\ p =\ eq,@# drop,1 drop,-1
         \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
         \\ \ split,@\n Each compute sum
 
         //not_eq,@ |sig Partition (digits length)
-    , "486", @src());
+    , "7", @src());
 }

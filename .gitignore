@@ -3,3 +3,4 @@ zig-out/
 zig-pkg/
 __pycache__/
 scratch/
+tests/*.txt
