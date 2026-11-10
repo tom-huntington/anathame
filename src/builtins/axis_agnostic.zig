@@ -3,6 +3,43 @@
 const std = @import("std");
 const Value = @import("../runtime.zig").Value;
 
+/// N-fold Cartesian product of leading-axis cells, with the last choice varying fastest.
+pub fn cartesian_pow(a: std.mem.Allocator, x: Value, exponent: Value) !Value {
+    if (x.tuple != null or exponent.tuple != null) return error.ExpectedArray;
+    if (x.shape.len == 0 or exponent.shape.len != 0 or exponent.data.len != 1)
+        return error.InvalidInput;
+    const number = exponent.data[0];
+    if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or
+        number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidInput;
+    const n: usize = @intFromFloat(number);
+    const choices = x.shape[0];
+    const combinations = try std.math.powi(usize, choices, n);
+    var width: usize = 1;
+    for (x.shape[1..]) |dimension| width = try std.math.mul(usize, width, dimension);
+    const length_ = try std.math.mul(usize, try std.math.mul(usize, combinations, n), width);
+    const shape = try a.alloc(usize, x.shape.len + 1);
+    errdefer a.free(shape);
+    shape[0] = combinations;
+    shape[1] = n;
+    @memcpy(shape[2..], x.shape[1..]);
+    const data = try a.alloc(f64, length_);
+    errdefer a.free(data);
+    if (data.len != 0) {
+        for (0..combinations) |combination| {
+            var remaining = combination;
+            var position = n;
+            while (position > 0) {
+                position -= 1;
+                const choice = remaining % choices;
+                remaining /= choices;
+                const start = (combination * n + position) * width;
+                @memcpy(data[start..][0..width], x.data[choice * width ..][0..width]);
+            }
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 /// Pick a cell by leading-axis coordinates, or a batch of coordinate vectors.
 /// The last index axis holds coordinates; preceding axes shape the batch.
 pub fn pick(a: std.mem.Allocator, source: Value, indices: Value) !Value {

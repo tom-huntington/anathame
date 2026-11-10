@@ -130,6 +130,12 @@ and `fall` gives `[0_2_1 0_1_2]`.
 
 `flatten` (Uiua's `deshape`) turns any array into a vector in storage order:
 `[1_2_3 4_5_6]` becomes `[1 2 3 4 5 6]`, and `7` becomes `[7]`.
+`cartesian_pow` takes an array and a nonnegative integer scalar exponent, returning
+all combinations of that many leading-axis cells. The last choice varies fastest:
+`cartesian_pow,2` on `[1 2]` gives `[1_1 1_2 2_1 2_2]`.
+For input shape `[m ...]`, the output shape is `[m^n n ...]`.
+Exponent zero returns one empty combination; an empty input with a positive
+exponent returns no combinations.
 `squeeze` removes all length-one dimensions, preserving the data and other axes.
 For example, shape `[1 2 1 3 1]` becomes `[2 3]`, and `[7]` becomes scalar `7`.
 `shape` returns a vector of dimension sizes: `[1_2_3 4_5_6]` gives `[2 3]`,

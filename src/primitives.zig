@@ -52,7 +52,7 @@ pub fn arity(name: []const u8) ?usize {
         .{ "drop", {} },          .{ "prepend", {} },         .{ "indexin", {} },        .{ "select", {} },
         .{ "split", {} },         .{ "split.first", {} },     .{ "keep", {} },           .{ "radix", {} },
         .{ "re.Matches", {} },    .{ "re.Findall", {} },      .{ "convolve.same", {} },  .{ "convolve.valid", {} },
-        .{ "convolve.full", {} },
+        .{ "convolve.full", {} },  .{ "cartesian_pow", {} },
     });
     if (dyadic.has(name)) return 2;
     // Every registered product variant takes two arrays.
