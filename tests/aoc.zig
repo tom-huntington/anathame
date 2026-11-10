@@ -194,8 +194,10 @@ test "day 10" {
         \\$ [.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}
     ;
     try expected_result(example,
-        //\\ \ Partition,@\n \ part1
-        \\ \ split,@\n first split,@ \[diagram *buttons joltage] -> 1
+        \\ p =\ eq,@# drop,1 drop,-1
+        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ log`incidences -> [0 1] 6 |> cartesian_pow Sort.by sum \ Scan.rows,0 {(mul.mat,incidences mod,2 eq,diagram all) |d or} indexin,1 |sig pick sum
+        \\ \ split,@\n first compute 
+
         //not_eq,@ |sig Partition (digits length)
     , null, @src());
 }
