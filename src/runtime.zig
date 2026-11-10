@@ -347,6 +347,13 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
+        if (instruction == .find) {
+            const temporary = try hofs.find(memory, first_argument, instruction.find, 0);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .map_scan or instruction == .map_fold) {
             const temporary = try hofs.mapScan(memory, first_argument, instruction, 0);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -472,7 +479,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
-        .map_fold, .map_scan, .partials, .reduce, .unc, .join, .sort_with, .each => 1,
+        .find, .map_fold, .map_scan, .partials, .reduce, .unc, .join, .sort_with, .each => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
@@ -655,6 +662,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         return @import("builtins/axis_polymorphic.zig").sortComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))
         return @import("builtins/axis_polymorphic.zig").deduplicateComponents(memory.allocator(), x, dimensions);
+    if (c.function.* == .find) return hofs.find(memory, x, c.function.find, dimensions);
     if (c.function.* == .tuples) return hofs.tuples(memory, x, y, c.function.tuples, dimensions);
     if (c.function.* == .map_scan or c.function.* == .map_fold) return hofs.mapScan(memory, x, c.function.*, dimensions);
     const a = memory.allocator();

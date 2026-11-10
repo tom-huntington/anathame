@@ -179,8 +179,7 @@ test "day 9" {
         \\ proj =\ area negate
         \\ normalize =\ UnDer transpose sort
         \\ optimize =\ Sort.by proj
-        \\ Find =\ MapScan.comp or F indexin,1
-        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.vec optimize normalize) \\ green ->\ Find.mat ([[p q] [r s]] -> green |> MapFold.mat and (([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not)  ) |sig pick area
+        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.vec optimize normalize) \\ green ->\ Find.mat ([[p q] [r s]] -> green |> MapFold.mat and (([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not)  ) area
         \\ \ part1 ** part2
     , "[50 24]", @src());
 }
@@ -198,8 +197,7 @@ test "day 10" {
     const input = @embedFile("d10input.txt");
     try expected_result(input,
         \\ p =\ eq,@# drop,1 drop,-1
-        \\ Find =\ MapScan.comp or F indexin,1
-        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) |sig pick sum
+        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
         \\ \ split,@\n Each compute sum
 
         //not_eq,@ |sig Partition (digits length)

@@ -754,3 +754,38 @@ pub fn sortWith(memory: *ReservedBumpAllocator, x: Value, function: *const @impo
     for (indices, 0..) |source, target| @memcpy(data[target * width ..][0..width], x.data[source * width ..][0..width]);
     return .{ .data = data, .shape = x.shape };
 }
+
+/// Return the first matching cell along the selected axis, without evaluating later cells.
+pub fn find(memory: *ReservedBumpAllocator, x: Value, predicate: *const @import("../parser.zig").Instruction, dimensions: usize) anyerror!Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+    if (dimensions >= input.shape.len) return error.InvalidComponent;
+    const axis = input.shape.len - dimensions - 1;
+    const cell_shape = input.shape[axis + 1 ..];
+    var size: usize = 1;
+    for (cell_shape) |dim| size *= dim;
+    var count: usize = 1;
+    for (input.shape[0..axis]) |dim| count *= dim;
+    const a = memory.allocator();
+    const shape = try a.alloc(usize, input.shape.len - 1);
+    @memcpy(shape[0..axis], input.shape[0..axis]);
+    @memcpy(shape[axis..], cell_shape);
+    const data = try a.alloc(f64, count * size);
+    for (0..count) |row| {
+        for (0..input.shape[axis]) |column| {
+            const cell: Value = .{ .data = input.data[(row * input.shape[axis] + column) * size ..][0..size], .shape = cell_shape };
+            const checkpoint = memory.checkpoint();
+            const matched = blk: {
+                defer memory.restore(checkpoint);
+                const result = try evaluateScope(memory, &.{predicate.*}, cell, .{});
+                if (result.tuple != null or result.shape.len != 0 or result.data.len != 1) return error.ExpectedScalar;
+                break :blk result.data[0] != 0;
+            };
+            if (matched) {
+                @memcpy(data[row * size ..][0..size], cell.data);
+                break;
+            }
+        } else return error.NoMatch;
+    }
+    return .{ .data = data, .shape = shape };
+}

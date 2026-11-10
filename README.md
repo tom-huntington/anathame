@@ -307,6 +307,12 @@ mapped cells of a consistent output shape, which may differ from the input cell 
 absorbed, repeating the final value for the remaining prefixes. It shares the
 seeded-fold helper used by `Scan` and `Fold`.
 
+`Find predicate` returns the first input value for which the monadic predicate
+returns a nonzero scalar, stopping as soon as it matches. For example,
+`Find (greater,3)` maps `[1 4 5]` to `4`. Component suffixes select cells:
+`Find.vec predicate` searches vectors and returns the matching vector.
+Empty searches and searches without a match return `NoMatch`.
+
 `MapFold op f` uses the same mapping, monoids, axes, and boolean short-circuiting
 as `MapScan`, but returns only the final accumulator, removing the selected axis.
 For example, `MapFold add sq` maps `[1 2 3]` to `14`. Empty vectors return
@@ -439,8 +445,8 @@ definition names or value parameters. A TitleCase definition must use `F`; using
 definitions cannot use either placeholder.
 
 User-defined functions can use `.comp` as a component placeholder, for example
-`Find =\ MapScan.comp or F indexin,1`. Calling `Find.mat` substitutes `.mat`
-for `.comp`; calling bare `Find` removes `.comp`, using the underlying
+`FindIndex =\ MapScan.comp or F indexin,1`. Calling `FindIndex.mat` substitutes `.mat`
+for `.comp`; calling bare `FindIndex` removes `.comp`, using the underlying
 operation's default. This also works in ordinary functions, and the suffix can
 include multiple component parts such as `.r2.vec`.
 
