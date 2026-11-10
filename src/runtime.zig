@@ -347,6 +347,13 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
+        if (instruction == .map_scan) {
+            const temporary = try hofs.mapScan(memory, first_argument, instruction, 0);
+            result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
+            first_function = false;
+            retain_x = false;
+            continue;
+        }
         if (instruction == .partition) {
             const temporary = try hofs.partition(memory, first_argument, second_argument, instruction.partition);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
@@ -465,7 +472,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
-        .partials, .reduce, .unc, .join, .sort_with, .each => 1,
+        .map_scan, .partials, .reduce, .unc, .join, .sort_with, .each => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
@@ -643,6 +650,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))
         return @import("builtins/axial.zig").deduplicateComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .tuples) return hofs.tuples(memory, x, y, c.function.tuples, dimensions);
+    if (c.function.* == .map_scan) return hofs.mapScan(memory, x, c.function.*, dimensions);
     const a = memory.allocator();
     const axis = x.shape.len - dimensions - 1;
     const width = x.shape[axis];

@@ -288,6 +288,17 @@ seed `10` produces `16`. Each innermost vector starts from the seed;
 empty vectors return the seed. `sum` aliases `Fold,0 add`, so empty sums return `0`. Both pass the accumulator first and the next
 scalar second to their operand, which must return a scalar.
 
+`MapScan f op` maps each input scalar with monadic `f` and accumulates inclusive
+prefixes with a known dyadic monoid `op`. For example, `MapScan sq add` maps
+`[1 2 3]` to `[1 5 14]`. Supported operations are `add`, `mul` (`multiply`),
+`and`, `or`, `min`, and `max` (`maximum`), with identities `0`, `1`, `1`, `0`,
+positive infinity, and negative infinity, respectively. Empty inputs stay empty;
+the identity is not included in the output. Like `Partials`, the default axis is
+the innermost vector; `.rows` and other component axes are supported, with
+same-shaped mapped cells. `MapScan f or/and` skips `f` once the accumulator is
+absorbed, repeating the final value for the remaining prefixes. It shares the
+seeded-fold helper used by `Scan` and `Fold`.
+
 For all four operations, `f |d or` and `f |d and` skip `f` once the accumulator reaches `1` or `0`, respectively. Scans repeat that value for the remaining prefixes. Component-axis operations stop when every accumulator element has reached the absorbing value.
 
 `Stencil,3 sum` applies `sum` to overlapping windows of three leading-axis

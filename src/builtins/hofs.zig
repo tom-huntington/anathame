@@ -271,6 +271,32 @@ pub fn rowArgument(a: std.mem.Allocator, value: Value, index: usize) !Value {
     return .{ .data = value.data[start..][0..width], .shape = shape };
 }
 
+/// A closed set of scalar monoids with known identities.
+pub fn monoidIdentity(function: *const @import("../parser.zig").Instruction) ?f64 {
+    if (function.* != .primitive) return null;
+    const name = function.primitive;
+    if (std.mem.eql(u8, name, "add") or std.mem.eql(u8, name, "or")) return 0;
+    if (std.mem.eql(u8, name, "mul") or std.mem.eql(u8, name, "multiply") or std.mem.eql(u8, name, "and")) return 1;
+    if (std.mem.eql(u8, name, "min")) return std.math.inf(f64);
+    if (std.mem.eql(u8, name, "max") or std.mem.eql(u8, name, "maximum")) return -std.math.inf(f64);
+    return null;
+}
+
+pub fn mapScan(memory: *ReservedBumpAllocator, x: Value, operation: @import("../parser.zig").Instruction, dimensions: usize) anyerror!Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
+    if (dimensions >= input.shape.len) return error.InvalidComponent;
+    const axis = input.shape.len - dimensions - 1;
+    const cell_shape = input.shape[axis + 1 ..];
+    var size: usize = 1;
+    for (cell_shape) |dim| size *= dim;
+    const data = try memory.allocator().alloc(f64, size);
+    @memset(data, operation.map_scan.identity);
+    var result = try seededFold(memory, input, .{ .data = data, .shape = cell_shape }, operation.map_scan.function, axis, false, false, false);
+    if (x.shape.len == 0) result.shape = result.shape[1..];
+    return result;
+}
+
 /// Only bare boolean primitives can bypass operand evaluation.
 pub fn booleanOp(function: *const @import("../parser.zig").Instruction) ?bool {
     if (function.* != .primitive) return null;
