@@ -68,7 +68,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             break;
         }
         if (!validDefinitionName(name) or @import("primitives.zig").known(name) or
-            std.mem.eql(u8, name, "rsub") or std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "total") or std.mem.eql(u8, name, "split") or std.mem.eql(u8, name, "Pairwise") or
+            std.mem.eql(u8, name, "rsub") or std.mem.eql(u8, name, "sum") or std.mem.eql(u8, name, "all") or std.mem.eql(u8, name, "any") or std.mem.eql(u8, name, "total") or std.mem.eql(u8, name, "split") or std.mem.eql(u8, name, "Pairwise") or
             std.mem.eql(u8, name, "combinations") or std.mem.eql(u8, name, "tup")) return error.InvalidFunctionName;
         if (names.contains(name)) return error.DuplicateFunctionName;
         const body_start = lexer.offset;
@@ -344,6 +344,10 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         if (std.mem.eql(u8, token, "combinations") or std.mem.startsWith(u8, token, "combinations.")) {
             const suffix = token["combinations".len..];
             try result.appendSlice(a, try parse(a, try std.fmt.allocPrint(a, "Tuples{s},2 less", .{suffix})));
+            continue;
+        }
+        if (std.mem.eql(u8, token, "all") or std.mem.eql(u8, token, "any")) {
+            try result.appendSlice(a, try parse(a, if (std.mem.eql(u8, token, "all")) "Fold,1 and" else "Fold,0 or"));
             continue;
         }
         if (std.mem.eql(u8, token, "sum")) {
@@ -1121,7 +1125,7 @@ fn patternAtom(a: std.mem.Allocator, lexer: *Lexer, names: *std.StringHashMapUnm
     }
     if (!validName(token) or std.mem.eql(u8, token, "F") or std.mem.eql(u8, token, "G")) return error.InvalidFunctionName;
     if (names.contains(token) or @import("primitives.zig").known(token) or
-        std.mem.eql(u8, token, "rsub") or std.mem.eql(u8, token, "sum") or std.mem.eql(u8, token, "total") or
+        std.mem.eql(u8, token, "rsub") or std.mem.eql(u8, token, "sum") or std.mem.eql(u8, token, "all") or std.mem.eql(u8, token, "any") or std.mem.eql(u8, token, "total") or
         std.mem.eql(u8, token, "split") or std.mem.eql(u8, token, "Pairwise") or
         std.mem.eql(u8, token, "combinations") or std.mem.eql(u8, token, "tup")) return shadowed();
     try names.put(a, token, .{ .variable = token });
