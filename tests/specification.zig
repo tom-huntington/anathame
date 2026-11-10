@@ -336,6 +336,7 @@ test "types" {
 }
 
 test "syntax" {
+    // default arguments
     try expect_output(
         \\ 1 2 :>
         \\ \\ couple
@@ -348,4 +349,20 @@ test "syntax" {
         \\ 1 2 :>
         \\ \\ couple
     , .{}, "[1 2]");
+
+    // yeild macro
+    try expect_output(
+        \\ \ add,1 ~> |s couple
+    , "1", .{ "2", "[2 1]" });
+
+    try expect_output(
+        \\ \ add,1 ~> |s couple |s mul
+    , "2", .{ "3", "[6 4]" });
+
+    try expect_output(
+        \\ \ add,1 ~> |sig couple
+    , "1", .{ "2", "[1 2]" });
+    try expect_output(
+        \\ \\ mul ~> |phi1 sub couple
+    , .{ "2", "3" }, .{ "6", "[6 -1]" });
 }

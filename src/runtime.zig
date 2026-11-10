@@ -120,8 +120,14 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]cons
 }
 
 pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @import("parser.zig").Instruction, x: Value, y: Value) anyerror!Value {
+    return evaluateScopeImpl(memory, instructions, x, y, true);
+}
+
+fn evaluateScopeImpl(memory: *ReservedBumpAllocator, instructions: []const @import("parser.zig").Instruction, x: Value, y: Value, capture_yeilds: bool) anyerror!Value {
     var result = y;
-    const checkpoint = memory.checkpoint();
+    const scope_checkpoint = memory.checkpoint();
+    var checkpoint = scope_checkpoint;
+    var yeilds: std.ArrayList(Value) = .empty;
     var retain_x = false;
     var reverse_arguments = false;
     var retain_y = false;
@@ -130,10 +136,20 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
     // D transforms only the right input, so do not evaluate its prefix on x.
     var start: usize = 0;
     for (instructions, 0..) |instruction, index| {
-        if (instruction == .combinator and instruction.combinator == .d) start = index;
+        if (instruction == .combinator and instruction.combinator.kind == .d) start = index;
     }
     if (start > 0) {
-        result = try evaluateScope(memory, instructions[0..start], y, y);
+        // D changes the prefix's inputs. Yeild still captures the prefix as
+        // it would run on the original inputs with the suffix removed.
+        if (capture_yeilds) {
+            for (instructions[0 .. start + 1], 0..) |instruction, index| {
+                if (instruction != .combinator or !instruction.combinator.yeild) continue;
+                const prefix = try evaluateScopeImpl(memory, instructions[0..index], x, y, false);
+                try yeilds.append(memory.allocator(), prefix);
+            }
+            checkpoint = memory.checkpoint();
+        }
+        result = try evaluateScopeImpl(memory, instructions[0..start], y, y, false);
         first_function = false;
     }
     for (instructions[start..], start..) |instruction, index| {
@@ -141,11 +157,15 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             skip -= 1;
             continue;
         }
-        if (instruction == .combinator and (instruction.combinator == .d2 or instruction.combinator == .phi1)) {
-            if (index == 0 or index + 2 >= instructions.len) return combinatorFunctionArguments(@tagName(instruction.combinator), 3, @as(usize, @intFromBool(index > 0)) + @min(2, instructions.len - index - 1));
+        if (instruction == .combinator and instruction.combinator.yeild and capture_yeilds and (start == 0 or index > start)) {
+            try yeilds.append(memory.allocator(), result);
+            checkpoint = memory.checkpoint();
+        }
+        if (instruction == .combinator and (instruction.combinator.kind == .d2 or instruction.combinator.kind == .phi1)) {
+            if (index == 0 or index + 2 >= instructions.len) return combinatorFunctionArguments(@tagName(instruction.combinator.kind), 3, @as(usize, @intFromBool(index > 0)) + @min(2, instructions.len - index - 1));
             const branch = instructions[index + 1];
             const combine = instructions[index + 2];
-            const branch_arity: usize = if (instruction.combinator == .d2) 1 else 2;
+            const branch_arity: usize = if (instruction.combinator.kind == .d2) 1 else 2;
             if (functionArity(branch) != branch_arity or functionArity(combine) != 2) return error.WrongNumberOfArguments;
             const right = try evaluateScope(memory, &.{branch}, if (branch_arity == 1) y else x, y);
             const temporary = try evaluateScope(memory, &.{combine}, result, right);
@@ -157,11 +177,11 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             reverse_arguments = false;
             continue;
         }
-        if (instruction == .combinator and instruction.combinator == .psi) {
+        if (instruction == .combinator and instruction.combinator.kind == .psi) {
             if (index == 0 or index + 1 == instructions.len) return combinatorFunctionArguments("psi", 2, @as(usize, @intFromBool(index > 0)) + @min(1, instructions.len - index - 1));
             const function = instructions[index + 1];
             if (functionArity(function) != 2) return error.WrongNumberOfArguments;
-            const right = try evaluateScope(memory, instructions[0..index], y, y);
+            const right = try evaluateScopeImpl(memory, instructions[0..index], y, y, false);
             const temporary = try evaluateScope(memory, &.{function}, result, right);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             skip = 1;
@@ -170,7 +190,7 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             reverse_arguments = false;
             continue;
         }
-        if (instruction == .combinator and instruction.combinator == .phi) {
+        if (instruction == .combinator and instruction.combinator.kind == .phi) {
             const remaining = instructions[index + 1 ..];
             const temporary = if (result.tuple) |tuple| blk: {
                 if (tuple.len != 2) return error.WrongNumberOfArguments;
@@ -200,9 +220,10 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
             continue;
         }
         if (instruction == .combinator) {
-            retain_x = instruction.combinator != .b;
-            reverse_arguments = instruction.combinator == .sig or instruction.combinator == .n or instruction.combinator == .d;
-            retain_y = instruction.combinator == .nu or instruction.combinator == .delta;
+            const kind = instruction.combinator.kind;
+            retain_x = kind != .b;
+            reverse_arguments = kind == .sig or kind == .n or kind == .d;
+            retain_y = kind == .nu or kind == .delta;
             continue;
         }
         const first_argument = if (first_function or reverse_arguments) x else result;
@@ -445,7 +466,13 @@ pub fn evaluateScope(memory: *ReservedBumpAllocator, instructions: []const @impo
         first_function = false;
         retain_x = false;
     }
-    return result;
+    if (yeilds.items.len == 0) return result;
+    var remaining = yeilds.items.len;
+    while (remaining > 0) {
+        remaining -= 1;
+        result = .{ .tuple = try memory.allocator().dupe(Value, &.{ yeilds.items[remaining], result }) };
+    }
+    return @import("memory.zig").ReturnImpl(memory, scope_checkpoint, result);
 }
 
 pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig").Instruction) !Value {

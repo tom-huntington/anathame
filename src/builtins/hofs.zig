@@ -310,7 +310,10 @@ pub fn booleanD(function: *const @import("../parser.zig").Instruction) ?bool {
     if (scope.parameters.len != 0 or scope.default_arguments != null) return null;
     const body = scope.instructions;
     if (body.len == 1) return booleanD(&body[0]);
-    if (body.len < 3 or body[body.len - 2] != .combinator or body[body.len - 2].combinator != .d) return null;
+    if (body.len < 3 or body[body.len - 2] != .combinator or body[body.len - 2].combinator.kind != .d) return null;
+    for (body) |instruction| {
+        if (instruction == .combinator and instruction.combinator.yeild) return null;
+    }
     return booleanOp(&body[body.len - 1]);
 }
 

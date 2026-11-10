@@ -41,7 +41,7 @@ pub const Instruction = union(enum) {
     function_choices: []const Instruction,
     alternative,
     product: struct { branches: []const []const Instruction, shape: []const usize, function_alternatives: bool = false },
-    combinator: enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1 },
+    combinator: struct { kind: Combinator, yeild: bool = false },
     scope: struct { macro_definition: ?*const Macro = null, parameters: []const Pattern = &.{}, arity: usize, instructions: []const Instruction, default_arguments: ?[]const Value = null },
 };
 // Macro bodies are parsed after their function operands have been substituted.
@@ -206,14 +206,19 @@ fn validDefinitionName(name: []const u8) bool {
     return true;
 }
 
+const Combinator = enum { n, nu, s, sig, b, phi, psi, d, delta, d2, phi1 };
+
 fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: bool, root: bool, names: *const std.StringHashMapUnmanaged(Instruction)) anyerror![]const Instruction {
     var result: std.ArrayList(Instruction) = .empty;
     while (try lexer.next()) |token| {
-        if (std.mem.eql(u8, token, "|d2") or std.mem.eql(u8, token, "|phi1") or std.mem.eql(u8, token, "|d") or std.mem.eql(u8, token, "|delta") or std.mem.eql(u8, token, "|n") or std.mem.eql(u8, token, "|nu") or std.mem.eql(u8, token, "|s") or std.mem.eql(u8, token, "|sig") or std.mem.eql(u8, token, "|b") or std.mem.eql(u8, token, "|phi") or std.mem.eql(u8, token, "|psi")) {
+        const yeild = std.mem.eql(u8, token, "~>");
+        const combinator_token = if (yeild) (try lexer.next()) orelse return error.ExpectedFunction else token;
+        if (combinator_token[0] == '|') if (std.meta.stringToEnum(Combinator, combinator_token[1..])) |kind| {
             if (result.items.len == 0 or result.items[result.items.len - 1] == .combinator) return error.ExpectedFunction;
-            try result.append(a, .{ .combinator = if (std.mem.eql(u8, token, "|d2")) .d2 else if (std.mem.eql(u8, token, "|phi1")) .phi1 else if (std.mem.eql(u8, token, "|delta")) .delta else if (std.mem.eql(u8, token, "|d")) .d else if (std.mem.eql(u8, token, "|nu")) .nu else if (token[1] == 'n') .n else if (std.mem.eql(u8, token, "|sig")) .sig else if (token[1] == 's') .s else if (std.mem.eql(u8, token, "|psi")) .psi else if (token[1] == 'p') .phi else .b });
+            try result.append(a, .{ .combinator = .{ .kind = kind, .yeild = yeild } });
             continue;
-        }
+        };
+        if (yeild) return error.ExpectedFunction;
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
             (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "|>"))) return error.ExpectedFunction;
         if (std.mem.eql(u8, token, "|>") or std.mem.eql(u8, token, ":>")) {
@@ -518,7 +523,7 @@ fn printArityInstruction(instruction: Instruction) void {
             }
             std.debug.print(")", .{});
         },
-        .combinator => |combinator| std.debug.print("|{s}", .{@tagName(combinator)}),
+        .combinator => |combinator| std.debug.print("{s}|{s}", .{ if (combinator.yeild) "~> " else "", @tagName(combinator.kind) }),
         else => std.debug.print("{s}", .{@tagName(instruction)}),
     }
 }
@@ -533,15 +538,16 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
     var argument_source: ?Instruction = null;
     for (body, 0..) |instruction, index| {
         if (instruction == .combinator) {
+            if (instruction.combinator.yeild and explicit_operands != 0) return error.ExpectedFunction;
             argument_source = null;
-            active_combinator = @tagName(instruction.combinator);
-            explicit_operands = switch (instruction.combinator) {
+            active_combinator = @tagName(instruction.combinator.kind);
+            explicit_operands = switch (instruction.combinator.kind) {
                 .b => 0,
                 .d2, .phi1 => 2,
                 .phi => if (index + 1 < body.len and @import("runtime.zig").functionArity(body[index + 1]) == 2) 1 else if (index + 2 < body.len and @import("runtime.zig").functionArity(body[index + 2]) == 2) 2 else 3,
                 else => 1,
             };
-            available = if (instruction.combinator == .b) 1 else 2;
+            available = if (instruction.combinator.kind == .b) 1 else 2;
             continue;
         }
         if (instruction == .scope) try validateCombinatorArity(instruction.scope.instructions, instruction.scope.arity);
@@ -583,14 +589,14 @@ fn validateCombinatorArity(body: []const Instruction, declared: usize) !void {
             for (instruction.product.branches) |branch| try validateCombinatorArity(branch, declared);
         }
         if (instruction != .combinator) continue;
-        switch (instruction.combinator) {
+        switch (instruction.combinator.kind) {
             .s, .sig => {
                 result_arity = 1;
-                combinator_name = @tagName(instruction.combinator);
+                combinator_name = @tagName(instruction.combinator.kind);
             },
             .n, .nu, .d, .delta, .psi, .d2, .phi1 => {
                 result_arity = 2;
-                combinator_name = @tagName(instruction.combinator);
+                combinator_name = @tagName(instruction.combinator.kind);
             },
             .b, .phi => {},
         }
@@ -802,7 +808,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (@import("runtime.zig").functionArity(mapper) != 1 or @import("runtime.zig").functionArity(operation) != 2) return error.WrongNumberOfArguments;
             const identity = @import("builtins/hofs.zig").monoidIdentity(&operation) orelse return error.ExpectedMonoid;
             const function = try a.create(Instruction);
-            function.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{ mapper, .{ .combinator = .d }, operation }) } };
+            function.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{ mapper, .{ .combinator = .{ .kind = .d } }, operation }) } };
             try result.append(a, if (std.mem.eql(u8, name, "MapFold"))
                 .{ .map_fold = .{ .function = function, .identity = identity } }
             else
@@ -851,7 +857,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
                 operand,
                 .{ .primitive = "rise" },
-                .{ .combinator = .sig },
+                .{ .combinator = .{ .kind = .sig } },
                 .{ .primitive = "select" },
             }) } });
         } else if (std.mem.eql(u8, name, "Sort.with")) {
@@ -865,7 +871,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
                 operand,
-                .{ .combinator = .sig },
+                .{ .combinator = .{ .kind = .sig } },
                 .{ .primitive = "keep" },
             }) } });
         } else if (std.mem.eql(u8, name, "Each.fill")) {
