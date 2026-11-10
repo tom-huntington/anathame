@@ -1022,6 +1022,21 @@ fn foldValue(a: std.mem.Allocator, value: Instruction) anyerror!Instruction {
 
 fn valueExpression(a: std.mem.Allocator, lexer: *Lexer, token: []const u8, names: *const std.StringHashMapUnmanaged(Instruction), minimum: u8) anyerror!?Instruction {
     var left: Instruction = blk: {
+        if (std.mem.eql(u8, token, "-")) {
+            const operand_token = (try lexer.next()) orelse return error.ExpectedLiteral;
+            const operand = (try valueExpression(a, lexer, operand_token, names, 7)) orelse return error.ExpectedLiteral;
+            break :blk try foldValue(a, .{ .expression = .{
+                .arguments = try a.dupe(Instruction, &.{operand}),
+                .body = try a.dupe(Instruction, &.{.{ .primitive = "negate" }}),
+            } });
+        }
+        if (std.mem.eql(u8, token, "(")) {
+            const next = (try lexer.next()) orelse return error.ExpectedLiteral;
+            const inner = (try valueExpression(a, lexer, next, names, 0)) orelse return error.ExpectedLiteral;
+            const close = (try lexer.next()) orelse return error.InvalidSyntax;
+            if (!std.mem.eql(u8, close, ")")) return error.InvalidSyntax;
+            break :blk inner;
+        }
         if (std.mem.eql(u8, token, "[") or std.mem.eql(u8, token, "tup")) {
             const is_tuple = std.mem.eql(u8, token, "tup");
             if (is_tuple) {
