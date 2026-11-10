@@ -17,6 +17,7 @@ pub const Instruction = union(enum) {
     scan: struct { function: *const Instruction, exclusive: bool = false },
     partials: *const Instruction,
     map_scan: struct { function: *const Instruction, identity: f64 },
+    map_fold: struct { function: *const Instruction, identity: f64 },
     rows: *const Instruction,
     each: *const Instruction,
     each_fill: *const Instruction,
@@ -378,7 +379,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
+            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -712,14 +713,17 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .unc = function });
-        } else if (std.mem.eql(u8, name, "MapScan")) {
+        } else if (std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold")) {
             const mapper = result.pop() orelse return error.ExpectedFunction;
             const operation = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(mapper) != 1 or @import("runtime.zig").functionArity(operation) != 2) return error.WrongNumberOfArguments;
             const identity = @import("builtins/hofs.zig").monoidIdentity(&operation) orelse return error.ExpectedMonoid;
             const function = try a.create(Instruction);
             function.* = .{ .scope = .{ .arity = 2, .instructions = try a.dupe(Instruction, &.{ mapper, .{ .combinator = .d }, operation }) } };
-            try result.append(a, .{ .map_scan = .{ .function = function, .identity = identity } });
+            try result.append(a, if (std.mem.eql(u8, name, "MapFold"))
+                .{ .map_fold = .{ .function = function, .identity = identity } }
+            else
+                .{ .map_scan = .{ .function = function, .identity = identity } });
         } else if (std.mem.eql(u8, name, "MapAccum")) {
             const map = result.pop() orelse return error.ExpectedFunction;
             const update = result.pop() orelse return error.ExpectedFunction;

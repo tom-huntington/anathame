@@ -287,9 +287,11 @@ pub fn mapScan(memory: *ReservedBumpAllocator, x: Value, operation: @import("../
     const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
     if (dimensions >= input.shape.len) return error.InvalidComponent;
     const axis = input.shape.len - dimensions - 1;
-    const identity: Value = .{ .data = &.{operation.map_scan.identity} };
-    var result = try seededFoldImpl(memory, input, identity, operation.map_scan.function, axis, false, false, false, true);
-    if (x.shape.len == 0) result.shape = result.shape[1..];
+    const final_only = operation == .map_fold;
+    const identity: Value = .{ .data = &.{if (final_only) operation.map_fold.identity else operation.map_scan.identity} };
+    const function = if (final_only) operation.map_fold.function else operation.map_scan.function;
+    var result = try seededFoldImpl(memory, input, identity, function, axis, final_only, false, false, true);
+    if (x.shape.len == 0 and !final_only) result.shape = result.shape[1..];
     return result;
 }
 
@@ -366,7 +368,7 @@ pub fn seededFold(memory: *ReservedBumpAllocator, x: Value, seed: Value, functio
     return seededFoldImpl(memory, x, seed, function, axis, final_only, exclusive, include_seed, false);
 }
 
-// MapScan learns the accumulator shape from the first mapped cell, independently
+// Mapped reductions learn the accumulator shape from the first mapped cell, independently
 // of the input cell shape. Ordinary seeded folds retain their explicit seed shape.
 fn seededFoldImpl(memory: *ReservedBumpAllocator, x: Value, seed: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool, exclusive: bool, include_seed: bool, mapped: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;

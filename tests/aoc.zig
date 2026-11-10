@@ -179,7 +179,7 @@ test "day 9" {
         \\ proj =\ area negate
         \\ normalize =\ UnDer transpose sort
         \\ optimize =\ Sort.by proj
-        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) \\ green ->\ MapScan.mat ([[p q] [r s]] -> green |> Fold.mat,1 { ([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not |d and }) or  indexin,1 |sig pick area
+        \\ part2 =\ ints2d \ first.vec |sig join \ Pairwise couple optimize normalize |phi (combinations.rows optimize normalize) \\ green ->\ MapScan.mat ([[p q] [r s]] -> green |> MapFold.mat (([[x y] [u v]] -> p<u && q<v && r>x && s>y ) not) and ) or  indexin,1 |sig pick area
         \\ \ part1 ** part2
     , "[50 24]", @src());
 }

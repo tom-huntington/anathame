@@ -299,6 +299,11 @@ mapped cells of a consistent output shape, which may differ from the input cell 
 absorbed, repeating the final value for the remaining prefixes. It shares the
 seeded-fold helper used by `Scan` and `Fold`.
 
+`MapFold f op` uses the same mapping, monoids, axes, and boolean short-circuiting
+as `MapScan`, but returns only the final accumulator, removing the selected axis.
+For example, `MapFold sq add` maps `[1 2 3]` to `14`. Empty vectors return
+the monoid identity.
+
 For all four operations, `f |d or` and `f |d and` skip `f` once the accumulator reaches `1` or `0`, respectively. Scans repeat that value for the remaining prefixes. Component-axis operations stop when every accumulator element has reached the absorbing value.
 
 `Stencil,3 sum` applies `sum` to overlapping windows of three leading-axis
