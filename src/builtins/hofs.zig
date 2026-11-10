@@ -89,7 +89,8 @@ pub fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, funct
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 
-/// Map each row with the current accumulator, then update it for the next row.
+/// Map each row with the current accumulator. Without a separate update
+/// function, the mapper returns a tuple of the output and next accumulator.
 pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functions: @FieldType(@import("../parser.zig").Instruction, "map_accum")) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const a = memory.allocator();
@@ -99,13 +100,21 @@ pub fn mapAccum(memory: *ReservedBumpAllocator, x: Value, initial: Value, functi
     var output_shape: ?[]const usize = null;
     for (0..@max(count, 1)) |i| {
         const row = try rowArgument(a, x, i);
-        const mapped = try evaluateScope(memory, &.{functions.map.*}, row, accumulator);
+        const result = try evaluateScope(memory, &.{functions.map.*}, row, accumulator);
+        const mapped = if (functions.update == null) blk: {
+            const pair = result.tuple orelse return error.ExpectedTuple;
+            if (pair.len != 2) return error.WrongNumberOfArguments;
+            accumulator = pair[1];
+            break :blk pair[0];
+        } else result;
         if (mapped.tuple != null) return error.ExpectedArray;
         if (output_shape) |shape| {
             if (!std.mem.eql(usize, shape, mapped.shape)) return shapeMismatch(@src().fn_name, &.{ firstResult(data.items, shape), mapped });
         } else output_shape = try a.dupe(usize, mapped.shape);
         if (count != 0) try data.appendSlice(a, mapped.data);
-        if (i + 1 < count) accumulator = try evaluateScope(memory, &.{functions.update.*}, row, accumulator);
+        if (i + 1 < count) {
+            if (functions.update) |update| accumulator = try evaluateScope(memory, &.{update.*}, row, accumulator);
+        }
     }
     const axes: []const usize = if (x.shape.len == 0) &.{} else &.{count};
     return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ axes, output_shape.? }) };

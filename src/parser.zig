@@ -31,7 +31,7 @@ pub const Instruction = union(enum) {
     logshape: *const Instruction,
     reduce: *const Instruction,
     fold: *const Instruction,
-    map_accum: struct { map: *const Instruction, update: *const Instruction },
+    map_accum: struct { map: *const Instruction, update: ?*const Instruction },
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false, check: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
@@ -813,14 +813,18 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 .{ .map_fold = .{ .function = function, .identity = identity } }
             else
                 .{ .map_scan = .{ .function = function, .identity = identity } });
-        } else if (std.mem.eql(u8, name, "MapAccum")) {
+        } else if (std.mem.eql(u8, name, "MapAccum") or std.mem.eql(u8, name, "MapAccum.tuple")) {
             const map = result.pop() orelse return error.ExpectedFunction;
-            const update = result.pop() orelse return error.ExpectedFunction;
-            if (@import("runtime.zig").functionArity(map) != 2 or @import("runtime.zig").functionArity(update) != 2) return error.WrongNumberOfArguments;
+            const update_ptr = if (std.mem.eql(u8, name, "MapAccum")) blk: {
+                const update = result.pop() orelse return error.ExpectedFunction;
+                if (@import("runtime.zig").functionArity(update) != 2) return error.WrongNumberOfArguments;
+                const ptr = try a.create(Instruction);
+                ptr.* = update;
+                break :blk ptr;
+            } else null;
+            if (@import("runtime.zig").functionArity(map) != 2) return error.WrongNumberOfArguments;
             const map_ptr = try a.create(Instruction);
             map_ptr.* = map;
-            const update_ptr = try a.create(Instruction);
-            update_ptr.* = update;
             var bound: Instruction = .{ .map_accum = .{ .map = map_ptr, .update = update_ptr } };
             if (instruction == .partial) {
                 const function = try a.create(Instruction);
