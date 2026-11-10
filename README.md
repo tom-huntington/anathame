@@ -34,6 +34,11 @@ and `[4 5 6]` returns `32`.
 pair, broadcasting over matching leading axes like real multiplication.
 `mul.c.mat` remains unimplemented.
 
+`conjugate` is axis-monomorphic: it preserves the first element and negates
+every remaining element along axis -1, independently for each trailing vector.
+For example, `[1_2_3 4_5_6]` becomes `[1_-2_-3 4_-5_-6]`.
+Scalars and empty arrays are unchanged.
+
 Builtin implementations live in `src/builtins/`: `pervasives.zig` for
 elementwise operations, `axis_polymorphic.zig` for axis-polymorphic operations that accept a component specifier,
 `axis_monomorphic.zig` for axis-monomorphic operations, and `hofs.zig` for

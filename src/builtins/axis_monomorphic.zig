@@ -3,6 +3,18 @@
 const std = @import("std");
 const Value = @import("../runtime.zig").Value;
 
+/// Negate all but the first element of each trailing-axis vector.
+pub fn conjugate(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (x.shape.len == 0 or x.data.len == 0) return x;
+    const width = x.shape[x.shape.len - 1];
+    const data = try a.alloc(f64, x.data.len);
+    for (x.data, 0..) |number, i| {
+        data[i] = if (i % width == 0) number else -number;
+    }
+    return .{ .data = data, .shape = x.shape };
+}
+
 /// N-fold Cartesian product of leading-axis cells, with the last choice varying fastest.
 pub fn cartesian_pow(a: std.mem.Allocator, x: Value, exponent: Value) !Value {
     if (x.tuple != null or exponent.tuple != null) return error.ExpectedArray;
