@@ -127,7 +127,7 @@ pub fn parse(a: std.mem.Allocator, source: []const u8) ![]const Instruction {
             break :blk body[0];
         } else if (body[0] == .literal) body[0] else blk: {
             if (body[0] != .scope or body[0].scope.default_arguments == null) return error.InvalidSyntax;
-            break :blk .{ .literal = try @import("runtime.zig").evaluateConstant(a, body[0]) };
+            break :blk body[0];
         };
         try names.put(a, name, definition);
     }
@@ -216,32 +216,32 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (result.items.len > 0 and result.items[result.items.len - 1] == .combinator and
             (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "|>"))) return error.ExpectedFunction;
-        if (std.mem.eql(u8, token, "|>")) {
+        if (std.mem.eql(u8, token, "|>") or std.mem.eql(u8, token, ":>")) {
             if (result.items.len < 1 or result.items.len > 2) return error.WrongNumberOfArguments;
-            const dynamic = for (result.items) |item| {
-                if (item != .literal) break true;
-            } else false;
-            if (dynamic) {
-                for (result.items) |item| if (!isValue(item)) return error.ExpectedLiteral;
+            const defaults = std.mem.eql(u8, token, ":>");
+            if (defaults) {
+                var look = lexer.*;
+                const opener = (try look.next()) orelse return error.ExpectedFunction;
+                if (!std.mem.eql(u8, opener, "\\") and !std.mem.eql(u8, opener, "\\\\") and
+                    !std.mem.eql(u8, opener, "{") and !std.mem.eql(u8, opener, "(")) return error.ExpectedFunction;
+                const arguments = try a.alloc(Value, result.items.len);
+                for (result.items, arguments) |item, *argument| {
+                    if (item != .literal) return error.ExpectedLiteral;
+                    argument.* = item.literal;
+                }
                 const body = try sequence(a, lexer, close, implicit, root, names);
-                if (body.len == 0) return error.ExpectedFunction;
-                try validateCombinatorArity(body, result.items.len);
-                return a.dupe(Instruction, &.{.{ .expression = .{ .arguments = try result.toOwnedSlice(a), .body = body } }});
+                if (body.len != 1 or body[0] != .scope) return error.ExpectedFunction;
+                var application = body[0];
+                if (application.scope.arity != arguments.len) return error.WrongNumberOfArguments;
+                try validateCombinatorArity(application.scope.instructions, arguments.len);
+                application.scope.default_arguments = arguments;
+                return a.dupe(Instruction, &.{application});
             }
-            const arguments = try a.alloc(Value, result.items.len);
-            for (result.items, arguments) |instruction, *argument| {
-                argument.* = switch (instruction) {
-                    .literal => |value| value,
-                    else => return error.ExpectedLiteral,
-                };
-            }
+            for (result.items) |item| if (!isValue(item)) return error.ExpectedLiteral;
             const body = try sequence(a, lexer, close, implicit, root, names);
             if (body.len == 0) return error.ExpectedFunction;
-            var application: Instruction = if (body.len == 1 and body[0] == .scope) body[0] else .{ .scope = .{ .arity = arguments.len, .instructions = body } };
-            application.scope.arity = arguments.len;
-            try validateCombinatorArity(application.scope.instructions, arguments.len);
-            application.scope.default_arguments = arguments;
-            return a.dupe(Instruction, &.{application});
+            try validateCombinatorArity(body, result.items.len);
+            return a.dupe(Instruction, &.{try foldValue(a, .{ .expression = .{ .arguments = try result.toOwnedSlice(a), .body = body } })});
         }
         if (std.mem.eql(u8, token, ")") or std.mem.eql(u8, token, "}") or std.mem.eql(u8, token, "]")) {
             if (close == null or !std.mem.eql(u8, token, close.?)) return error.InvalidSyntax;
@@ -997,8 +997,7 @@ fn tuple(a: std.mem.Allocator, lexer: *Lexer, names: *const std.StringHashMapUnm
 
 // Strands stack equally shaped literals along a new leading axis.
 fn isValue(value: Instruction) bool {
-    return value == .literal or value == .variable or value == .expression or value == .aggregate or
-        (value == .scope and value.scope.default_arguments != null);
+    return value == .literal or value == .variable or value == .expression or value == .aggregate;
 }
 
 fn foldValue(a: std.mem.Allocator, value: Instruction) anyerror!Instruction {

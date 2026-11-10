@@ -110,9 +110,11 @@ pub fn evaluate(memory: *ReservedBumpAllocator, code: []const u8, input: ?[]cons
         };
         break :blk values;
     } else program.scope.default_arguments orelse return error.WrongNumberOfArguments;
-    if (arguments.len != arity) return error.WrongNumberOfArguments;
-    const x = arguments[0];
-    const y = if (arity == 1) x else arguments[1];
+    if (arguments.len > arity) return error.WrongNumberOfArguments;
+    const defaults = program.scope.default_arguments;
+    if (arguments.len < arity and defaults == null) return error.WrongNumberOfArguments;
+    const x = if (arguments.len > 0) arguments[0] else defaults.?[0];
+    const y = if (arity == 1) x else if (arguments.len > 1) arguments[1] else defaults.?[1];
     const result = try callScope(memory, program.scope, x, y);
     return if (result.tuple) |tuple| tuple else a.dupe(Value, &.{result});
 }

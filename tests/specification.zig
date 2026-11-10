@@ -111,9 +111,9 @@ test "function application" {
         \\ 2 3 |> mul |n couple
     , "[2 6]");
 
-    // when we have |> at top level it specifies default arguments
+    // :> supplies defaults to an explicit function scope
     try expect_output(
-        \\ 2 3 |> mul |n couple
+        \\ 2 3 :> { mul |n couple }
     , .{ "5", "7" }, "[5 35]");
 }
 
@@ -268,9 +268,9 @@ test "tuples" {
 test "fill and full" {
     // same as uiua reshape
     try expect_output("\\\\ fill", .{ "[2 2]", "0" }, "[0_0 0_0]");
-    try value_expression("zeros = [2 2] 0 |> fill\nzeros", "[0_0 0_0]");
+    try value_expression("[2 2] 0 |> fill", "[0_0 0_0]");
     try expect_output("\\\\ fill", .{ "0", "[2 2]" }, "[0_0 0_0]");
-    try value_expression("zeros = 0 [2 2] |> full\nzeros", "[0_0 0_0]"); // arguments reversed
+    try value_expression("0 [2 2] |> full", "[0_0 0_0]"); // arguments reversed
 }
 
 test "lambdas" {
@@ -333,4 +333,19 @@ test "types" {
     // mul.mat.min.max Minimax paths
     // mul.mat.max.min Maximum-capacity paths
     // mul.mat.add.mul Counting walks same as mul.mat
+}
+
+test "syntax" {
+    try expect_output(
+        \\ 1 2 :>
+        \\ \\ couple
+    , .{ "3", "4" }, "[3 4]");
+    try expect_output(
+        \\ 1 2 :>
+        \\ \\ couple
+    , .{"3"}, "[3 2]");
+    try expect_output(
+        \\ 1 2 :>
+        \\ \\ couple
+    , .{}, "[1 2]");
 }
