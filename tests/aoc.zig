@@ -38,8 +38,12 @@ test "day 3" {
         \\$ 234234234234278
         \\$ 818181911112111
     ,
-        \\ \ digits2d reverse combinations radix,10 Reduce max sum
-    , "357", @src());
+        \\ part1 =\ digits2d reverse combinations radix,10 Reduce max sum
+        \\ best_digit =\\ reserve, bank -> bank |> drop,-reserve Reduce max
+        \\ next_remaining =\\ slots_after, remaining -> remaining indexin(remaining,best_digit(slots_after,remaining))+1 |> drop
+        \\ part2 =\ digits2d Rows (Flip,reverse(iota(12)) MapAccum best_digit next_remaining reverse radix,10) sum
+        \\ \ part1 ** part2
+    , "[357 3121910778619]", @src());
 }
 
 test "day 4" {
