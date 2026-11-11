@@ -853,7 +853,7 @@ const RecurseMap = std.HashMapUnmanaged([]const usize, usize, struct {
 const Recurse = struct {
     memory: *ReservedBumpAllocator,
     functions: @FieldType(@import("../parser.zig").Instruction, "recurse"),
-    bounds: []const usize,
+    dimensions: usize,
     component: []const usize,
     width: usize,
     table: []f64,
@@ -872,13 +872,12 @@ const Recurse = struct {
     }
 
     fn visit(self: *Recurse, node: Value, root: bool) anyerror!Value {
-        if (node.tuple != null or node.shape.len > 1 or node.data.len != self.bounds.len) return error.InvalidRecurseIndex;
+        if (node.tuple != null or node.shape.len > 1 or node.data.len != self.dimensions) return error.InvalidRecurseIndex;
         const checkpoint = self.memory.checkpoint();
-        const coordinates = try self.memory.allocator().alloc(usize, self.bounds.len);
-        for (node.data, self.bounds, coordinates) |number, bound, *destination| {
+        const coordinates = try self.memory.allocator().alloc(usize, self.dimensions);
+        for (node.data, coordinates) |number, *destination| {
             if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
             const coordinate: usize = @intFromFloat(number);
-            if (!root and coordinate >= bound) return error.InvalidRecurseIndex;
             destination.* = coordinate;
         }
         var index: usize = 0;
@@ -888,7 +887,7 @@ const Recurse = struct {
             } else {
                 index = self.map.count();
                 if (index == self.state.len) return error.RecurseCacheCapacityExceeded;
-                const key = self.keys[index * self.bounds.len ..][0..self.bounds.len];
+                const key = self.keys[index * self.dimensions ..][0..self.dimensions];
                 @memcpy(key, coordinates);
                 // All storage predates the recursive checkpoints. Never grow here.
                 self.map.putAssumeCapacityNoClobber(key, index);
@@ -935,21 +934,20 @@ fn isRecurseSentinel(value: Value) bool {
     return value.tuple == null and value.shape.len == 0 and value.data.len == 1 and std.math.isNan(value.data[0]);
 }
 
-pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @FieldType(@import("../parser.zig").Instruction, "recurse")) anyerror!Value {
-    if (maximum.tuple != null or maximum.shape.len > 1) return error.InvalidRecurseIndex;
+pub fn recurse(memory: *ReservedBumpAllocator, initial: Value, functions: @FieldType(@import("../parser.zig").Instruction, "recurse")) anyerror!Value {
+    if (initial.tuple != null or initial.shape.len > 1) return error.InvalidRecurseIndex;
     const checkpoint = memory.checkpoint();
     errdefer memory.restore(checkpoint);
     const a = memory.allocator();
-    const bounds = try a.alloc(usize, maximum.data.len);
     var count: usize = 1;
-    for (maximum.data, bounds) |number, *bound| {
+    for (initial.data) |number| {
         if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
-        bound.* = @intFromFloat(number);
-        count *|= bound.*;
+        // Coordinates size the cache, but do not constrain child indices.
+        count *|= @max(1, @as(usize, @intFromFloat(number)));
     }
-    const zeros = try a.alloc(f64, maximum.data.len);
+    const zeros = try a.alloc(f64, initial.data.len);
     @memset(zeros, 0);
-    const origin: Value = .{ .data = zeros, .shape = maximum.shape };
+    const origin: Value = .{ .data = zeros, .shape = initial.shape };
     const base = try evaluateScope(memory, &.{functions.base.*}, origin, origin);
     if (base.tuple != null) return error.ExpectedArray;
     for (base.data) |number| if (std.math.isNan(number)) return error.RecurseOriginNotBaseCase;
@@ -957,29 +955,27 @@ pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @Field
     // Four buckets per entry conservatively covers load factor, power-of-two
     // rounding, metadata, and the map allocation header/alignment.
     const budget = 1024 * 1024 * 1024;
-    const bytes_per_entry = try std.math.add(usize, try std.math.add(usize, try std.math.mul(usize, bounds.len, @sizeOf(usize)), try std.math.mul(usize, base.data.len, @sizeOf(f64))), 1 + 4 * (@sizeOf([]const usize) + @sizeOf(usize) + 1) + 64);
+    const bytes_per_entry = try std.math.add(usize, try std.math.add(usize, try std.math.mul(usize, initial.data.len, @sizeOf(usize)), try std.math.mul(usize, base.data.len, @sizeOf(f64))), 1 + 4 * (@sizeOf([]const usize) + @sizeOf(usize) + 1) + 64);
     const capacity = @min(count, budget / bytes_per_entry);
     var map: RecurseMap = .empty;
     try map.ensureTotalCapacity(a, @intCast(capacity));
     var cache: Recurse = .{
         .memory = memory,
         .functions = functions,
-        .bounds = bounds,
+        .dimensions = initial.data.len,
         .component = base.shape,
         .width = base.data.len,
         .table = try a.alloc(f64, try std.math.mul(usize, capacity, base.data.len)),
         .state = try a.alloc(u8, capacity),
-        .keys = try a.alloc(usize, try std.math.mul(usize, capacity, bounds.len)),
+        .keys = try a.alloc(usize, try std.math.mul(usize, capacity, initial.data.len)),
         .map = map,
     };
     @memset(cache.state, 0);
-    if (count > 0) {
-        if (capacity == 0) return error.RecurseCacheCapacityExceeded;
-        const key = cache.keys[0..bounds.len];
-        @memset(key, 0);
-        cache.map.putAssumeCapacityNoClobber(key, 0);
-        _ = try cache.store(0, base);
-    }
-    const result = try cache.visit(maximum, true);
+    if (capacity == 0) return error.RecurseCacheCapacityExceeded;
+    const key = cache.keys[0..initial.data.len];
+    @memset(key, 0);
+    cache.map.putAssumeCapacityNoClobber(key, 0);
+    _ = try cache.store(0, base);
+    const result = try cache.visit(initial, true);
     return @import("../memory.zig").ReturnImpl(memory, checkpoint, result);
 }

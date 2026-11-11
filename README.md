@@ -394,12 +394,13 @@ whose leading-axis rows are child indices. `combine` receives the stacked child
 results; a dyadic `combine` receives the original index first and child results
 second. Scalar children preserve the scalar-child behavior of Uiua's `recur`.
 
-Each invocation uses its initial argument, `table_index_max`, as the exclusive
-cache bounds. Only visited indices are stored; the initial root is evaluated outside those bounds.
+Only visited indices are stored. The starting index does not bound child indices.
 The cache preallocates buckets, integer keys, and result storage before recursion,
-with a conservative 1 GiB budget (less for small index spaces). It never grows;
+with a conservative 1 GiB budget, capped at the product of the starting coordinates
+(with each zero counted as one). It never grows;
 exhausting its entry capacity raises `RecurseCacheCapacityExceeded`. Indices are nonnegative
-integer scalars or vectors, and child indices must lie inside the table.
+integer scalars or vectors; child indices must have the same number of coordinates
+as the starting index.
 The all-zero index must be a base case. Every result must have that base case's
 shape. NaN results from `combine`, invalid indices, and dependency cycles are
 errors. `base` and `children` are unary; `combine` is unary or dyadic.
@@ -413,7 +414,7 @@ for input 10:
 
 `Recurse1 base children combine` works like `Recurse`, but a dyadic `combine`
 receives child indices first and the corresponding child values second. A unary
-`combine` still receives only child values. Cache bounds, base cases, and result
+`combine` still receives only child values. Index, base case, and result
 shape requirements are the same as for `Recurse`.
 
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
