@@ -310,8 +310,9 @@ pub fn monoidIdentity(function: *const @import("../parser.zig").Instruction) ?f6
     return null;
 }
 
-/// Empty reductions preserve the cell shape and yield one identity per cell.
+/// Empty partials preserve their input; reductions yield one identity per cell.
 pub fn emptyMonoidFold(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool) anyerror!Value {
+    if (!final_only) return x;
     const identity = monoidIdentity(function) orelse return error.EmptyArray;
     const a = memory.allocator();
     const cell_shape = x.shape[axis + 1 ..];
