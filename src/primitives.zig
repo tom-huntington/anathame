@@ -12,6 +12,7 @@ comptime {
     }
 }
 pub fn arity(name: []const u8) ?usize {
+    if (std.mem.eql(u8, name, "Recurse") or std.mem.eql(u8, name, "Recur")) return 1;
     if (std.mem.eql(u8, name, "conjugate")) return 1;
     if (std.mem.eql(u8, name, "InnerProduct") or std.mem.eql(u8, name, "dot_product")) return 2;
     if (std.mem.eql(u8, name, "pad")) return 3;
@@ -290,6 +291,8 @@ pub const names = [_][]const u8{
     "Partials",
     "Reduce",
     "Fold",
+    "Recurse",
+    "Recur",
     "MapAccum",
     "Mapaccum",
     "InnerProduct",

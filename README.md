@@ -374,6 +374,28 @@ accumulator for the next row. For example, `{ MapAccum couple mul }` on
 tuple `(next accumulator, mapped value)`. Both forms return only the mapped
 array. `MapAccum,7 f g` and `Mapaccum,7 f` bind the initial accumulator.
 
+`Recurse base children combine` (also spelled `Recur`) evaluates a recursive
+computation with a dense array memo table. `base` returns the result for a base
+case, or the scalar `null` (NaN) sentinel otherwise. `children` returns an array
+whose leading-axis rows are child indices. `combine` receives the stacked child
+results; a dyadic `combine` receives the original index first and child results
+second. Scalar children preserve the scalar-child behavior of Uiua's `recur`.
+
+Each invocation uses its initial argument, `table_index_max`, as the exclusive
+cache bounds. The table shape is `table_index_max ++ shape(base(table_index_max * 0))`;
+the initial root is evaluated outside those bounds. Indices are nonnegative
+integer scalars or vectors, and child indices must lie inside the table.
+The all-zero index must be a base case. Every result must have that base case's
+shape. NaN results from `combine`, invalid indices, and dependency cycles are
+errors. `base` and `children` are unary; `combine` is unary or dyadic.
+
+For example, this computes Fibonacci with base values 1 and 1, returning 89
+for input 10:
+
+```text
+\ Recurse (n -> n n<2 |> Switch (const,1) (const,null)) (n -> [n-1 n-2]) sum
+```
+
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
 binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
 and `(Repeat,3 sq)` on `2` both produce `256`. A zero count returns the input.

@@ -820,3 +820,103 @@ pub fn find(memory: *ReservedBumpAllocator, x: Value, predicate: *const @import(
     }
     return .{ .data = data, .shape = shape };
 }
+
+/// A dense memo table, with a separate state array to support empty components
+/// and detect dependency cycles without reserving a numeric result value.
+const Recurse = struct {
+    memory: *ReservedBumpAllocator,
+    functions: @FieldType(@import("../parser.zig").Instruction, "recurse"),
+    bounds: []const usize,
+    component: []const usize,
+    width: usize,
+    table: []f64,
+    state: []u8,
+
+    fn store(self: *Recurse, index: usize, value: Value) !Value {
+        if (value.tuple != null) return error.ExpectedArray;
+        if (!std.mem.eql(usize, self.component, value.shape) or value.data.len != self.width) return error.RecurseResultShapeMismatch;
+        for (value.data) |number| if (std.math.isNan(number)) return error.RecurseSentinelResult;
+        const destination = self.table[index * self.width ..][0..self.width];
+        @memcpy(destination, value.data);
+        self.state[index] = 2;
+        return .{ .data = destination, .shape = self.component };
+    }
+
+    fn visit(self: *Recurse, node: Value, root: bool) anyerror!Value {
+        if (node.tuple != null or node.shape.len > 1 or node.data.len != self.bounds.len) return error.InvalidRecurseIndex;
+        var index: usize = 0;
+        for (node.data, self.bounds) |number, bound| {
+            if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
+            const coordinate: usize = @intFromFloat(number);
+            if (!root and coordinate >= bound) return error.InvalidRecurseIndex;
+            if (!root) index = index * bound + coordinate;
+        }
+        if (!root) {
+            if (self.state[index] == 2) return .{ .data = self.table[index * self.width ..][0..self.width], .shape = self.component };
+            if (self.state[index] == 1) return error.RecurseCycle;
+            self.state[index] = 1;
+        }
+        const checkpoint = self.memory.checkpoint();
+        const base = try evaluateScope(self.memory, &.{self.functions.base.*}, node, node);
+        var result = base;
+        if (isRecurseSentinel(base)) {
+            const children = try evaluateScope(self.memory, &.{self.functions.children.*}, node, node);
+            if (children.tuple != null) return error.ExpectedArray;
+            const scalar = children.shape.len == 0;
+            const count = if (scalar) 1 else children.shape[0];
+            const a = self.memory.allocator();
+            const values = try a.alloc(f64, try std.math.mul(usize, count, self.width));
+            for (0..count) |i| {
+                const child = if (scalar) children else try rowArgument(a, children, i);
+                const value = try self.visit(child, false);
+                @memcpy(values[i * self.width ..][0..self.width], value.data);
+            }
+            const resolved: Value = .{ .data = values, .shape = if (scalar) self.component else try std.mem.concat(a, usize, &.{ &.{count}, self.component }) };
+            result = if (functionArity(self.functions.combine.*) == 2)
+                try evaluateScope(self.memory, &.{self.functions.combine.*}, node, resolved)
+            else
+                try evaluateScope(self.memory, &.{self.functions.combine.*}, resolved, resolved);
+        }
+        if (result.tuple != null) return error.ExpectedArray;
+        for (result.data) |number| if (std.math.isNan(number)) return error.RecurseSentinelResult;
+        if (!std.mem.eql(usize, result.shape, self.component)) return error.RecurseResultShapeMismatch;
+        if (root) return @import("../memory.zig").ReturnImpl(self.memory, checkpoint, result);
+        const cached = try self.store(index, result);
+        self.memory.restore(checkpoint);
+        return cached;
+    }
+};
+
+fn isRecurseSentinel(value: Value) bool {
+    return value.tuple == null and value.shape.len == 0 and value.data.len == 1 and std.math.isNan(value.data[0]);
+}
+
+pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @FieldType(@import("../parser.zig").Instruction, "recurse")) anyerror!Value {
+    if (maximum.tuple != null or maximum.shape.len > 1) return error.InvalidRecurseIndex;
+    const a = memory.allocator();
+    const bounds = try a.alloc(usize, maximum.data.len);
+    var count: usize = 1;
+    for (maximum.data, bounds) |number, *bound| {
+        if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
+        bound.* = @intFromFloat(number);
+        count = try std.math.mul(usize, count, bound.*);
+    }
+    const zeros = try a.alloc(f64, maximum.data.len);
+    @memset(zeros, 0);
+    const origin: Value = .{ .data = zeros, .shape = maximum.shape };
+    const base = try evaluateScope(memory, &.{functions.base.*}, origin, origin);
+    if (base.tuple != null) return error.ExpectedArray;
+    for (base.data) |number| if (std.math.isNan(number)) return error.RecurseOriginNotBaseCase;
+    var cache: Recurse = .{
+        .memory = memory,
+        .functions = functions,
+        .bounds = bounds,
+        .component = base.shape,
+        .width = base.data.len,
+        .table = try a.alloc(f64, try std.math.mul(usize, count, base.data.len)),
+        .state = try a.alloc(u8, count),
+    };
+    @memset(cache.state, 0);
+    if (count > 0) _ = try cache.store(0, base);
+    return cache.visit(maximum, true);
+}
