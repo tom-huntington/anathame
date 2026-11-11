@@ -9,9 +9,15 @@ fn product(comptime reduce: Function, comptime combine: Function) Function {
     return struct {
         fn call(a: std.mem.Allocator, x: Value, y: Value) !Value {
             if (x.tuple != null or y.tuple != null) return error.InvalidInput;
-            if (x.shape.len == 0 or y.shape.len == 0) return error.ShapeMismatch;
+            if (x.shape.len == 0 or y.shape.len == 0) {
+                std.debug.print("Inner product ShapeMismatch: left shape = {any}, right shape = {any}\n", .{ x.shape, y.shape });
+                return error.ShapeMismatch;
+            }
             const width = x.shape[x.shape.len - 1];
-            if (width != y.shape[0]) return error.ShapeMismatch;
+            if (width != y.shape[0]) {
+                std.debug.print("Inner product ShapeMismatch: left shape = {any}, right shape = {any}; contracting dimensions {d} != {d}\n", .{ x.shape, y.shape, width, y.shape[0] });
+                return error.ShapeMismatch;
+            }
             var rows: usize = 1;
             for (x.shape[0 .. x.shape.len - 1]) |dim| rows = try std.math.mul(usize, rows, dim);
             var cols: usize = 1;
