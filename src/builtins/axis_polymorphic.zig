@@ -702,6 +702,32 @@ pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
 
 /// Uiua keep on the trailing axis. Counts cycle when short and truncate when long.
 /// Real scalar counts resample the axis; negative scalars also reverse it.
+pub fn keepComponents(a: std.mem.Allocator, x: Value, counts: Value, dimensions: usize) !Value {
+    if (x.tuple != null) return error.ExpectedArray;
+    if (dimensions >= x.shape.len) return error.InvalidAxis;
+    const axis = x.shape.len - dimensions - 1;
+    const width = x.shape[axis];
+    const indices = try a.alloc(f64, width);
+    for (indices, 0..) |*index, i| index.* = @floatFromInt(i);
+    const selected = try keep(a, .{ .data = indices, .shape = &.{width} }, counts);
+    const new_width = selected.data.len;
+    var outer: usize = 1;
+    for (x.shape[0..axis]) |dim| outer *= dim;
+    var cell_size: usize = 1;
+    for (x.shape[axis + 1 ..]) |dim| cell_size *= dim;
+    const shape = try a.dupe(usize, x.shape);
+    shape[axis] = new_width;
+    const data = try a.alloc(f64, outer * new_width * cell_size);
+    for (0..outer) |row| {
+        for (selected.data, 0..) |index, j| {
+            const source = (row * width + @as(usize, @intFromFloat(index))) * cell_size;
+            const dest = (row * new_width + j) * cell_size;
+            @memcpy(data[dest..][0..cell_size], x.data[source..][0..cell_size]);
+        }
+    }
+    return .{ .data = data, .shape = shape };
+}
+
 pub fn keep(a: std.mem.Allocator, x: Value, counts: Value) !Value {
     if (x.tuple != null or counts.tuple != null) return error.InvalidInput;
     const scalar = counts.shape.len == 0;

@@ -451,7 +451,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or (std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Uny")) or (std.mem.eql(u8, name, "Each") and !std.mem.eql(u8, token, "Each.fill")) or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Find") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
+            if (std.mem.eql(u8, name, "Filter") or std.mem.eql(u8, name, "keep") or std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or (std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Uny")) or (std.mem.eql(u8, name, "Each") and !std.mem.eql(u8, token, "Each.fill")) or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Find") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -883,10 +883,17 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
         } else if (std.mem.eql(u8, name, "Filter")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
+            var keep: Instruction = .{ .primitive = "keep" };
+            if (component) |c| {
+                const function = try a.create(Instruction);
+                function.* = keep;
+                keep = .{ .component = .{ .function = function, .dimensions = c.dimensions, .leading_axes = c.leading_axes, .type_shape = c.type_shape } };
+                component = null;
+            }
             try result.append(a, .{ .scope = .{ .arity = 1, .instructions = try a.dupe(Instruction, &.{
                 operand,
                 .{ .combinator = .{ .kind = .sig } },
-                .{ .primitive = "keep" },
+                keep,
             }) } });
         } else if (std.mem.eql(u8, name, "Each.fill")) {
             if (instruction != .partial) return error.WrongNumberOfArguments;

@@ -695,6 +695,9 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         (c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "indexin")))
         return @import("builtins/axis_polymorphic.zig").indexinComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, selected_dimensions orelse x.shape.len);
     if (dimensions >= x.shape.len) return error.InvalidAxis;
+    if ((c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "keep")) or
+        (c.function.* == .partial and std.mem.eql(u8, c.function.partial.name, "keep")))
+        return @import("builtins/axis_polymorphic.zig").keepComponents(memory.allocator(), x, if (c.function.* == .partial) c.function.partial.argument else y, dimensions);
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "sort"))
         return @import("builtins/axis_polymorphic.zig").sortComponents(memory.allocator(), x, dimensions);
     if (c.function.* == .primitive and std.mem.eql(u8, c.function.primitive, "deduplicate"))

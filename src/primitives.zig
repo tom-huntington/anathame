@@ -356,6 +356,7 @@ pub fn known(name: []const u8) bool {
 }
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
+    @setEvalBranchQuota(2000);
     if (@import("builtins/products.zig").lookup(name)) |function| return function;
     if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_monomorphic.zig").arrayShape;
     if (std.mem.startsWith(u8, name, "convolve.")) {
@@ -375,7 +376,7 @@ pub fn lookup(name: []const u8) ?Function {
     const axis_monomorphic = @import("builtins/axis_monomorphic.zig");
     inline for (.{ pervasives, axis_polymorphic, axis_monomorphic }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
-            if (comptime std.mem.eql(u8, decl, "unconsComponents") or std.mem.eql(u8, decl, "unsnocComponents") or std.mem.eql(u8, decl, "selectComponents") or std.mem.eql(u8, decl, "indexinComponents") or std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
+            if (comptime std.mem.eql(u8, decl, "keepComponents") or std.mem.eql(u8, decl, "unconsComponents") or std.mem.eql(u8, decl, "unsnocComponents") or std.mem.eql(u8, decl, "selectComponents") or std.mem.eql(u8, decl, "indexinComponents") or std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }

@@ -376,3 +376,11 @@ test "syntax" {
         \\ \\ mul ~> |phi1 sub couple
     , .{ "2", "3" }, .{ "6", "[6 -1]" });
 }
+
+test "Filter.vec keeps vector components" {
+    try test_alias("Filter.vec mod,2", "(mod,2 |sig keep.vec)");
+    try expect_output("\\ ((sum mod,2) |sig keep.vec)", "[1_2 3_5 5_6]", "[1_2 5_6]");
+    try expect_output("\\ Filter.vec (sum mod,2)", "[1_2 3_5 5_6]", "[1_2 5_6]");
+    try expect_output("\\\\ keep.vec", .{ "[1_2 3_5 5_6]", "[1 0 1]" }, "[1_2 5_6]");
+    try expect_output("\\\\ keep", .{ "[1_2 3_5 5_6]", "[0 0 1]" }, "[[] [] []]");
+}
