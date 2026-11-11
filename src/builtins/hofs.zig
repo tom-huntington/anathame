@@ -907,13 +907,20 @@ pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @Field
     const base = try evaluateScope(memory, &.{functions.base.*}, origin, origin);
     if (base.tuple != null) return error.ExpectedArray;
     for (base.data) |number| if (std.math.isNan(number)) return error.RecurseOriginNotBaseCase;
+    const table = blk: {
+        errdefer std.debug.print(
+            "recurse DP table allocation failed\nmaximum={any}, bounds={any}, count={d}, component_shape={any}, width={d}, element_size={d}\n",
+            .{ maximum.data, bounds, count, base.shape, base.data.len, @sizeOf(f64) },
+        );
+        break :blk try a.alloc(f64, try std.math.mul(usize, count, base.data.len));
+    };
     var cache: Recurse = .{
         .memory = memory,
         .functions = functions,
         .bounds = bounds,
         .component = base.shape,
         .width = base.data.len,
-        .table = try a.alloc(f64, try std.math.mul(usize, count, base.data.len)),
+        .table = table,
         .state = try a.alloc(u8, count),
     };
     @memset(cache.state, 0);
