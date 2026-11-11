@@ -211,8 +211,9 @@ test "day 10" {
         \\ compute =\ split,@ Unc \p1`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
         \\ part1 = \ split,@\n Each compute sum
         \\ p2 =\ ints
-        \\ candidates = \\ b, A_ -> [0 1] length(A_) |> cartesian_pow Filter.vec (mul.mat,A_ \ {less_eq},b all |phi (sub,b mod,2 eq,0 all) and ) mul.mat,A_ b^sub div,2
-        \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse1 (eq,0 all index,[null 0]) Log (candidates,A) { sum |d2 mul,2 add Reduce min }
+        \\ patterns = \\ b, A_ -> [0 1] length(A_) |> cartesian_pow Filter.vec (mul.mat,A_ \ {less_eq},b all |phi (sub,b mod,2 eq,0 all) and )
+        \\ candidates = \\ state, matrix -> state |> patterns,matrix mul.mat,matrix state^sub div,2
+        \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse (eq,0 all index,[null 0]) (candidates,A) { (patterns,A Rows sum) |d2 mul,2 add Reduce min }
         \\\ split,@\n first compute2
     , "10" // "7"
         , @src());
