@@ -286,6 +286,14 @@ pub fn uncons(a: std.mem.Allocator, x: Value, _: Value) !Value {
 }
 
 pub fn unconsComponents(a: std.mem.Allocator, x: Value, dimensions: usize) !Value {
+    return splitComponents(a, x, dimensions, false);
+}
+
+pub fn unsnocComponents(a: std.mem.Allocator, x: Value, dimensions: usize) !Value {
+    return splitComponents(a, x, dimensions, true);
+}
+
+fn splitComponents(a: std.mem.Allocator, x: Value, dimensions: usize, from_end: bool) !Value {
     if (x.tuple != null) return error.ExpectedArray;
     if (dimensions >= x.shape.len) return error.InvalidAxis;
     const axis = x.shape.len - dimensions - 1;
@@ -301,12 +309,14 @@ pub fn unconsComponents(a: std.mem.Allocator, x: Value, dimensions: usize) !Valu
     const rest = try a.alloc(f64, frames * (width - 1) * cell_size);
     for (0..frames) |i| {
         const start = i * width * cell_size;
-        @memcpy(data[i * cell_size ..][0..cell_size], x.data[start..][0..cell_size]);
-        @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + cell_size ..][0 .. (width - 1) * cell_size]);
+        @memcpy(data[i * cell_size ..][0..cell_size], x.data[start + (if (from_end) (width - 1) * cell_size else 0) ..][0..cell_size]);
+        @memcpy(rest[i * (width - 1) * cell_size ..][0 .. (width - 1) * cell_size], x.data[start + (if (from_end) 0 else cell_size) ..][0 .. (width - 1) * cell_size]);
     }
     const rest_shape = try a.dupe(usize, x.shape);
     rest_shape[axis] -= 1;
-    return .{ .tuple = try a.dupe(Value, &.{ .{ .data = data, .shape = shape }, .{ .data = rest, .shape = rest_shape } }) };
+    const item: Value = .{ .data = data, .shape = shape };
+    const remainder: Value = .{ .data = rest, .shape = rest_shape };
+    return .{ .tuple = try a.dupe(Value, if (from_end) &.{ remainder, item } else &.{ item, remainder }) };
 }
 
 /// Take array rows or tuple elements from the front, or from the back for a negative count.

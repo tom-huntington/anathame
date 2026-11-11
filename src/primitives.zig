@@ -35,7 +35,7 @@ pub fn arity(name: []const u8) ?usize {
     if (std.mem.eql(u8, name, "ints") or std.mem.eql(u8, name, "ints2d") or std.mem.eql(u8, name, "digits") or std.mem.eql(u8, name, "digits2d")) return 1;
     if (std.mem.eql(u8, name, "Find") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "length") or std.mem.eql(u8, name, "iota") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "floor") or std.mem.eql(u8, name, "abs") or std.mem.eql(u8, name, "absolute value") or std.mem.eql(u8, name, "sq") or std.mem.eql(u8, name, "parse") or std.mem.eql(u8, name, "to_string") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "id") or std.mem.eql(u8, name, "identity")) return 1;
     const dyadic = std.StaticStringMap(void).initComptime(.{
-        .{ "const", {} },
+        .{ "const", {} }, .{ "Uny", {} },
         .{ "Fold", {} },          .{ "Scan", {} },            .{ "Scan.exclusive", {} }, .{ "Partition", {} },
         .{ "Repeat", {} },        .{ "Repeat.check", {} },    .{ "Fix", {} },            .{ "Fix.check", {} },
         .{ "Tuples", {} },        .{ "TuplesWith", {} },      .{ "Stencil", {} },        .{ "Table", {} },
@@ -287,6 +287,7 @@ pub const names = [_][]const u8{
     "Sort.by",
     "Sort.with",
     "Unc",
+    "Uny",
     "Scan",
     "Partials",
     "Reduce",
@@ -374,7 +375,7 @@ pub fn lookup(name: []const u8) ?Function {
     const axis_monomorphic = @import("builtins/axis_monomorphic.zig");
     inline for (.{ pervasives, axis_polymorphic, axis_monomorphic }) |implementations| {
         inline for (comptime std.meta.declarations(implementations)) |decl| {
-            if (comptime std.mem.eql(u8, decl, "unconsComponents") or std.mem.eql(u8, decl, "selectComponents") or std.mem.eql(u8, decl, "indexinComponents") or std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
+            if (comptime std.mem.eql(u8, decl, "unconsComponents") or std.mem.eql(u8, decl, "unsnocComponents") or std.mem.eql(u8, decl, "selectComponents") or std.mem.eql(u8, decl, "indexinComponents") or std.mem.eql(u8, decl, "sortComponents") or std.mem.eql(u8, decl, "deduplicateComponents") or std.mem.eql(u8, decl, "arrayShape") or std.mem.eql(u8, decl, "extractNumbers")) continue;
             if (std.mem.eql(u8, name, decl)) return &@field(implementations, decl);
         }
     }

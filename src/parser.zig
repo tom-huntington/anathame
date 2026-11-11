@@ -27,6 +27,7 @@ pub const Instruction = union(enum) {
     join: *const Instruction,
     switch_fn: struct { yes: *const Instruction, no: *const Instruction },
     unc: *const Instruction,
+    uny: *const Instruction,
     log: *const Instruction,
     logshape: *const Instruction,
     reduce: *const Instruction,
@@ -450,7 +451,7 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
         }
         if (std.mem.indexOfScalar(u8, token, '.')) |dot| {
             const name = token[0..dot];
-            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or std.mem.eql(u8, name, "Unc") or (std.mem.eql(u8, name, "Each") and !std.mem.eql(u8, token, "Each.fill")) or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Find") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
+            if (std.mem.eql(u8, name, "select") or std.mem.eql(u8, name, "indexin") or std.mem.eql(u8, name, "sort") or std.mem.eql(u8, name, "deduplicate") or std.mem.eql(u8, name, "uncons") or (std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Uny")) or (std.mem.eql(u8, name, "Each") and !std.mem.eql(u8, token, "Each.fill")) or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Find") or std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) {
                 var parts = std.mem.splitScalar(u8, token[dot + 1 ..], '.');
                 var type_dimension: usize = 0;
                 var type_shape: []const usize = &.{};
@@ -791,12 +792,12 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 bound = .{ .applied = .{ .function = logged, .argument = instruction.partial.argument } };
             }
             try result.append(a, bound);
-        } else if (std.mem.eql(u8, name, "Unc")) {
+        } else if (std.mem.eql(u8, name, "Unc") or std.mem.eql(u8, name, "Uny")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             const function = try a.create(Instruction);
             function.* = operand;
-            try result.append(a, .{ .unc = function });
+            try result.append(a, if (std.mem.eql(u8, name, "Uny")) .{ .uny = function } else .{ .unc = function });
         } else if (std.mem.eql(u8, name, "Find")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (@import("runtime.zig").functionArity(operand) != 1) return error.WrongNumberOfArguments;

@@ -288,9 +288,9 @@ fn evaluateScopeImpl(memory: *ReservedBumpAllocator, instructions: []const @impo
             retain_x = false;
             continue;
         }
-        if (instruction == .unc) {
-            if (functionArity(instruction.unc.*) != 2) return error.WrongNumberOfArguments;
-            const temporary = try uncOperation(memory, instruction.unc, first_argument, 0);
+        if (instruction == .unc or instruction == .uny) {
+            const function = if (instruction == .uny) instruction.uny else instruction.unc;
+            const temporary = try uncOperation(memory, function, first_argument, 0, instruction == .uny);
             result = try @import("memory.zig").ReturnImpl(memory, checkpoint, temporary);
             first_function = false;
             retain_x = false;
@@ -515,7 +515,7 @@ pub fn functionArity(instruction: @import("parser.zig").Instruction) ?usize {
         .scope => |scope| scope.arity,
         .repeat => |r| if (r.second != null or (!r.fixed and r.count == null)) 2 else 1,
         .partition, .table, .flip, .map_accum, .switch_fn, .scan, .fold => 2,
-        .recurse, .find, .map_fold, .map_scan, .partials, .reduce, .unc, .join, .sort_with, .each => 1,
+        .recurse, .find, .map_fold, .map_scan, .partials, .reduce, .unc, .uny, .join, .sort_with, .each => 1,
         .rows => |function| functionArity(function.*),
         .stencil => 2,
         .product => |p| if (p.branches[0].len == 1) functionArity(p.branches[0][0]) else null,
@@ -637,12 +637,13 @@ fn bindPattern(memory: *ReservedBumpAllocator, a: std.mem.Allocator, pattern: @i
     }
 }
 
-/// Split the selected axis into two arguments, grouping items after the first.
-fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser.zig").Instruction, x: Value, dimensions: ?usize) anyerror!Value {
+/// Split the selected axis into two arguments, grouping items after the first or before the last.
+fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser.zig").Instruction, x: Value, dimensions: ?usize, from_end: bool) anyerror!Value {
     if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
     const pair = if (x.tuple) |tuple| blk: {
         if (dimensions != null and dimensions.? != 0) return error.InvalidAxis;
         if (tuple.len < 2) return error.WrongNumberOfArguments;
+        if (from_end) break :blk [2]Value{ if (tuple.len == 2) tuple[0] else .{ .tuple = tuple[0 .. tuple.len - 1] }, tuple[tuple.len - 1] };
         break :blk [2]Value{ tuple[0], if (tuple.len == 2) tuple[1] else .{ .tuple = tuple[1..] } };
     } else blk: {
         if (x.shape.len == 0) return error.WrongNumberOfArguments;
@@ -652,7 +653,7 @@ fn uncOperation(memory: *ReservedBumpAllocator, function: *const @import("parser
         if (count < 2) return error.WrongNumberOfArguments;
         const axis_polymorphic = @import("builtins/axis_polymorphic.zig");
         if (count > 2) {
-            const parts = try axis_polymorphic.unconsComponents(memory.allocator(), x, rank);
+            const parts = try if (from_end) axis_polymorphic.unsnocComponents(memory.allocator(), x, rank) else axis_polymorphic.unconsComponents(memory.allocator(), x, rank);
             break :blk [2]Value{ parts.tuple.?[0], parts.tuple.?[1] };
         }
         break :blk [2]Value{
@@ -679,11 +680,11 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
         return @import("builtins/axis_polymorphic.zig").selectComponents(memory.allocator(), x, if (bound_selection) c.function.partial.argument else y, selected_dimensions);
     }
-    if (c.function.* == .unc) {
+    if (c.function.* == .unc or c.function.* == .uny) {
         if (x.tuple != null and c.type_shape.len != 0) return error.ExpectedArray;
         if (x.tuple == null and (x.shape.len < c.type_shape.len or
             !std.mem.eql(usize, x.shape[x.shape.len - c.type_shape.len ..], c.type_shape))) return error.ShapeMismatch;
-        return uncOperation(memory, c.function.unc, x, selected_dimensions);
+        return uncOperation(memory, if (c.function.* == .uny) c.function.uny else c.function.unc, x, selected_dimensions, c.function.* == .uny);
     }
     if (x.tuple != null) return error.ExpectedArray;
     if (x.shape.len < c.type_shape.len or

@@ -81,6 +81,12 @@ Batches on tuple sources return tuples, nested for additional batch axes.
 For `[1_2_3 4_5_6]` it returns the pair `[1 4]` and `[2_3 5_6]`.
 `uncons.vec` splits off a whole row; `uncons.block` splits off a leading-axis item.
 
+`Unc f` applies a binary function to the first item and the remaining items.
+`Uny f` applies it to the initial items and the last item instead.
+Both unwrap two-item inputs into two individual arguments and accept component
+suffixes such as `.vec` and `.block`. For example, `Uny sub` on `[1 2 3]`
+returns `[-2 -1]`.
+
 `indexin` retains its search-domain suffixes: the default and `.vec`
 search within trailing vectors. `.mat` searches within trailing matrices and
 returns coordinate pairs, with the innermost axis first. For example, searching
