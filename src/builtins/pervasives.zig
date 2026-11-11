@@ -81,7 +81,7 @@ pub fn min(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .minimum);
 }
 
-fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, minimum, boolean_and, boolean_or }) !Value {
+fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, less_eq, greater_eq, maximum, minimum, boolean_and, boolean_or }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
     // Lower-rank arguments repeat over leading axes, matching trailing axes.
@@ -103,6 +103,8 @@ fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add,
             .modulo => if (y.data[yi] == 0) std.math.nan(f64) else @mod(x.data[xi], y.data[yi]),
             .less => @floatFromInt(@intFromBool(x.data[xi] < y.data[yi])),
             .greater => @floatFromInt(@intFromBool(x.data[xi] > y.data[yi])),
+            .less_eq => @floatFromInt(@intFromBool(x.data[xi] <= y.data[yi])),
+            .greater_eq => @floatFromInt(@intFromBool(x.data[xi] >= y.data[yi])),
             .equal => @floatFromInt(@intFromBool(x.data[xi] == y.data[yi])),
             .not_equal => @floatFromInt(@intFromBool(x.data[xi] != y.data[yi])),
         };
@@ -116,4 +118,12 @@ pub fn less(a: std.mem.Allocator, x: Value, y: Value) !Value {
 
 pub fn greater(a: std.mem.Allocator, x: Value, y: Value) !Value {
     return arithmetic(a, x, y, .greater);
+}
+
+pub fn less_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .less_eq);
+}
+
+pub fn greater_eq(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    return arithmetic(a, x, y, .greater_eq);
 }
