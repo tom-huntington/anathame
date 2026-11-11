@@ -90,7 +90,7 @@ pub const Lexer = struct {
             return self.source[start..self.offset];
         }
         if (c == '+' or c == '/' or (c == '-' and (self.offset == self.source.len or (!std.ascii.isDigit(self.source[self.offset]) and self.source[self.offset] != '.' and !std.mem.startsWith(u8, self.source[self.offset..], "inf"))))) return self.source[start..self.offset];
-        if (std.mem.indexOfScalar(u8, "[],(){}_*=", c) != null) return self.source[start..self.offset];
+        if (std.mem.indexOfScalar(u8, "[],(){}_*=^", c) != null) return self.source[start..self.offset];
         while (self.offset < self.source.len) : (self.offset += 1) {
             const b = self.source[self.offset];
             if (b == '`') {
@@ -101,7 +101,7 @@ pub const Lexer = struct {
             if (b == '+' or b == '-' or b == '/' or b == '<' or b == '>' or
                 (b == '&' and std.mem.startsWith(u8, self.source[self.offset..], "&&"))) break;
             if (b == '_' and (std.ascii.isAlphabetic(c) or c == '&')) continue;
-            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=\\\"@$", b) != null or
+            if (std.ascii.isWhitespace(b) or b == ';' or std.mem.indexOfScalar(u8, "[],(){}_*=^\\\"@$", b) != null or
                 b == '|' or b == ':' or (b == '~' and std.mem.startsWith(u8, self.source[self.offset..], "~>"))) break;
         }
         return self.source[start..self.offset];

@@ -259,6 +259,12 @@ Array-producing pipelines can also be inlined inside brackets, such as
 `convolve.same,[[3 3] 1 |> fill]`. The pipeline is evaluated when parsed,
 and its array result is used directly without adding an extra dimension.
 
+`func,value` partially applies the last argument; `value^func` partially applies
+the first argument. For example, `\ sub,2` on `3` returns `1`, while
+`\ 2^sub` on `3` returns `-1`. The value before `^` can also be an array,
+a named constant, or an expression using lambda parameters. Use braces to
+bind a grouped dyadic function, for example `2^{sub sq}`.
+
 Partial applications accept literal choices separated by `***`. A scope runs
 every combination of choices on the same input and stacks the results into
 a Cartesian array. The first choice varies fastest; later choices add outer

@@ -8,6 +8,8 @@ pub const Instruction = union(enum) {
     aggregate: struct { items: []const Instruction, tuple: bool = false },
     expression: struct { arguments: []const Instruction, body: []const Instruction },
     dynamic_applied: struct { function: *const Instruction, argument: *const Instruction },
+    // Parser-only marker, resolved after the following function binds its operands.
+    bind_first: *const Instruction,
     cases: Value,
     primitive: []const u8,
     pad: *const Instruction,
@@ -297,6 +299,14 @@ fn sequence(a: std.mem.Allocator, lexer: *Lexer, close: ?[]const u8, implicit: b
             }
             try validateCombinatorArity(body, if (returns_function) 1 else arity);
             try result.append(a, .{ .scope = .{ .parameters = parameters, .arity = arity, .instructions = body } });
+            continue;
+        }
+        if (std.mem.eql(u8, token, "^")) {
+            const argument = result.pop() orelse return error.ExpectedLiteral;
+            if (!isValue(argument)) return error.ExpectedLiteral;
+            const bound = try a.create(Instruction);
+            bound.* = argument;
+            try result.append(a, .{ .bind_first = bound });
             continue;
         }
         if (std.mem.eql(u8, token, ",")) {
@@ -693,6 +703,17 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
     while (i > 0) {
         i -= 1;
         var instruction = instructions[i];
+        if (instruction == .bind_first) {
+            const operand = result.pop() orelse return error.ExpectedFunction;
+            if (isValue(operand) or operand == .combinator or operand == .alternative) return error.ExpectedFunction;
+            if (@import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
+            const function = try a.create(Instruction);
+            function.* = operand;
+            const flipped = try a.create(Instruction);
+            flipped.* = .{ .flip = function };
+            try result.append(a, .{ .dynamic_applied = .{ .function = flipped, .argument = instruction.bind_first } });
+            continue;
+        }
         if (instruction == .scope and instruction.scope.macro_definition != null) {
             const macro = instruction.scope.macro_definition.?;
             var local_names = try macro.names.clone(a);
