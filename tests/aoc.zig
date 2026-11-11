@@ -204,9 +204,10 @@ test "day 10" {
         \\$ [...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
         \\$ [.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}
     ;
+    const input = example;
     //_ = example;
     //const input = @embedFile("d10input.txt");
-    try expected_result(example,
+    try expected_result(input, //example,
         \\ p1 =\ eq,@# drop,1 drop,-1
         \\ compute =\ split,@ Unc \p1`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
         \\ part1 = \ split,@\n Each compute sum
@@ -214,9 +215,9 @@ test "day 10" {
         \\ patterns = \\ b, A_ -> [0 1] length(A_) |> cartesian_pow Filter.vec (mul.mat,A_ \ {less_eq},b all |phi (sub,b mod,2 eq,0 all) and )
         \\ candidates = \\ state, matrix -> state |> patterns,matrix mul.mat,matrix state^sub div,2
         \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse (eq,0 all index,[null 0]) (candidates,A) { (patterns,A Rows sum) |d2 mul,2 add Reduce min }
-        \\\ split,@\n first compute2
-    , "10" // "7"
-        , @src());
+        \\ part2 =\ split,@\n Each compute2 sum
+        \\ \ part1 ** part2
+    , "[7 33]", @src());
 }
 
 test "day 11" {
