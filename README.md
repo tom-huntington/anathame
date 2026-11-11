@@ -374,7 +374,7 @@ accumulator for the next row. For example, `{ MapAccum couple mul }` on
 tuple `(next accumulator, mapped value)`. Both forms return only the mapped
 array. `MapAccum,7 f g` and `Mapaccum,7 f` bind the initial accumulator.
 
-`Recurse base children combine` (also spelled `Recur`) evaluates a recursive
+`Recurse base children combine` evaluates a recursive
 computation with a dense array memo table. `base` returns the result for a base
 case, or the scalar `null` (NaN) sentinel otherwise. `children` returns an array
 whose leading-axis rows are child indices. `combine` receives the stacked child

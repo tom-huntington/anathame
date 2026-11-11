@@ -803,7 +803,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .find = function });
-        } else if (std.mem.eql(u8, name, "Recurse") or std.mem.eql(u8, name, "Recur")) {
+        } else if (std.mem.eql(u8, name, "Recurse")) {
             const functions = try a.alloc(Instruction, 3);
             for (functions, 0..) |*function, operand_index| {
                 function.* = result.pop() orelse return error.ExpectedFunction;
