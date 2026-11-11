@@ -197,6 +197,8 @@ test "day 9" {
 // Characteristic vector or indicator vector
 
 test "day 10" {
+    //if (true) return error.SkipZigTest;
+
     const example =
         \\$ [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
         \\$ [...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}
@@ -205,15 +207,20 @@ test "day 10" {
     //_ = example;
     //const input = @embedFile("d10input.txt");
     try expected_result(example,
-        \\ p =\ eq,@# drop,1 drop,-1
-        \\ compute =\ split,@ Unc \p`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
-        \\ \ split,@\n Each compute sum
-
-        //not_eq,@ |sig Partition (digits length)
-    , "7", @src());
+        \\ p1 =\ eq,@# drop,1 drop,-1
+        \\ compute =\ split,@ Unc \p1`diagram -> \ drop,-1 Each.fill,0 (ints unwhere) \ incidences -> [0 1] length(incidences) |> cartesian_pow Sort.by sum \ Find.vec (mul.mat,incidences mod,2 eq,diagram all) sum
+        \\ part1 = \ split,@\n Each compute sum
+        \\ p2 =\ ints
+        \\ candidates = \\ b, A_ -> [0 1] length(A_) |> cartesian_pow Filter.vec (mul.mat,A_ \ {less_eq},b all |phi (sub,b mod,2 eq,0 all) and ) mul.mat,A_ b^sub div,2
+        \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse1 (eq,0 all {Flip pick},[null 0]) (candidates,A) { sum |d2 mul,2 add Reduce max }
+        \\\ split,@\n first compute2
+    , "10" // "7"
+        , @src());
 }
 
 test "day 11" {
+    if (true) return error.SkipZigTest;
+
     const example =
         \\$ aaa: you hhh
         \\$ you: bbb ccc
@@ -227,7 +234,8 @@ test "day 11" {
         \\$ iii: out
     ;
     try expected_result(example,
-        \\ part1 =\
+        \\ part1 =\ length
         \\ \ part1
-    , "539", @src());
+    , null // "539"
+        , @src());
 }
