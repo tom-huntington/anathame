@@ -302,10 +302,8 @@ fn evaluateScopeImpl(memory: *ReservedBumpAllocator, instructions: []const @impo
             if (shapes) {
                 try @import("logging.zig").printShapes(first_argument, if (functionArity(function) == 2) second_argument else null, null);
             } else {
-                _ = if (functionArity(function) == 2)
-                    try @import("builtins/axis_monomorphic.zig").logl(memory.allocator(), first_argument, second_argument)
-                else
-                    try @import("builtins/axis_monomorphic.zig").log(memory.allocator(), first_argument, second_argument);
+                const dyadic = functionArity(function) == 2;
+                try @import("logging.zig").printArguments(memory.allocator(), first_argument, if (dyadic) second_argument else null, false, if (dyadic) null else "input:\n");
             }
             const temporary = try evaluateScope(memory, &.{function}, first_argument, second_argument);
             if (shapes) try @import("logging.zig").printShapes(temporary, null, "result:\n") else try @import("logging.zig").printResult(memory.allocator(), temporary);

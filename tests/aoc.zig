@@ -212,7 +212,7 @@ test "day 10" {
         \\ part1 = \ split,@\n Each compute sum
         \\ p2 =\ ints
         \\ candidates = \\ b, A_ -> [0 1] length(A_) |> cartesian_pow Filter.vec (mul.mat,A_ \ {less_eq},b all |phi (sub,b mod,2 eq,0 all) and ) mul.mat,A_ b^sub div,2
-        \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse1 (eq,0 all {Flip pick},[null 0]) (candidates,A) { sum |d2 mul,2 add Reduce max }
+        \\ compute2 =\ split,@ drop,1 Uny Flip \p2`joltages -> \ Each.fill,0 (ints unwhere) \ A -> joltages |> Recurse1 (eq,0 all index,[null 0]) Log (candidates,A) { sum |d2 mul,2 add Reduce min }
         \\\ split,@\n first compute2
     , "10" // "7"
         , @src());
