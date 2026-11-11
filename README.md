@@ -72,6 +72,7 @@ available and leaves scalars and vectors unchanged.
 
 `pick` follows a coordinate vector through leading array axes or tuple elements.
 For example, `pick,[1 -1]` on `tup(10,[20 30])` returns `30`.
+`index` is `pick` with its arguments reversed: indices first, source second.
 Scalar coordinates select one row or tuple element; negative coordinates count
 from the end. An empty coordinate vector returns the source unchanged.
 The last index axis holds coordinates and preceding axes form a batch.

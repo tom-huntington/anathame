@@ -49,6 +49,7 @@ pub fn arity(name: []const u8) ?usize {
         .{ "not_eq", {} },        .{ "max", {} },             .{ "maximum", {} },        .{ "min", {} },
         .{ "less", {} },          .{ "less than", {} },       .{ "greater", {} },        .{ "greater than", {} },
         .{ ">", {} },             .{ "pick", {} },            .{ "logl", {} },           .{ "logr", {} },
+        .{ "index", {} },
         .{ "range", {} },         .{ "range_inclusive", {} }, .{ "in.closed", {} },      .{ "tuple", {} },
         .{ "reshape", {} },       .{ "fill", {} },            .{ "full", {} },           .{ "base", {} },
         .{ "join", {} },          .{ "couple", {} },          .{ "distance", {} },       .{ "quadrance", {} },
@@ -358,6 +359,7 @@ pub fn known(name: []const u8) bool {
 // Register public builtin implementations through comptime reflection.
 pub fn lookup(name: []const u8) ?Function {
     @setEvalBranchQuota(2000);
+    if (std.mem.eql(u8, name, "index")) return &index;
     if (@import("builtins/products.zig").lookup(name)) |function| return function;
     if (std.mem.eql(u8, name, "shape")) return &@import("builtins/axis_monomorphic.zig").arrayShape;
     if (std.mem.startsWith(u8, name, "convolve.")) {
@@ -391,4 +393,9 @@ pub fn lookup(name: []const u8) ?Function {
     if (std.mem.eql(u8, name, "subtract")) return &pervasives.sub;
     if (std.mem.eql(u8, name, "modulo")) return &pervasives.mod;
     return null;
+}
+
+/// Like pick, with the indices first and source second.
+fn index(a: std.mem.Allocator, indices: Value, source: Value) !Value {
+    return @import("builtins/axis_monomorphic.zig").pick(a, source, indices);
 }
