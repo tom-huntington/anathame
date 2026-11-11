@@ -823,6 +823,16 @@ pub fn find(memory: *ReservedBumpAllocator, x: Value, predicate: *const @import(
 
 /// A dense memo table, with a separate state array to support empty components
 /// and detect dependency cycles without reserving a numeric result value.
+const RecurseMap = std.HashMapUnmanaged([]const usize, usize, struct {
+    pub fn hash(_: @This(), key: []const usize) u64 {
+        return std.hash.Wyhash.hash(0, std.mem.sliceAsBytes(key));
+    }
+
+    pub fn eql(_: @This(), lhs: []const usize, rhs: []const usize) bool {
+        return std.mem.eql(usize, lhs, rhs);
+    }
+}, std.hash_map.default_max_load_percentage);
+
 const Recurse = struct {
     memory: *ReservedBumpAllocator,
     functions: @FieldType(@import("../parser.zig").Instruction, "recurse"),
@@ -831,6 +841,8 @@ const Recurse = struct {
     width: usize,
     table: []f64,
     state: []u8,
+    keys: []usize,
+    map: RecurseMap,
 
     fn store(self: *Recurse, index: usize, value: Value) !Value {
         if (value.tuple != null) return error.ExpectedArray;
@@ -844,19 +856,34 @@ const Recurse = struct {
 
     fn visit(self: *Recurse, node: Value, root: bool) anyerror!Value {
         if (node.tuple != null or node.shape.len > 1 or node.data.len != self.bounds.len) return error.InvalidRecurseIndex;
-        var index: usize = 0;
-        for (node.data, self.bounds) |number, bound| {
+        const checkpoint = self.memory.checkpoint();
+        const coordinates = try self.memory.allocator().alloc(usize, self.bounds.len);
+        for (node.data, self.bounds, coordinates) |number, bound, *destination| {
             if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
             const coordinate: usize = @intFromFloat(number);
             if (!root and coordinate >= bound) return error.InvalidRecurseIndex;
-            if (!root) index = index * bound + coordinate;
+            destination.* = coordinate;
         }
+        var index: usize = 0;
         if (!root) {
-            if (self.state[index] == 2) return .{ .data = self.table[index * self.width ..][0..self.width], .shape = self.component };
+            if (self.map.get(coordinates)) |cached_index| {
+                index = cached_index;
+            } else {
+                index = self.map.count();
+                if (index == self.state.len) return error.RecurseCacheCapacityExceeded;
+                const key = self.keys[index * self.bounds.len ..][0..self.bounds.len];
+                @memcpy(key, coordinates);
+                // All storage predates the recursive checkpoints. Never grow here.
+                self.map.putAssumeCapacityNoClobber(key, index);
+                self.state[index] = 0;
+            }
+            if (self.state[index] == 2) {
+                self.memory.restore(checkpoint);
+                return .{ .data = self.table[index * self.width ..][0..self.width], .shape = self.component };
+            }
             if (self.state[index] == 1) return error.RecurseCycle;
             self.state[index] = 1;
         }
-        const checkpoint = self.memory.checkpoint();
         const base = try evaluateScope(self.memory, &.{self.functions.base.*}, node, node);
         var result = base;
         if (isRecurseSentinel(base)) {
@@ -893,13 +920,15 @@ fn isRecurseSentinel(value: Value) bool {
 
 pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @FieldType(@import("../parser.zig").Instruction, "recurse")) anyerror!Value {
     if (maximum.tuple != null or maximum.shape.len > 1) return error.InvalidRecurseIndex;
+    const checkpoint = memory.checkpoint();
+    errdefer memory.restore(checkpoint);
     const a = memory.allocator();
     const bounds = try a.alloc(usize, maximum.data.len);
     var count: usize = 1;
     for (maximum.data, bounds) |number, *bound| {
         if (!std.math.isFinite(number) or number < 0 or @trunc(number) != number or number >= @as(f64, @floatFromInt(std.math.maxInt(usize)))) return error.InvalidRecurseIndex;
         bound.* = @intFromFloat(number);
-        count = try std.math.mul(usize, count, bound.*);
+        count *|= bound.*;
     }
     const zeros = try a.alloc(f64, maximum.data.len);
     @memset(zeros, 0);
@@ -907,23 +936,33 @@ pub fn recurse(memory: *ReservedBumpAllocator, maximum: Value, functions: @Field
     const base = try evaluateScope(memory, &.{functions.base.*}, origin, origin);
     if (base.tuple != null) return error.ExpectedArray;
     for (base.data) |number| if (std.math.isNan(number)) return error.RecurseOriginNotBaseCase;
-    const table = blk: {
-        errdefer std.debug.print(
-            "recurse DP table allocation failed\nmaximum={any}, bounds={any}, count={d}, component_shape={any}, width={d}, element_size={d}\n",
-            .{ maximum.data, bounds, count, base.shape, base.data.len, @sizeOf(f64) },
-        );
-        break :blk try a.alloc(f64, try std.math.mul(usize, count, base.data.len));
-    };
+    // Bound the cache by 1 GiB, including owned keys/results and buckets.
+    // Four buckets per entry conservatively covers load factor, power-of-two
+    // rounding, metadata, and the map allocation header/alignment.
+    const budget = 1024 * 1024 * 1024;
+    const bytes_per_entry = try std.math.add(usize, try std.math.add(usize, try std.math.mul(usize, bounds.len, @sizeOf(usize)), try std.math.mul(usize, base.data.len, @sizeOf(f64))), 1 + 4 * (@sizeOf([]const usize) + @sizeOf(usize) + 1) + 64);
+    const capacity = @min(count, budget / bytes_per_entry);
+    var map: RecurseMap = .empty;
+    try map.ensureTotalCapacity(a, @intCast(capacity));
     var cache: Recurse = .{
         .memory = memory,
         .functions = functions,
         .bounds = bounds,
         .component = base.shape,
         .width = base.data.len,
-        .table = table,
-        .state = try a.alloc(u8, count),
+        .table = try a.alloc(f64, try std.math.mul(usize, capacity, base.data.len)),
+        .state = try a.alloc(u8, capacity),
+        .keys = try a.alloc(usize, try std.math.mul(usize, capacity, bounds.len)),
+        .map = map,
     };
     @memset(cache.state, 0);
-    if (count > 0) _ = try cache.store(0, base);
-    return cache.visit(maximum, true);
+    if (count > 0) {
+        if (capacity == 0) return error.RecurseCacheCapacityExceeded;
+        const key = cache.keys[0..bounds.len];
+        @memset(key, 0);
+        cache.map.putAssumeCapacityNoClobber(key, 0);
+        _ = try cache.store(0, base);
+    }
+    const result = try cache.visit(maximum, true);
+    return @import("../memory.zig").ReturnImpl(memory, checkpoint, result);
 }

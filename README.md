@@ -388,15 +388,17 @@ tuple `(next accumulator, mapped value)`. Both forms return only the mapped
 array. `MapAccum,7 f g` and `Mapaccum,7 f` bind the initial accumulator.
 
 `Recurse base children combine` evaluates a recursive
-computation with a dense array memo table. `base` returns the result for a base
+computation with a fixed-capacity sparse memo table. `base` returns the result for a base
 case, or the scalar `null` (NaN) sentinel otherwise. `children` returns an array
 whose leading-axis rows are child indices. `combine` receives the stacked child
 results; a dyadic `combine` receives the original index first and child results
 second. Scalar children preserve the scalar-child behavior of Uiua's `recur`.
 
 Each invocation uses its initial argument, `table_index_max`, as the exclusive
-cache bounds. The table shape is `table_index_max ++ shape(base(table_index_max * 0))`;
-the initial root is evaluated outside those bounds. Indices are nonnegative
+cache bounds. Only visited indices are stored; the initial root is evaluated outside those bounds.
+The cache preallocates buckets, integer keys, and result storage before recursion,
+with a conservative 1 GiB budget (less for small index spaces). It never grows;
+exhausting its entry capacity raises `RecurseCacheCapacityExceeded`. Indices are nonnegative
 integer scalars or vectors, and child indices must lie inside the table.
 The all-zero index must be a base case. Every result must have that base case's
 shape. NaN results from `combine`, invalid indices, and dependency cycles are

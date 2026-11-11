@@ -5,7 +5,7 @@ pub fn expected_result(input: anytype, code: []const u8, expected: ?[]const u8, 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var memory = try language.ReservedBumpAllocator.init(64 * 1024 * 1024);
+    var memory = try language.ReservedBumpAllocator.init(2 * 1024 * 1024 * 1024);
     defer memory.deinit();
     const source_input: []const u8 = if (comptime @typeInfo(@TypeOf(input)) == .@"struct") blk: {
         if (!@typeInfo(@TypeOf(input)).@"struct".is_tuple or input.len != 2)

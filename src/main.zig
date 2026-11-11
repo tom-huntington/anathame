@@ -3,7 +3,7 @@ const runtime = @import("anathame").runtime;
 pub fn main(init: std.process.Init) !void {
     @import("anathame").console.init();
 
-    var memory = try @import("anathame").ReservedBumpAllocator.init(64 * 1024 * 1024);
+    var memory = try @import("anathame").ReservedBumpAllocator.init(2 * 1024 * 1024 * 1024);
     defer memory.deinit();
     const a = memory.allocator();
     const raw_args = try init.minimal.args.toSlice(a);

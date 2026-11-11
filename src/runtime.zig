@@ -45,7 +45,7 @@ pub fn firstResult(data: []const f64, shape: []const usize) Value {
 }
 
 pub fn expect_output(a: std.mem.Allocator, code: []const u8, input: anytype, expected: anytype) !void {
-    var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
+    var memory = try ReservedBumpAllocator.init(2 * 1024 * 1024 * 1024);
     defer memory.deinit();
     const source: ?[]const u8 = if (comptime @typeInfo(@TypeOf(input)) == .@"struct") blk: {
         var arguments: [input.len][]const u8 = undefined;
@@ -486,7 +486,7 @@ pub fn evaluateConstant(a: std.mem.Allocator, instruction: @import("parser.zig")
     if (ReservedBumpAllocator.fromAllocator(a)) |memory| {
         return evaluateScope(memory, &.{instruction}, argument, argument);
     }
-    var memory = try ReservedBumpAllocator.init(64 * 1024 * 1024);
+    var memory = try ReservedBumpAllocator.init(2 * 1024 * 1024 * 1024);
     defer memory.deinit();
     defer memory.bindings.deinit(memory.allocator());
     return cloneValue(a, try evaluateScope(&memory, &.{instruction}, argument, argument));
