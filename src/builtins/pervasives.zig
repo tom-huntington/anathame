@@ -84,12 +84,13 @@ pub fn min(a: std.mem.Allocator, x: Value, y: Value) !Value {
 fn arithmetic(a: std.mem.Allocator, x: Value, y: Value, comptime op: enum { add, multiply, subtract, divide, modulo, equal, not_equal, less, greater, maximum, minimum, boolean_and, boolean_or }) !Value {
     if (x.tuple != null or y.tuple != null) return error.InvalidInput;
     const n = @min(x.shape.len, y.shape.len);
-    if (!std.mem.eql(usize, x.shape[0..n], y.shape[0..n])) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
+    // Lower-rank arguments repeat over leading axes, matching trailing axes.
+    if (!std.mem.eql(usize, x.shape[x.shape.len - n ..], y.shape[y.shape.len - n ..])) return @import("../runtime.zig").shapeMismatch(@src().fn_name, &.{ x, y });
     const big = if (x.shape.len >= y.shape.len) x else y;
     const data = try a.alloc(f64, big.data.len);
     for (data, 0..) |*d, i| {
-        const xi = if (x.shape.len == big.shape.len) i else i / (big.data.len / x.data.len);
-        const yi = if (y.shape.len == big.shape.len) i else i / (big.data.len / y.data.len);
+        const xi = i % x.data.len;
+        const yi = i % y.data.len;
         d.* = switch (op) {
             .boolean_and => @floatFromInt(@intFromBool(x.data[xi] != 0) & @intFromBool(y.data[yi] != 0)),
             .boolean_or => @floatFromInt(@intFromBool(x.data[xi] != 0) | @intFromBool(y.data[yi] != 0)),

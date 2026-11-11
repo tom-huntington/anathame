@@ -149,6 +149,16 @@ test "tuple literal" {
     , .{ "1", "[2 3]" });
 }
 
+test "dyadic pervasives broadcast over trailing axes" {
+    try expect_output("\\\\ add", .{ "[1_2_3 4_5_6]", "[10 20 30]" }, "[11_22_33 14_25_36]");
+    try expect_output("\\\\ sub", .{ "[10 20 30]", "[1_2_3 4_5_6]" }, "[9_18_27 6_15_24]");
+    // Equal leading and trailing dimensions must still use the trailing axis.
+    try expect_output("\\\\ mul", .{ "[1_2 3_4]", "[10 20]" }, "[10_40 30_80]");
+    try expect_output("\\\\ less", .{ "[1_2_3 4_5_6]", "[3 5 4]" }, "[1_1_1 0_0_0]");
+    try expect_output("\\\\ add", .{ "[1_2_3 4_5_6]", "10" }, "[11_12_13 14_15_16]");
+    try expect_output("\\\\ sub", .{ "10", "[1_2_3 4_5_6]" }, "[9_8_7 6_5_4]");
+}
+
 test "builtins" {
     try expect_output("\\\\ take", .{ "[8 3 9 2 0]", "3" }, "[8 3 9]");
     try expect_output("\\\\ split", .{ "[1 2 3 4 5 3 6 7]", "3" }, "[1_2 4_5 6_7]");
