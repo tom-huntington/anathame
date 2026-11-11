@@ -35,7 +35,7 @@ pub const Instruction = union(enum) {
     reduce: *const Instruction,
     fold: *const Instruction,
     map_accum: struct { map: *const Instruction, update: ?*const Instruction },
-    recurse: struct { base: *const Instruction, children: *const Instruction, combine: *const Instruction },
+    recurse: struct { base: *const Instruction, children: *const Instruction, combine: *const Instruction, child_indices: bool = false },
     repeat: struct { first: *const Instruction, second: ?*const Instruction = null, count: ?Value = null, fixed: bool = false, check: bool = false },
     stencil: struct { function: *const Instruction },
     applied: struct { function: *const Instruction, argument: Value },
@@ -825,14 +825,14 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const function = try a.create(Instruction);
             function.* = operand;
             try result.append(a, .{ .find = function });
-        } else if (std.mem.eql(u8, name, "Recurse")) {
+        } else if (std.mem.eql(u8, name, "Recurse") or std.mem.eql(u8, name, "Recurse1")) {
             const functions = try a.alloc(Instruction, 3);
             for (functions, 0..) |*function, operand_index| {
                 function.* = result.pop() orelse return error.ExpectedFunction;
                 const arity = @import("runtime.zig").functionArity(function.*) orelse return error.ExpectedFunction;
                 if (arity != 1 and !(operand_index == 2 and arity == 2)) return error.WrongNumberOfArguments;
             }
-            try result.append(a, .{ .recurse = .{ .base = &functions[0], .children = &functions[1], .combine = &functions[2] } });
+            try result.append(a, .{ .recurse = .{ .base = &functions[0], .children = &functions[1], .combine = &functions[2], .child_indices = std.mem.eql(u8, name, "Recurse1") } });
         } else if (std.mem.eql(u8, name, "MapScan") or std.mem.eql(u8, name, "MapFold")) {
             const operation = result.pop() orelse return error.ExpectedFunction;
             const mapper = result.pop() orelse return error.ExpectedFunction;

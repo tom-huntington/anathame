@@ -408,6 +408,11 @@ for input 10:
 \ Recurse (n -> n n<2 |> Switch (const,1) (const,null)) (n -> [n-1 n-2]) sum
 ```
 
+`Recurse1 base children combine` works like `Recurse`, but a dyadic `combine`
+receives child indices first and the corresponding child values second. A unary
+`combine` still receives only child values. Cache bounds, base cases, and result
+shape requirements are the same as for `Recurse`.
+
 `Repeat f` takes a value and a nonnegative integer scalar count; `Repeat,n f`
 binds the count and takes one value. For example, `{ Repeat sq }` on `2 3`
 and `(Repeat,3 sq)` on `2` both produce `256`. A zero count returns the input.

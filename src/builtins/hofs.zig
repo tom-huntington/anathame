@@ -873,7 +873,7 @@ const Recurse = struct {
             }
             const resolved: Value = .{ .data = values, .shape = if (scalar) self.component else try std.mem.concat(a, usize, &.{ &.{count}, self.component }) };
             result = if (functionArity(self.functions.combine.*) == 2)
-                try evaluateScope(self.memory, &.{self.functions.combine.*}, node, resolved)
+                try evaluateScope(self.memory, &.{self.functions.combine.*}, if (self.functions.child_indices) children else node, resolved)
             else
                 try evaluateScope(self.memory, &.{self.functions.combine.*}, resolved, resolved);
         }
