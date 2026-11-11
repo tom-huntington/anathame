@@ -721,7 +721,7 @@ fn componentOperation(memory: *ReservedBumpAllocator, c: @FieldType(@import("par
     if (is_reduce or is_fold or is_scan or is_partials) {
         const function = if (is_reduce) c.function.reduce else if (is_fold) c.function.fold else if (is_scan) c.function.scan.function else c.function.partials;
         if (functionArity(function.*) != 2) return error.WrongNumberOfArguments;
-        if (!seeded and width == 0) return error.EmptyArray;
+        if (!seeded and width == 0) return hofs.emptyMonoidFold(memory, x, function, axis, final_only);
         if (seeded) return hofs.seededFold(memory, x, y, function, axis, final_only, is_scan and c.function.scan.exclusive, true);
         if (hofs.booleanOp(function)) |is_or| return hofs.booleanFold(a, x, if (seeded) y else null, axis, final_only, is_scan and c.function.scan.exclusive, seeded, is_or);
         if (final_only and count > 0) {

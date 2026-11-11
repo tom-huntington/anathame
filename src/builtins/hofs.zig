@@ -310,6 +310,18 @@ pub fn monoidIdentity(function: *const @import("../parser.zig").Instruction) ?f6
     return null;
 }
 
+/// Empty reductions preserve the cell shape and yield one identity per cell.
+pub fn emptyMonoidFold(memory: *ReservedBumpAllocator, x: Value, function: *const @import("../parser.zig").Instruction, axis: usize, final_only: bool) anyerror!Value {
+    const identity = monoidIdentity(function) orelse return error.EmptyArray;
+    const a = memory.allocator();
+    const cell_shape = x.shape[axis + 1 ..];
+    var cell_size: usize = 1;
+    for (cell_shape) |dimension| cell_size = try std.math.mul(usize, cell_size, dimension);
+    const data = try a.alloc(f64, cell_size);
+    @memset(data, identity);
+    return seededFold(memory, x, .{ .data = data, .shape = cell_shape }, function, axis, final_only, false, true);
+}
+
 pub fn mapScan(memory: *ReservedBumpAllocator, x: Value, operation: @import("../parser.zig").Instruction, dimensions: usize) anyerror!Value {
     if (x.tuple != null) return error.ExpectedArray;
     const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
@@ -474,7 +486,9 @@ pub fn scan(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: *c
         var result = try seededFold(memory, input, initial, function, input.shape.len - 1, false, exclusive, false);
         if (x.shape.len == 0) result.shape = result.shape[1..];
         return result;
-    } else if (x.data.len == 0) return error.EmptyArray;
+    } else if (x.shape.len > 0 and x.shape[x.shape.len - 1] == 0) {
+        return emptyMonoidFold(memory, x, function, x.shape.len - 1, false);
+    }
     if (booleanOp(function)) |is_or| {
         const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
         var result = try booleanFold(memory.allocator(), input, seed, input.shape.len - 1, false, exclusive, exclusive, is_or);
@@ -516,7 +530,9 @@ pub fn reduce(memory: *ReservedBumpAllocator, x: Value, seed: ?Value, function: 
     if (seed) |initial| {
         const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
         return seededFold(memory, input, initial, function, input.shape.len - 1, true, false, false);
-    } else if (x.data.len == 0) return error.EmptyArray;
+    } else if (x.shape.len > 0 and x.shape[x.shape.len - 1] == 0) {
+        return emptyMonoidFold(memory, x, function, x.shape.len - 1, true);
+    }
     if (booleanOp(function)) |is_or| {
         const input = if (x.shape.len == 0) Value{ .data = x.data, .shape = &.{1} } else x;
         return booleanFold(memory.allocator(), input, seed, input.shape.len - 1, true, false, false, is_or);
