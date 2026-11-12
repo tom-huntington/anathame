@@ -827,3 +827,14 @@ pub fn transpose(a: std.mem.Allocator, x: Value, _: Value) !Value {
     }
     return .{ .data = data, .shape = shape };
 }
+
+/// Parse Unicode code points as a number or a rectangular nested array literal.
+pub fn literal_eval(a: std.mem.Allocator, x: Value, _: Value) !Value {
+    return @import("literal_eval.zig").evaluate(a, x, null);
+}
+
+/// Parse a literal, filling missing array cells with the scalar second argument.
+pub fn @"literal_eval.pad"(a: std.mem.Allocator, x: Value, fill: Value) !Value {
+    if (fill.tuple != null or fill.shape.len != 0 or fill.data.len != 1) return error.InvalidInput;
+    return @import("literal_eval.zig").evaluate(a, x, fill.data[0]);
+}
