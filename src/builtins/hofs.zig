@@ -27,11 +27,25 @@ pub fn product(memory: *ReservedBumpAllocator, p: @FieldType(@import("../parser.
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 
-/// Split on a delimiter, map each piece, and stack equal-shaped array results.
+/// Split and map each piece; stack rectangular results, otherwise return a tuple.
 pub fn splitMap(memory: *ReservedBumpAllocator, x: Value, delimiter: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
     if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
-    const pieces = try @import("axis_polymorphic.zig").split(memory.allocator(), x, delimiter);
-    return eachItems(memory, pieces, function, null);
+    const a = memory.allocator();
+    const pieces = try @import("axis_polymorphic.zig").split(a, x, delimiter);
+    const count = if (pieces.tuple) |items| items.len else pieces.shape[0];
+    const probes = if (pieces.tuple != null) count else @max(count, 1);
+    const results = try a.alloc(Value, probes);
+    var rectangular = true;
+    var data: std.ArrayList(f64) = .empty;
+    for (results, 0..) |*result, i| {
+        const item = if (pieces.tuple) |items| items[i] else try rowArgument(a, pieces, i);
+        result.* = try evaluateScope(memory, &.{function.*}, item, item);
+        if (result.tuple != null or (i > 0 and !std.mem.eql(usize, results[0].shape, result.shape))) rectangular = false;
+        if (rectangular and i < count) try data.appendSlice(a, result.data);
+    }
+    if (!rectangular) return .{ .tuple = results[0..count] };
+    const shape: []const usize = if (results.len == 0) &.{} else results[0].shape;
+    return .{ .data = try data.toOwnedSlice(a), .shape = try std.mem.concat(a, usize, &.{ &.{count}, shape }) };
 }
 
 /// Stack positive marker runs; unequal runs return (rows, cumulative row offsets).
