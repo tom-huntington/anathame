@@ -293,6 +293,12 @@ select the cells to compare lexicographically: `sort.vec` sorts rows,
 axis. Scalar elements are the default. Any axes before the
 selected axis are processed independently; the array shape is preserved.
 
+`compare` compares two arrays lexicographically in storage order and returns
+a scalar: `-1` when the first is greater, `1` when the second is greater,
+and `0` when equal. After an equal prefix, the longer array is greater.
+For example, `compare` on `1; 0` gives `-1`, and on `1_2; 1_3` gives `1`.
+Shapes are ignored; NaNs compare equal to each other and greater than numbers.
+
 `UnDer f g` applies `f`, then `g`, then the inverse of `f`. Currently only
 `transpose` has a registered inverse (itself). For example,
 `UnDer transpose sort` sorts each column of a matrix. A dyadic `g` receives

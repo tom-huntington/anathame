@@ -58,7 +58,7 @@ pub fn arity(name: []const u8) ?usize {
         .{ "prepend", {} },         .{ "indexin", {} },       .{ "select", {} },         .{ "split", {} },
         .{ "split.first", {} },     .{ "keep", {} },          .{ "radix", {} },          .{ "re.Matches", {} },
         .{ "re.Findall", {} },      .{ "convolve.same", {} }, .{ "convolve.valid", {} }, .{ "convolve.full", {} },
-        .{ "cartesian_pow", {} },
+        .{ "cartesian_pow", {} },   .{ "compare", {} },
     });
     if (dyadic.has(name)) return 2;
     // Every registered product variant takes two arrays.
@@ -167,6 +167,7 @@ pub const names = [_][]const u8{
     "cos",
     "cosh",
     "couple",
+    "compare",
     "csv",
     "datetime",
     "deduplicate",

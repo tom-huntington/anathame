@@ -670,6 +670,27 @@ pub fn sortComponents(a: std.mem.Allocator, value: Value, dimensions: usize) !Va
     return .{ .data = data, .shape = value.shape };
 }
 
+/// Compare flattened arrays lexicographically, with greater first inputs returning -1.
+pub fn compare(a: std.mem.Allocator, x: Value, y: Value) !Value {
+    if (x.tuple != null or y.tuple != null) return error.InvalidInput;
+    var result: f64 = 0;
+    const common_len = @min(x.data.len, y.data.len);
+    for (x.data[0..common_len], y.data[0..common_len]) |lhs, rhs| {
+        if (lhs < rhs or (!std.math.isNan(lhs) and std.math.isNan(rhs))) {
+            result = 1;
+            break;
+        }
+        if (lhs > rhs or (std.math.isNan(lhs) and !std.math.isNan(rhs))) {
+            result = -1;
+            break;
+        }
+    }
+    if (result == 0) result = if (x.data.len < y.data.len) 1 else if (x.data.len > y.data.len) -1 else 0;
+    const data = try a.alloc(f64, 1);
+    data[0] = result;
+    return .{ .data = data };
+}
+
 /// Uiua sort: reorder leading-axis rows lexicographically, preserving their contents.
 pub fn lexisort(a: std.mem.Allocator, value: Value, _: Value) !Value {
     if (value.tuple != null) return error.InvalidInput;
