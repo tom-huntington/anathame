@@ -14,6 +14,7 @@ pub const Instruction = union(enum) {
     primitive: []const u8,
     pad: *const Instruction,
     partition: *const Instruction,
+    split: *const Instruction,
     sort_with: *const Instruction,
     under: struct { transform: *const Instruction, function: *const Instruction, inverse: []const u8 },
     scan: struct { function: *const Instruction, exclusive: bool = false },
@@ -925,11 +926,11 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
             const bound = try a.create(Instruction);
             bound.* = .{ .each_fill = function };
             try result.append(a, .{ .applied = .{ .function = bound, .argument = instruction.partial.argument } });
-        } else if (std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith") or std.mem.eql(u8, name, "Table")) {
+        } else if (std.mem.eql(u8, name, "Split") or std.mem.eql(u8, name, "Partition") or std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive") or std.mem.eql(u8, name, "Partials") or std.mem.eql(u8, name, "Rows") or std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "Reduce") or std.mem.eql(u8, name, "Fold") or std.mem.eql(u8, name, "Stencil") or std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith") or std.mem.eql(u8, name, "Table")) {
             const operand = result.pop() orelse return error.ExpectedFunction;
             if (operand == .combinator or operand == .literal) return error.ExpectedFunction;
             if (std.mem.eql(u8, name, "Table") and @import("runtime.zig").functionArity(operand) != 2) return error.WrongNumberOfArguments;
-            if (std.mem.eql(u8, name, "Each") and @import("runtime.zig").functionArity(operand) != 1) return error.WrongNumberOfArguments;
+            if ((std.mem.eql(u8, name, "Each") or std.mem.eql(u8, name, "Split")) and @import("runtime.zig").functionArity(operand) != 1) return error.WrongNumberOfArguments;
             const function = try a.create(Instruction);
             function.* = operand;
             var tuple_function: ?*Instruction = null;
@@ -939,7 +940,7 @@ fn bindFunctions(a: std.mem.Allocator, input: []const Instruction, lift_scopes: 
                 tuple_function = try a.create(Instruction);
                 tuple_function.?.* = mapper;
             }
-            var bound: Instruction = if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Each")) .{ .each = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
+            var bound: Instruction = if (std.mem.eql(u8, name, "Split")) .{ .split = function } else if (std.mem.eql(u8, name, "Partition")) .{ .partition = function } else if (std.mem.eql(u8, name, "Scan") or std.mem.eql(u8, name, "Scan.exclusive")) .{ .scan = .{ .function = function, .exclusive = std.mem.eql(u8, name, "Scan.exclusive") } } else if (std.mem.eql(u8, name, "Partials")) .{ .partials = function } else if (std.mem.eql(u8, name, "Each")) .{ .each = function } else if (std.mem.eql(u8, name, "Rows")) .{ .rows = function } else if (std.mem.eql(u8, name, "Reduce")) .{ .reduce = function } else if (std.mem.eql(u8, name, "Fold")) .{ .fold = function } else if (std.mem.eql(u8, name, "Table")) .{ .table = function } else if (std.mem.eql(u8, name, "Tuples") or std.mem.eql(u8, name, "TuplesWith")) .{ .tuples = .{ .predicate = function, .function = tuple_function.? } } else .{ .stencil = .{ .function = function } };
             // Bind the component axis before applying the seed.
             if (component) |c| {
                 const selected = try a.create(Instruction);

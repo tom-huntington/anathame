@@ -27,6 +27,13 @@ pub fn product(memory: *ReservedBumpAllocator, p: @FieldType(@import("../parser.
     return .{ .data = try data.toOwnedSlice(a), .shape = shape };
 }
 
+/// Split on a delimiter, map each piece, and stack equal-shaped array results.
+pub fn splitMap(memory: *ReservedBumpAllocator, x: Value, delimiter: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
+    if (functionArity(function.*) != 1) return error.WrongNumberOfArguments;
+    const pieces = try @import("axis_polymorphic.zig").split(memory.allocator(), x, delimiter);
+    return eachItems(memory, pieces, function, null);
+}
+
 /// Stack positive marker runs; unequal runs return (rows, cumulative row offsets).
 pub fn partition(memory: *ReservedBumpAllocator, x: Value, markers: Value, function: *const @import("../parser.zig").Instruction) anyerror!Value {
     const a = memory.allocator();

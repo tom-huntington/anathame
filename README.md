@@ -101,6 +101,10 @@ components used by `first`, `last`, `uncons`, and `sort`.
 vectors, including strings. Matched delimiters are removed, and empty pieces
 are preserved. Equal-length pieces stack into an array; unequal pieces form a
 tuple. No match produces an array containing the original vector as one row.
+`Split` takes the same delimiter and a unary function, calls it on each split
+piece, and stacks the results into an array. Results must be arrays with equal
+shapes; incompatible shapes produce an error. For example, `Split,0 length`
+maps `[1 0 2 3]` to `[1 2]`. Empty pieces are passed to the function too.
 For example, `split.first,"\n\n"` replaces the former `tuple.blankline` for
 LF-separated text; use `"\r\n\r\n"` for CRLF-separated text.
 
